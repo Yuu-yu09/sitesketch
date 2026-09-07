@@ -3,6 +3,7 @@ import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
+import { ENV } from "./env";
 import { sdk } from "./sdk";
 
 function getQueryParam(req: Request, key: string): string | undefined {
@@ -11,6 +12,42 @@ function getQueryParam(req: Request, key: string): string | undefined {
 }
 
 export function registerOAuthRoutes(app: Express) {
+  for (const provider of ["google", "github"] as const) {
+    app.get(`/api/auth/${provider}`, (req: Request, res: Response) => {
+      const configured = provider === "google"
+        ? ENV.googleClientId && ENV.googleClientSecret
+        : ENV.githubClientId && ENV.githubClientSecret;
+      if (!configured) {
+        res.status(503).json({
+          error: `${provider[0].toUpperCase()}${provider.slice(1)} login is not configured`,
+          required: provider === "google"
+            ? ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+            : ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
+        });
+        return;
+      }
+
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/${provider}/callback`;
+      const params = new URLSearchParams({
+        client_id: provider === "google" ? ENV.googleClientId : ENV.githubClientId,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: provider === "google" ? "openid email profile" : "read:user user:email",
+        state: redirectUri,
+      });
+      const authorizationUrl = provider === "google"
+        ? `https://accounts.google.com/o/oauth2/v2/auth?${params}`
+        : `https://github.com/login/oauth/authorize?${params}`;
+      res.redirect(302, authorizationUrl);
+    });
+
+    app.get(`/api/auth/${provider}/callback`, (_req: Request, res: Response) => {
+      res.status(501).json({
+        error: `${provider[0].toUpperCase()}${provider.slice(1)} callback exchange is not implemented yet`,
+      });
+    });
+  }
+
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
