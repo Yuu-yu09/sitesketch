@@ -9,7 +9,7 @@ describe("auth.me", () => {
       openId: "session-user",
       email: "session@example.com",
       name: "Session User",
-      loginMethod: "manus",
+      loginMethod: "oauth",
       role: "user" as const,
       createdAt: new Date(),
       updatedAt: new Date(),
