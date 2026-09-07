@@ -89,4 +89,34 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not configured");
+  }
+
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result[0];
+}
+
+export async function createLocalUser(input: {
+  openId: string;
+  name: string;
+  email: string;
+  passwordHash: string;
+}) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not configured");
+  }
+
+  await db.insert(users).values({
+    ...input,
+    loginMethod: "email",
+    lastSignedIn: new Date(),
+  });
+
+  return getUserByOpenId(input.openId);
+}
+
 // TODO: add feature queries here as your schema grows.

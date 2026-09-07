@@ -177,6 +177,12 @@ class SDKServer {
     );
   }
 
+  async createLocalSession(user: User): Promise<string> {
+    return this.createSessionToken(user.openId, {
+      name: user.name ?? user.email ?? "SiteSketch user",
+    });
+  }
+
   async signSession(
     payload: SessionPayload,
     options: { expiresInMs?: number } = {}
