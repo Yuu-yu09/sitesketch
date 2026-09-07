@@ -1,0 +1,16 @@
+#sitesketch-blocks { border-top: 1px solid #eef0f3; padding-top: 15px; }
+.grapesjs-shell { min-height: 700px; }
+.grapesjs-shell .gjs-blocks-c { display: grid; gap: 4px; }
+.grapesjs-shell .gjs-block { display:flex; min-height: 0; width:100%; align-items:center; justify-content:flex-start; gap:8px; border:0; border-radius:7px; background:transparent; box-shadow:none; padding:8px 6px; color:#7a8598; font-family:'DM Sans',sans-serif; font-size:11px; text-align:left; }
+.grapesjs-shell .gjs-block:hover { background:#f0f1ff; color:#5d66d4; box-shadow:none; }
+.grapesjs-shell .gjs-block-label { text-align:left; }
+.grapesjs-shell .gjs-block svg, .grapesjs-shell .gjs-block img { display:none; }
+.grapesjs-canvas { min-height: 624px; height: calc(100% - 48px); }
+.grapesjs-canvas .gjs-editor { min-height: 624px; }
+.grapesjs-canvas .gjs-one-bg { background:#f0f2f5; }
+.grapesjs-canvas .gjs-two-color { color:#697489; }
+.grapesjs-canvas .gjs-three-bg { background:#5f68d9; color:#fff; }
+.grapesjs-canvas .gjs-four-color, .grapesjs-canvas .gjs-four-color-h:hover { color:#5f68d9; }
+.grapesjs-canvas .gjs-frame-wrapper { padding: 28px; }
+.grapesjs-canvas .gjs-frame { box-shadow: 0 15px 35px rgba(31,39,60,.14); }
+@media (max-width: 720px) { .grapesjs-shell { min-height: 560px; }.grapesjs-canvas, .grapesjs-canvas .gjs-editor { min-height: 520px; } }
