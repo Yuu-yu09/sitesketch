@@ -1,16 +1,15 @@
 services:
-  mysql:
-    image: mysql:8.4
+  postgres:
+    image: postgres:17
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: sitesketch
-      MYSQL_USER: sitesketch
-      MYSQL_PASSWORD: sitesketch
-      MYSQL_ROOT_PASSWORD: sitesketch-root
+      POSTGRES_DB: sitesketch
+      POSTGRES_USER: sitesketch
+      POSTGRES_PASSWORD: sitesketch
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - sitesketch-mysql:/var/lib/mysql
+      - sitesketch-postgres:/var/lib/postgresql/data
 
 volumes:
-  sitesketch-mysql:
+  sitesketch-postgres:

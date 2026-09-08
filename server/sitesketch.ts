@@ -95,7 +95,7 @@ export async function createUserProject(userId: number, state: ProjectStateInput
     sectionsJson: JSON.stringify(state.sections),
     checklistJson: JSON.stringify(state.checklist),
     selectedBlock: state.selectedBlock,
-  }).$returningId();
+  }).returning({ id: projects.id });
   if (!created?.id) throw new Error("Project could not be created");
   await db.insert(pages).values({ projectId: created.id, name: "Home", slug: "home", position: 0 });
   return { id: created.id };
@@ -155,7 +155,10 @@ export async function saveEditorData(userId: number, projectId: number, data: Re
   const owned = await getOwnedProject(userId, projectId);
   if (!owned) return false;
   const dataJson = JSON.stringify(data);
-  await db.insert(projectEditorData).values({ projectId, dataJson, updatedAt: new Date() }).onDuplicateKeyUpdate({ set: { dataJson, updatedAt: new Date() } });
+  await db.insert(projectEditorData).values({ projectId, dataJson, updatedAt: new Date() }).onConflictDoUpdate({
+    target: projectEditorData.projectId,
+    set: { dataJson, updatedAt: new Date() },
+  });
   return true;
 }
 
