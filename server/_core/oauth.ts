@@ -12,6 +12,11 @@ function getQueryParam(req: Request, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function getRedirectUri(req: Request, provider: "google" | "github"): string {
+  const baseUrl = ENV.appUrl || `${req.protocol}://${req.get("host")}`;
+  return `${baseUrl.replace(/\/+$/, "")}/api/auth/${provider}/callback`;
+}
+
 type ProviderProfile = {
   id: string;
   name: string | null;
@@ -86,7 +91,7 @@ export function registerOAuthRoutes(app: Express) {
         return;
       }
 
-      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/${provider}/callback`;
+      const redirectUri = getRedirectUri(req, provider);
       const nonce = randomBytes(32).toString("base64url");
       res.cookie(OAUTH_STATE_COOKIE, nonce, {
         httpOnly: true,
@@ -124,7 +129,7 @@ export function registerOAuthRoutes(app: Express) {
         res.status(403).json({ error: "invalid oauth state" });
         return;
       }
-      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/${provider}/callback`;
+      const redirectUri = getRedirectUri(req, provider);
       if (decoded.redirectUri !== redirectUri) {
         res.status(403).json({ error: "invalid oauth redirect" });
         return;
