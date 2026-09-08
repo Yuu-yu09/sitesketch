@@ -51,6 +51,9 @@ import {
 } from "@/features/workspace/model";
 import { useWorkspaceProject } from "@/features/workspace/useWorkspaceProject";
 import { Blueprint, Checklist, ProjectDialog, SectionRow } from "@/features/workspace/components";
+import { WorkspaceSidebar, WorkspaceTopbar } from "@/features/workspace/chrome";
+import { useWorkspaceMutations } from "@/features/workspace/useWorkspaceMutations";
+import { WorkspaceBuilder, WorkspacePreview } from "@/features/workspace/views";
 
 type Mode = WorkspaceMode;
 type Section = WorkspaceSection;
@@ -64,58 +67,6 @@ const blockContent: Record<string, { eyebrow: string; title: string; body: strin
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
-}
-
-function Logo() {
-  return (
-    <div className="flex items-center gap-3 px-1">
-      <div className="brand-mark"><span>✦</span></div>
-      <div>
-        <div className="font-display text-[15px] font-semibold tracking-[0.16em] text-white">SITESKETCH</div>
-        <div className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">Plan · shape · ship</div>
-      </div>
-    </div>
-  );
-}
-
-function Sidebar({ mode, setMode, project, onNew, user, projects, activeProjectId, onOpenProject, onRenameProject, onDeleteProject }: { mode: Mode; setMode: (mode: Mode) => void; project: ProjectState; onNew: () => void; user: any; projects: Array<{ id: number; projectName: string; updatedAt: Date }>; activeProjectId?: number; onOpenProject: (id: number) => void; onRenameProject: (id: number) => void; onDeleteProject: (id: number) => void }) {
-  const links: Array<{ id: Mode; label: string; icon: typeof LayoutDashboard }> = [
-    { id: "plan", label: "Plan workspace", icon: LayoutDashboard },
-    { id: "build", label: "Visual builder", icon: Blocks },
-    { id: "preview", label: "Live preview", icon: Eye },
-  ];
-  const [openMenu, setOpenMenu] = useState<number | null>(null);
-  return (
-    <aside className="sidebar fixed inset-y-0 left-0 z-30 hidden w-[252px] flex-col border-r border-white/[0.08] bg-[#0d1325] px-5 py-6 lg:flex">
-      <Logo />
-      <div className="mt-10 flex items-center justify-between px-1"><span className="eyebrow text-slate-500">Workspace</span><button onClick={onNew} className="icon-button text-slate-400" title="New project"><Plus size={16} /></button></div>
-      <nav className="mt-3 space-y-1">{links.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => setMode(id)} className={cn("side-link", mode === id && "side-link-active")}><Icon size={17} strokeWidth={1.8} /><span>{label}</span>{id === "preview" && <span className="ml-auto live-dot" />}</button>)}</nav>
-      <div className="mt-9 px-1"><span className="eyebrow text-slate-500">Your projects</span></div>
-      <div className="mt-3 space-y-1">{projects.length === 0 && <div className="px-2 py-3 text-[11px] text-slate-500">No saved projects yet.</div>}{projects.slice(0, 6).map((saved) => <div key={saved.id} className={cn("project-nav-item", activeProjectId === saved.id && "project-nav-active")}><button onClick={() => onOpenProject(saved.id)} className="project-nav-select"><div className="project-thumb"><LayoutTemplate size={14} /></div><div className="min-w-0 text-left"><div className="truncate text-[12px] font-medium text-slate-200">{saved.projectName}</div><div className="mt-0.5 text-[10px] text-slate-500">{new Date(saved.updatedAt).toLocaleDateString()}</div></div></button><button onClick={() => setOpenMenu(openMenu === saved.id ? null : saved.id)} className="project-nav-more" title="Project actions"><MoreHorizontal size={14} /></button>{openMenu === saved.id && <div className="project-menu project-menu-dark"><button onClick={() => { setOpenMenu(null); onRenameProject(saved.id); }}><FileText size={13} />Rename</button><button onClick={() => { setOpenMenu(null); onDeleteProject(saved.id); }}><Trash2 size={13} />Delete</button></div>}</div>)}<button onClick={() => toast(projects.length ? `${projects.length} saved project${projects.length === 1 ? "" : "s"} shown above` : "Create your first project with the + button")} className="side-link mt-1 text-slate-500"><FolderOpen size={16} /><span>All projects</span><ChevronRight size={14} className="ml-auto" /></button></div>
-      <div className="mt-auto"><div className="sidebar-note"><div className="flex items-center gap-2 text-amber-300"><Sparkles size={14} /><span className="text-[11px] font-semibold">Build with intention</span></div><p className="mt-2 text-[11px] leading-relaxed text-slate-400">Start with structure. The right details come later.</p></div><div className="mt-5 flex items-center gap-3 border-t border-white/[0.07] pt-4"><div className="avatar">{user ? (user.name || "AM").slice(0, 2).toUpperCase() : "AM"}</div><div className="min-w-0"><div className="truncate text-xs font-medium text-slate-200">{user?.name || "Alex Morgan"}</div><div className="text-[10px] text-slate-500">{user ? "Synced workspace" : "Sign in to sync"}</div></div><Settings2 size={15} className="ml-auto text-slate-500" /></div></div>
-    </aside>
-  );
-}
-
-function Topbar({ mode, setMode, project, onSave, user, onLogout }: { mode: Mode; setMode: (mode: Mode) => void; project: ProjectState; onSave: () => void; user: any; onLogout: () => void }) {
-  const [accountOpen, setAccountOpen] = useState(false);
-  return (
-    <header className="topbar sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-[#e4e6eb] bg-[#f8f9fb]/90 px-5 backdrop-blur-xl lg:pl-[30px] lg:pr-8">
-      <div className="flex items-center gap-4 lg:gap-7">
-        <button className="icon-button lg:hidden"><Menu size={19} /></button>
-        <div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex"><span>Projects</span><ChevronRight size={13} /><span className="font-medium text-slate-600">{project.projectName}</span></div>
-        <div className="mode-tabs">
-          {(["plan", "build", "preview"] as Mode[]).map((item) => <button key={item} onClick={() => setMode(item)} className={cn(mode === item && "mode-tab-active")}>{item === "plan" ? "Plan" : item === "build" ? "Build" : "Preview"}</button>)}
-        </div>
-      </div>
-      <div className="flex items-center gap-2 sm:gap-3">
-        <span className="hidden items-center gap-1.5 text-[11px] font-medium text-slate-400 sm:flex"><span className="save-indicator" />All changes saved</span>
-        <button onClick={onSave} className="button-secondary hidden sm:flex"><Save size={14} />Save</button>
-        <button onClick={() => toast("Preview link copied to clipboard") } className="button-secondary hidden md:flex"><SquareArrowOutUpRight size={14} />Share</button>
-        {user ? <div className="relative"><button onClick={() => setAccountOpen(!accountOpen)} className="avatar avatar-top" title="Account"><span>{(user.name || "AM").slice(0, 2).toUpperCase()}</span></button>{accountOpen && <div className="account-menu"><div className="border-b border-[#edf0f3] px-3 py-2.5"><div className="truncate text-[11px] font-semibold text-slate-700">{user.name || "Signed-in user"}</div><div className="mt-0.5 truncate text-[10px] text-slate-400">{user.email || "Signed-in session"}</div></div><div className="px-1.5 py-1.5"><div className="account-status"><span className="save-indicator" />Database sync enabled</div><button onClick={() => { setAccountOpen(false); onLogout(); }} className="account-menu-item"><LogOut size={13} />Sign out</button></div></div>}</div> : <button onClick={() => startLogin()} className="button-primary"><LogIn size={14} />Sign in</button>}
-      </div>
-    </header>
-  );
 }
 
 
@@ -159,12 +110,7 @@ export default function Home() {
   const [projectDialogValue, setProjectDialogValue] = useState("");
   const { project, setProject, persistLocalProject } = useWorkspaceProject();
   const projectsQuery = trpc.projects.list.useQuery(undefined, { enabled: Boolean(user) });
-  const createProject = trpc.projects.create.useMutation();
-  const updateProject = trpc.projects.update.useMutation();
-  const renameProject = trpc.projects.rename.useMutation();
-  const deleteProject = trpc.projects.delete.useMutation();
-  const saveEditor = trpc.projects.editor.save.useMutation();
-  const generateAI = trpc.ai.generate.useMutation();
+  const { createProject, updateProject, renameProject, deleteProject, saveEditor, generateAI } = useWorkspaceMutations();
   const projectProgress = useMemo(() => Math.min(100, Math.round((project.sections.length / 7) * 100)), [project.sections.length]);
 
   useEffect(() => {
@@ -233,5 +179,5 @@ export default function Home() {
   const handleEditorData = useCallback((data: Record<string, unknown>) => setEditorData(data), []);
   const savedProjects = projectsQuery.data ?? [];
   if (loading) return <div className="min-h-screen bg-[#f8f9fb]" />;
-  return <div className="app-shell"><Sidebar mode={mode} setMode={setMode} project={project} onNew={newProject} user={user} projects={savedProjects} activeProjectId={projectId} onOpenProject={openProject} onRenameProject={renameProjectById} onDeleteProject={deleteProjectById} /><div className="main-shell lg:pl-[252px]"><Topbar mode={mode} setMode={setMode} project={project} onSave={saveProject} user={user} onLogout={() => logout().then(() => { setProjectId(undefined); setEditorData({}); toast.success("Signed out"); }).catch((error) => toast.error("Sign out failed", { description: error.message }))} /><main className="mx-auto max-w-[1500px] px-5 py-7 sm:px-8 lg:px-10 lg:py-10">{mode === "plan" && <PlanView project={project} setProject={setProject} onGenerate={generate} onOpenBuilder={() => setMode("build")} onRenameProject={renameCurrentProject} onDeleteProject={() => projectId ? deleteProjectById(projectId) : toast("Save this project before deleting it")} />}{mode === "build" && <BuildView projectId={projectId} editorSectionIds={editorSectionIds} generatedSections={generatedSections} ignoreRemoteData={ignoreRemoteEditorData} editorResetKey={editorResetKey} />}{mode === "preview" && <PreviewView project={project} setMode={setMode} />}</main><div className="mobile-bottom-nav lg:hidden"><button className={cn(mode === "plan" && "mobile-nav-active")} onClick={() => setMode("plan")}><LayoutDashboard size={17} /><span>Plan</span></button><button className={cn(mode === "build" && "mobile-nav-active")} onClick={() => setMode("build")}><Blocks size={17} /><span>Build</span></button><button className={cn(mode === "preview" && "mobile-nav-active")} onClick={() => setMode("preview")}><Eye size={17} /><span>Preview</span></button></div></div><div className="fixed bottom-5 right-5 hidden items-center gap-2 rounded-full bg-[#131b31] px-3 py-2 text-[10px] font-semibold text-slate-300 shadow-xl lg:flex"><span className="live-dot" />{projectProgress}% planned <span className="ml-1 text-slate-500">·</span> <CircleHelp size={13} /></div>{projectDialog && <ProjectDialog mode={projectDialog.mode} value={projectDialogValue} setValue={setProjectDialogValue} onCancel={closeProjectDialog} onConfirm={confirmProjectDialog} />}</div>;
+  return <div className="app-shell"><WorkspaceSidebar mode={mode} setMode={setMode} onNew={newProject} user={user} projects={savedProjects} activeProjectId={projectId} onOpenProject={openProject} onRenameProject={renameProjectById} onDeleteProject={deleteProjectById} /><div className="main-shell lg:pl-[252px]"><WorkspaceTopbar mode={mode} setMode={setMode} project={project} onSave={saveProject} user={user} onLogout={() => logout().then(() => { setProjectId(undefined); setEditorData({}); toast.success("Signed out"); }).catch((error) => toast.error("Sign out failed", { description: error.message }))} /><main className="mx-auto max-w-[1500px] px-5 py-7 sm:px-8 lg:px-10 lg:py-10">{mode === "plan" && <PlanView project={project} setProject={setProject} onGenerate={generate} onOpenBuilder={() => setMode("build")} onRenameProject={renameCurrentProject} onDeleteProject={() => projectId ? deleteProjectById(projectId) : toast("Save this project before deleting it")} />}{mode === "build" && <WorkspaceBuilder projectId={projectId} editorSectionIds={editorSectionIds} generatedSections={generatedSections} ignoreRemoteData={ignoreRemoteEditorData} editorResetKey={editorResetKey} />}{mode === "preview" && <WorkspacePreview project={project} setMode={setMode} />}</main><div className="mobile-bottom-nav lg:hidden"><button className={cn(mode === "plan" && "mobile-nav-active")} onClick={() => setMode("plan")}><LayoutDashboard size={17} /><span>Plan</span></button><button className={cn(mode === "build" && "mobile-nav-active")} onClick={() => setMode("build")}><Blocks size={17} /><span>Build</span></button><button className={cn(mode === "preview" && "mobile-nav-active")} onClick={() => setMode("preview")}><Eye size={17} /><span>Preview</span></button></div></div><div className="fixed bottom-5 right-5 hidden items-center gap-2 rounded-full bg-[#131b31] px-3 py-2 text-[10px] font-semibold text-slate-300 shadow-xl lg:flex"><span className="live-dot" />{projectProgress}% planned <span className="ml-1 text-slate-500">·</span> <CircleHelp size={13} /></div>{projectDialog && <ProjectDialog mode={projectDialog.mode} value={projectDialogValue} setValue={setProjectDialogValue} onCancel={closeProjectDialog} onConfirm={confirmProjectDialog} />}</div>;
 }
