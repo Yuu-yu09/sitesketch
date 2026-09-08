@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { projectStateSchema, websiteSpecSchema } from "./sitesketch";
+import { recommendSections } from "../client/src/features/workspace/model";
 
 describe("SiteSketch structured data validation", () => {
   it("accepts an editable project state", () => {
@@ -13,6 +14,13 @@ describe("SiteSketch structured data validation", () => {
       selectedBlock: "hero",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("returns deterministic planning recommendations for common site types", () => {
+    expect(recommendSections("Restaurant", "Help visitors book a service").map(section => section.id)).toEqual([
+      "nav", "hero", "services", "proof", "contact", "footer",
+    ]);
+    expect(recommendSections("SaaS product", "Drive signups").map(section => section.id)).toContain("process");
   });
 
   it("rejects malformed or uncontrolled AI website specifications", () => {
