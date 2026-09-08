@@ -34,6 +34,14 @@ async function startServer() {
   if (ENV.isProduction) {
     if (!ENV.databaseUrl) throw new Error("DATABASE_URL is required in production");
     if (ENV.cookieSecret.length < 32) throw new Error("JWT_SECRET must be at least 32 characters in production");
+    const googleConfigured = Boolean(ENV.googleClientId || ENV.googleClientSecret);
+    const githubConfigured = Boolean(ENV.githubClientId || ENV.githubClientSecret);
+    if (googleConfigured && (!ENV.googleClientId || !ENV.googleClientSecret)) {
+      throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured together");
+    }
+    if (githubConfigured && (!ENV.githubClientId || !ENV.githubClientSecret)) {
+      throw new Error("GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be configured together");
+    }
   }
   const app = express();
   const server = createServer(app);

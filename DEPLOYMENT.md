@@ -15,6 +15,11 @@ register these callback URLs:
 - `/api/auth/google/callback`
 - `/api/auth/github/callback`
 
+Google login uses `prompt=select_account` so users can choose the Google
+account they want to use. GitHub uses the currently authorized GitHub account
+and requests the verified email scope. Never commit provider secrets; configure
+them in the deployment platform's secret manager.
+
 ## Database setup
 
 Run migrations before starting the application:
@@ -47,3 +52,9 @@ readiness. Configure the platform health check to use `/readyz`.
 - Back up PostgreSQL and test restoring a backup.
 - Monitor `/readyz` and application errors.
 - Configure the reverse proxy to forward `X-Forwarded-Proto`.
+
+## Continuous integration
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` starts PostgreSQL,
+applies migrations, runs TypeScript checks, unit tests, ownership integration
+tests, Playwright browser tests, and the production build.
