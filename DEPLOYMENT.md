@@ -31,8 +31,16 @@ corepack pnpm db:push
 For local development, start PostgreSQL with:
 
 ```sh
-docker compose up -d postgres
+corepack pnpm setup:local
 ```
+
+On Windows, install and run Docker Desktop first. The setup command creates
+`.env` from `.env.example`, starts PostgreSQL, waits for its healthcheck, and
+applies the Drizzle migrations.
+
+For production, Neon or another managed PostgreSQL provider is recommended.
+Copy its pooled or direct connection string into `DATABASE_URL`; do not commit
+that value.
 
 ## Build and run
 
@@ -58,3 +66,17 @@ readiness. Configure the platform health check to use `/readyz`.
 The GitHub Actions workflow in `.github/workflows/ci.yml` starts PostgreSQL,
 applies migrations, runs TypeScript checks, unit tests, ownership integration
 tests, Playwright browser tests, and the production build.
+
+## OAuth provider setup
+
+Create provider applications using the exact public HTTPS origin of the
+deployed SiteSketch instance:
+
+- Google Cloud Console: enable Google Identity Services and add
+  `https://YOUR_DOMAIN/api/auth/google/callback` as an authorized redirect URI.
+- GitHub Developer Settings: add
+  `https://YOUR_DOMAIN/api/auth/github/callback` as the authorization callback URL.
+
+Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, and
+`GITHUB_CLIENT_SECRET` in the hosting provider's secret manager. The server
+rejects partially configured provider credentials at startup.

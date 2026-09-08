@@ -11,6 +11,10 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "setup:local": "powershell -ExecutionPolicy Bypass -File scripts/setup-local.ps1",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:status": "docker compose ps postgres",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },
   "dependencies": {
