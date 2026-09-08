@@ -40,48 +40,19 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  defaultProject,
+  initialSections,
+  sectionOptions,
+  type GeneratedSection,
+  type ProjectState,
+  type WorkspaceMode,
+  type WorkspaceSection,
+} from "@/features/workspace/model";
+import { useWorkspaceProject } from "@/features/workspace/useWorkspaceProject";
 
-type Mode = "plan" | "build" | "preview";
-type Section = {
-  id: string;
-  name: string;
-  description: string;
-  status: "recommended" | "added";
-  icon: string;
-};
-
-export type GeneratedSection = {
-  id: string;
-  name: string;
-  eyebrow: string;
-  title: string;
-  body: string;
-  cta: string;
-  background: string;
-  foreground: string;
-  accent: string;
-  layout: "split" | "centered" | "grid" | "quote" | "simple";
-};
-
-type ProjectState = {
-  projectName: string;
-  projectType: string;
-  purpose: string;
-  prompt: string;
-  sections: Section[];
-  checklist: Record<string, boolean>;
-  selectedBlock: string;
-};
-
-const initialSections: Section[] = [
-  { id: "nav", name: "Navigation", description: "Clear wayfinding for every page", status: "recommended", icon: "≡" },
-  { id: "hero", name: "Hero", description: "Lead with a focused value proposition", status: "recommended", icon: "✦" },
-  { id: "proof", name: "Social proof", description: "Build confidence with customer signals", status: "recommended", icon: "◌" },
-  { id: "services", name: "Services", description: "Show the ways you create value", status: "recommended", icon: "▦" },
-  { id: "process", name: "Process", description: "Make the next step feel simple", status: "recommended", icon: "↗" },
-  { id: "contact", name: "Contact", description: "A direct path to start a conversation", status: "recommended", icon: "⌁" },
-  { id: "footer", name: "Footer", description: "Close with confidence and context", status: "recommended", icon: "—" },
-];
+type Mode = WorkspaceMode;
+type Section = WorkspaceSection;
 
 const blockContent: Record<string, { eyebrow: string; title: string; body: string }> = {
   hero: { eyebrow: "STRATEGY, MADE VISIBLE", title: "Make your next move obvious.", body: "A clear website turns good ideas into momentum. Shape the story, then build the experience around it." },
@@ -89,18 +60,6 @@ const blockContent: Record<string, { eyebrow: string; title: string; body: strin
   services: { eyebrow: "HOW WE HELP", title: "A system for the next chapter.", body: "From the first outline to the final interaction, every part of the site has a job to do." },
   process: { eyebrow: "A BETTER WAY TO BUILD", title: "From blank page to clear direction.", body: "Start with structure. Refine with intention. Launch with confidence." },
 };
-
-const defaultProject: ProjectState = {
-  projectName: "Northstar Studio",
-  projectType: "Creative agency",
-  purpose: "Turn interest into qualified conversations",
-  prompt: "A confident, editorial site for a small strategy studio helping ambitious teams find their next clear move.",
-  sections: initialSections,
-  checklist: { headline: true, proof: true, services: false, cta: false },
-  selectedBlock: "hero",
-};
-
-const sectionOptions = ["Testimonials", "FAQ", "Pricing", "Gallery", "Case studies", "Opening hours"];
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -233,7 +192,7 @@ export default function Home() {
   const [editorResetKey, setEditorResetKey] = useState(0);
   const [projectDialog, setProjectDialog] = useState<{ mode: "rename" | "delete"; id: number } | null>(null);
   const [projectDialogValue, setProjectDialogValue] = useState("");
-  const [project, setProject] = useState<ProjectState>(() => { try { const saved = window.localStorage.getItem("sitesketch-project"); return saved ? JSON.parse(saved) : defaultProject; } catch { return defaultProject; } });
+  const { project, setProject, persistLocalProject } = useWorkspaceProject();
   const projectsQuery = trpc.projects.list.useQuery(undefined, { enabled: Boolean(user) });
   const createProject = trpc.projects.create.useMutation();
   const updateProject = trpc.projects.update.useMutation();
@@ -244,7 +203,7 @@ export default function Home() {
   const projectProgress = useMemo(() => Math.min(100, Math.round((project.sections.length / 7) * 100)), [project.sections.length]);
 
   useEffect(() => {
-    if (!user) { window.localStorage.setItem("sitesketch-project", JSON.stringify(project)); return; }
+    if (!user) { persistLocalProject(project); return; }
     const first = projectsQuery.data?.[0];
     if (first && !projectId && !hasChosenProject) {
       setProjectId(first.id);
@@ -253,10 +212,10 @@ export default function Home() {
       setIgnoreRemoteEditorData(false);
       setProject({ projectName: first.projectName, projectType: first.projectType, purpose: first.purpose, prompt: first.prompt, sections: first.sections, checklist: first.checklist, selectedBlock: first.selectedBlock });
     }
-  }, [user, projectsQuery.data, projectId, hasChosenProject]);
+  }, [user, projectsQuery.data, projectId, hasChosenProject, persistLocalProject]);
 
   const saveProject = () => {
-    if (!user) { window.localStorage.setItem("sitesketch-project", JSON.stringify(project)); toast.success("Project saved locally", { description: "Sign in to persist this project to the SiteSketch database." }); return; }
+    if (!user) { persistLocalProject(project); toast.success("Project saved locally", { description: "Sign in to persist this project to the SiteSketch database." }); return; }
     if (projectId) {
       updateProject.mutate({ id: projectId, state: project }, { onSuccess: () => toast.success("Project saved to database") });
       if (Object.keys(editorData).length > 0) saveEditor.mutate({ id: projectId, data: editorData });

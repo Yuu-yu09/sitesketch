@@ -5,7 +5,7 @@ import "@/grapesjs-overrides.css";
 import { ChevronDown, MoreHorizontal, Save, Sparkles, Undo2, Redo2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import type { GeneratedSection } from "@/pages/Home";
+import type { GeneratedSection } from "@/features/workspace/model";
 
 type SiteSketchEditorProps = {
   projectId?: number;
