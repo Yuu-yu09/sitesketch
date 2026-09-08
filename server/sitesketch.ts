@@ -25,14 +25,14 @@ export const projectStateSchema = z.object({
 export const editorDataSchema = z.record(z.string(), z.unknown());
 
 export const websiteSpecSchema = z.object({
-  site_type: z.string().min(1).max(120),
-  purpose: z.string().min(1).max(240),
-  theme: z.string().min(1).max(80),
+  site_type: z.string().trim().min(1).max(120),
+  purpose: z.string().trim().min(1).max(240),
+  theme: z.string().trim().min(1).max(80),
   pages: z.array(z.object({
-    name: z.string().min(1).max(120),
+    name: z.string().trim().min(1).max(120),
     sections: z.array(z.object({
-      id: z.string().min(1).max(80).regex(/^[a-z0-9_-]+$/),
-      name: z.string().min(1).max(120),
+      id: z.string().trim().min(1).max(80).regex(/^[a-z0-9_-]+$/),
+      name: z.string().trim().min(1).max(120),
       eyebrow: z.string().max(80),
       title: z.string().min(1).max(180),
       body: z.string().max(500),
@@ -43,7 +43,25 @@ export const websiteSpecSchema = z.object({
       layout: z.enum(["split", "centered", "grid", "quote", "simple"]),
     })).min(1).max(20),
   })).min(1).max(8),
+}).superRefine((spec, ctx) => {
+  const pageNames = new Set<string>();
+  spec.pages.forEach((page, pageIndex) => {
+    const normalizedName = page.name.toLowerCase();
+    if (pageNames.has(normalizedName)) {
+      ctx.addIssue({ code: "custom", path: ["pages", pageIndex, "name"], message: "Page names must be unique" });
+    }
+    pageNames.add(normalizedName);
+    const sectionIds = new Set<string>();
+    page.sections.forEach((section, sectionIndex) => {
+      if (sectionIds.has(section.id)) {
+        ctx.addIssue({ code: "custom", path: ["pages", pageIndex, "sections", sectionIndex, "id"], message: "Section ids must be unique within a page" });
+      }
+      sectionIds.add(section.id);
+    });
+  });
 });
+
+export const aiPromptSchema = z.string().trim().min(10).max(4000);
 
 export type ProjectStateInput = z.infer<typeof projectStateSchema>;
 
@@ -163,12 +181,13 @@ export async function saveEditorData(userId: number, projectId: number, data: Re
 }
 
 export async function generateWebsiteSpec(prompt: string) {
+  const validatedPrompt = aiPromptSchema.parse(prompt);
   let response;
   try {
     response = await invokeLLM({
     messages: [
       { role: "system", content: "You are SiteSketch's website planning assistant. Return only a valid structured website specification. Use short, practical section ids from this supported set when possible: navbar, hero, about, services, features, cards, gallery, testimonials, pricing, faq, contact, footer. For every section write original, specific copy for the user's business and a distinct visual direction. Colors must be six-digit hex values. Never return HTML, CSS, JavaScript, markdown, or arbitrary code." },
-      { role: "user", content: `Create an editable website structure from this brief: ${prompt}` },
+      { role: "user", content: `Create an editable website structure from this brief: ${validatedPrompt}` },
     ],
     response_format: {
       type: "json_schema",

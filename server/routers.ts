@@ -12,6 +12,7 @@ import {
   createUserProject,
   deleteUserProject,
   generateWebsiteSpec,
+  aiPromptSchema,
   listUserProjects,
   loadEditorData,
   projectStateSchema,
@@ -101,7 +102,7 @@ export const appRouter = router({
     }),
   }),
   ai: router({
-    generate: protectedProcedure.input(z.object({ prompt: z.string().min(10).max(4000) })).mutation(({ input }) => generateWebsiteSpec(input.prompt)),
+    generate: protectedProcedure.input(z.object({ prompt: aiPromptSchema })).mutation(({ input }) => generateWebsiteSpec(input.prompt)),
   }),
 });
 

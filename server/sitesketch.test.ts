@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { projectStateSchema, websiteSpecSchema } from "./sitesketch";
+import { aiPromptSchema, projectStateSchema, websiteSpecSchema } from "./sitesketch";
 import { recommendSections } from "../client/src/features/workspace/model";
 
 describe("SiteSketch structured data validation", () => {
@@ -36,6 +36,23 @@ describe("SiteSketch structured data validation", () => {
   it("requires at least one page and one section per page", () => {
     expect(websiteSpecSchema.safeParse({ site_type: "portfolio", purpose: "show work", theme: "quiet", pages: [] }).success).toBe(false);
     expect(websiteSpecSchema.safeParse({ site_type: "portfolio", purpose: "show work", theme: "quiet", pages: [{ name: "Home", sections: [] }] }).success).toBe(false);
+  });
+
+  it("rejects ambiguous AI prompts and duplicate generated content", () => {
+    expect(aiPromptSchema.safeParse("   ").success).toBe(false);
+    const duplicateSections = websiteSpecSchema.safeParse({
+      site_type: "portfolio",
+      purpose: "show work",
+      theme: "quiet",
+      pages: [{
+        name: "Home",
+        sections: [
+          { id: "hero", name: "Hero", eyebrow: "", title: "One", body: "", cta: "", background: "#17213d", foreground: "#fff7ed", accent: "#f0b66d", layout: "simple" },
+          { id: "hero", name: "Hero again", eyebrow: "", title: "Two", body: "", cta: "", background: "#17213d", foreground: "#fff7ed", accent: "#f0b66d", layout: "simple" },
+        ],
+      }],
+    });
+    expect(duplicateSections.success).toBe(false);
   });
 
   it("accepts generated section copy and safe visual direction", () => {
