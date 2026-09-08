@@ -99,6 +99,23 @@ export async function getUserByEmail(email: string) {
   return result[0];
 }
 
+export async function updateUserSignIn(
+  openId: string,
+  input: { name?: string | null; email?: string | null; loginMethod?: string | null }
+) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not configured");
+  }
+
+  await db.update(users).set({
+    ...input,
+    lastSignedIn: new Date(),
+  }).where(eq(users.openId, openId));
+
+  return getUserByOpenId(openId);
+}
+
 export async function createLocalUser(input: {
   openId: string;
   name: string;

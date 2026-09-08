@@ -5,9 +5,9 @@ export const UNAUTHED_ERR_MSG = 'Please login (10001)';
 export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
 
 // One-time nonce cookie that binds an OAuth login to the browser that started
-// it. The `__Host-` prefix forces the cookie host-only (Secure, Path=/, no
-// Domain), so another site cannot plant a matching value in a victim's browser.
-export const OAUTH_STATE_COOKIE = "__Host-oauth_state";
+// it. No Domain attribute makes this cookie host-only while still allowing
+// local HTTP development, where the `__Host-` prefix cannot be used.
+export const OAUTH_STATE_COOKIE = "sitesketch_oauth_state";
 
 // `state` carries the callback redirect URI (used at token exchange) plus the
 // CSRF nonce. Defined here so the client encoder and server decoder never drift.

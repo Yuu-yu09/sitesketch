@@ -1,0 +1,16 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: sitesketch
+      MYSQL_USER: sitesketch
+      MYSQL_PASSWORD: sitesketch
+      MYSQL_ROOT_PASSWORD: sitesketch-root
+    ports:
+      - "3306:3306"
+    volumes:
+      - sitesketch-mysql:/var/lib/mysql
+
+volumes:
+  sitesketch-mysql:
