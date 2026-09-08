@@ -38,13 +38,28 @@ async function exchangeProviderCode(
   const tokenUrl = provider === "google"
     ? "https://oauth2.googleapis.com/token"
     : "https://github.com/login/oauth/access_token";
+  const tokenBody = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    code,
+    redirect_uri: redirectUri,
+  });
   const tokenResponse = await fetch(tokenUrl, {
     method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri }),
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: tokenBody,
   });
-  if (!tokenResponse.ok) throw new Error(`${provider} token exchange failed`);
-  const token = await tokenResponse.json() as { access_token?: string; error?: string };
+  const token = await tokenResponse.json() as {
+    access_token?: string;
+    error?: string;
+    error_description?: string;
+  };
+  if (!tokenResponse.ok) {
+    throw new Error(`${provider} token exchange failed: ${token.error_description ?? token.error ?? "provider rejected the code"}`);
+  }
   if (!token.access_token) throw new Error(token.error ?? `${provider} did not return an access token`);
 
   if (provider === "google") {
