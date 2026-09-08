@@ -15,6 +15,8 @@ type SiteSketchEditorProps = {
   onDataChange?: (data: Record<string, unknown>) => void;
 };
 
+type EditorPage = { id: string; name: string; html: string; css: string };
+
 const starterHtml = `
   <main class="ss-site">
     <nav class="ss-nav"><div class="ss-logo"><span>n</span> northstar</div><div class="ss-links"><a>Approach</a><a>Capabilities</a><a>About</a></div><button class="ss-pill">Let's talk →</button></nav>
@@ -64,6 +66,10 @@ export default function SiteSketchEditor({ projectId, initialSectionIds = ["nav"
   const [activeDevice, setActiveDevice] = useState("Desktop");
   const [isReady, setIsReady] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [pages, setPages] = useState<EditorPage[]>([{ id: "home", name: "Home", html: "", css: starterCss }]);
+  const [activePageId, setActivePageId] = useState("home");
+  const activePageIdRef = useRef("home");
+  const pagesRef = useRef<Record<string, EditorPage>>({});
   const remoteEditor = trpc.projects.editor.load.useQuery({ id: projectId ?? 0 }, { enabled: Boolean(projectId) });
   const saveEditor = trpc.projects.editor.save.useMutation({
     onSuccess: () => { setHasChanges(false); toast.success("Editor saved", { description: "Your editable GrapesJS project data is stored in the database." }); },
@@ -95,8 +101,11 @@ export default function SiteSketchEditor({ projectId, initialSectionIds = ["nav"
     if (generatedSections.length > 0) editor.addStyle(`.ss-generated { min-height: 280px; padding: 78px 12%; display:flex; align-items:center; } .ss-generated-inner { width:100%; max-width:820px; margin:0 auto; } .ss-generated h2 { max-width:760px; margin:16px 0; font-size:clamp(32px,5vw,66px); line-height:.98; letter-spacing:-.06em; } .ss-generated p { max-width:560px; color:color-mix(in srgb, var(--ss-fg) 72%, transparent); font-size:16px; line-height:1.6; } .ss-generated-cta { display:inline-block; margin-top:20px; border-bottom:2px solid var(--ss-accent); padding-bottom:5px; color:var(--ss-fg); font-weight:700; text-decoration:none; } .ss-generated-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:28px; } .ss-generated-grid span { border:1px solid color-mix(in srgb, var(--ss-fg) 25%, transparent); border-radius:12px; padding:20px; } .ss-generated-centered { text-align:center; } .ss-generated-centered .ss-generated-inner { max-width:720px; } .ss-generated-split:nth-child(even) .ss-generated-inner { margin-left:auto; margin-right:8%; } .ss-generated-quote { font-style:italic; }`);
     blocks.forEach(block => editor.BlockManager.add(block.id, { label: block.label, category: block.category, content: block.content, attributes: { class: "gjs-block-ss" } }));
     editor.setComponents(initialHtml || starterHtml);
+    pagesRef.current = { home: { id: "home", name: "Home", html: initialHtml || starterHtml, css: starterCss } };
     const emitData = () => {
-      const data = editor.getProjectData() as Record<string, unknown>;
+      const activePage = pagesRef.current[activePageIdRef.current];
+      if (activePage) pagesRef.current[activePageIdRef.current] = { ...activePage, html: editor.getHtml(), css: editor.getCss() ?? "" };
+      const data = { ...editor.getProjectData(), pages: Object.values(pagesRef.current) } as Record<string, unknown>;
       onDataChange?.(data);
       if (!isHydratingRef.current) setHasChanges(true);
     };
@@ -108,8 +117,17 @@ export default function SiteSketchEditor({ projectId, initialSectionIds = ["nav"
 
   useEffect(() => {
     if (!isReady || !editorRef.current || !currentData) return;
+    const remoteData = currentData as Record<string, unknown>;
+    const savedPages = Array.isArray(remoteData.pages) ? remoteData.pages.filter((page: unknown): page is EditorPage => Boolean(page) && typeof page === "object" && typeof (page as { id?: unknown }).id === "string" && typeof (page as { name?: unknown }).name === "string" && typeof (page as { html?: unknown }).html === "string" && typeof (page as { css?: unknown }).css === "string") : [];
+    if (savedPages.length > 0) {
+      pagesRef.current = Object.fromEntries(savedPages.map(page => [page.id, page]));
+      setPages(savedPages);
+      setActivePageId(savedPages[0].id);
+      activePageIdRef.current = savedPages[0].id;
+    }
     isHydratingRef.current = true;
-    editorRef.current.loadProjectData(currentData);
+    const { pages: _pages, ...projectData } = remoteData;
+    editorRef.current.loadProjectData(projectData);
     onDataChange?.(currentData);
     setHasChanges(false);
     isHydratingRef.current = false;
@@ -117,7 +135,10 @@ export default function SiteSketchEditor({ projectId, initialSectionIds = ["nav"
 
   useEffect(() => {
     if (!isReady || !projectId || generatedSections.length === 0 || currentData || !editorRef.current) return;
-    const data = editorRef.current.getProjectData() as Record<string, unknown>;
+    const editor = editorRef.current;
+    const activePage = pagesRef.current[activePageIdRef.current];
+    if (activePage) pagesRef.current[activePageIdRef.current] = { ...activePage, html: editor.getHtml(), css: editor.getCss() ?? "" };
+    const data = { ...editor.getProjectData(), pages: Object.values(pagesRef.current) } as Record<string, unknown>;
     onDataChange?.(data);
     saveEditor.mutate({ id: projectId, data });
   }, [currentData, generatedSections.length, isReady, onDataChange, projectId]);
@@ -131,14 +152,45 @@ export default function SiteSketchEditor({ projectId, initialSectionIds = ["nav"
   const save = () => {
     const editor = editorRef.current;
     if (!editor) return;
-    const data = editor.getProjectData() as Record<string, unknown>;
+    const activePage = pagesRef.current[activePageId];
+    if (activePage) pagesRef.current[activePageId] = { ...activePage, html: editor.getHtml(), css: editor.getCss() ?? "" };
+    const data = { ...editor.getProjectData(), pages: Object.values(pagesRef.current) } as Record<string, unknown>;
     onDataChange?.(data);
     if (projectId) saveEditor.mutate({ id: projectId, data });
     else { setHasChanges(false); toast("Editor draft saved locally until you sign in"); }
   };
 
+  const selectPage = (pageId: string) => {
+    const editor = editorRef.current;
+    const nextPage = pagesRef.current[pageId];
+    if (!editor || !nextPage || pageId === activePageId) return;
+    const currentPage = pagesRef.current[activePageId];
+    if (currentPage) pagesRef.current[activePageId] = { ...currentPage, html: editor.getHtml(), css: editor.getCss() ?? "" };
+    editor.setComponents(nextPage.html);
+    editor.setStyle(nextPage.css);
+    setActivePageId(pageId);
+    activePageIdRef.current = pageId;
+    setHasChanges(true);
+  };
+
+  const addPage = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const id = `page-${pages.length + 1}`;
+    const page = { id, name: `Page ${pages.length + 1}`, html: "<main class=\"ss-site\"></main>", css: starterCss };
+    const currentPage = pagesRef.current[activePageId];
+    if (currentPage) pagesRef.current[activePageId] = { ...currentPage, html: editor.getHtml(), css: editor.getCss() ?? "" };
+    pagesRef.current[id] = page;
+    setPages(Object.values(pagesRef.current));
+    editor.setComponents(page.html);
+    editor.setStyle(page.css);
+    setActivePageId(id);
+    activePageIdRef.current = id;
+    setHasChanges(true);
+  };
+
   return <div className="builder-shell grapesjs-shell">
-    <aside className="builder-palette"><div className="palette-title"><span>Blocks</span><span className="font-mono text-[10px] text-slate-400">{isReady ? "LIVE" : "…"}</span></div><div id="sitesketch-blocks" className="palette-group grapesjs-blocks" /><div className="palette-tip"><Sparkles size={14} className="text-amber-400" /><div><div className="text-[11px] font-semibold text-slate-600">Drag to build</div><p className="mt-1 text-[10px] leading-relaxed text-slate-400">Drop a block onto the canvas, then edit its content and styles.</p></div></div></aside>
+    <aside className="builder-palette"><div className="palette-title"><span>Blocks</span><span className="font-mono text-[10px] text-slate-400">{isReady ? "LIVE" : "…"}</span></div><div className="mb-3 flex gap-1"><select value={activePageId} onChange={(event) => selectPage(event.target.value)} className="select-field min-w-0 flex-1 text-[11px]">{pages.map(page => <option key={page.id} value={page.id}>{page.name}</option>)}</select><button className="button-secondary px-2 py-1" onClick={addPage} title="Add page">+</button></div><div id="sitesketch-blocks" className="palette-group grapesjs-blocks" /><div className="palette-tip"><Sparkles size={14} className="text-amber-400" /><div><div className="text-[11px] font-semibold text-slate-600">Drag to build</div><p className="mt-1 text-[10px] leading-relaxed text-slate-400">Drop a block onto the canvas, then edit its content and styles.</p></div></div></aside>
     <div className="builder-canvas-area"><div className="builder-toolbar"><div className="flex items-center gap-1 rounded-lg bg-[#f4f5f7] p-1">{["Desktop", "Tablet", "Mobile"].map(device => <button key={device} onClick={() => setActiveDevice(device)} className={`device-tab ${activeDevice === device ? "device-tab-active" : ""}`}>{device}</button>)}</div><div className="flex items-center gap-3 text-[11px] text-slate-400"><span>{hasChanges ? "Unsaved changes" : "Saved"}</span><button className="button-secondary px-2 py-1" onClick={save}><Save size={13} />Save</button><Undo2 size={15} /><Redo2 size={15} /><MoreHorizontal size={17} /></div></div><div ref={canvasRef} className="grapesjs-canvas" /></div>
     <aside className="builder-inspector"><div className="inspector-tabs"><button className="inspector-tab-active">Inspector</button><button>Styles</button></div><div className="inspector-section"><div className="eyebrow text-slate-400">Selected component</div><p className="mt-3 text-xs leading-relaxed text-slate-500">Select a block in the canvas to edit its text, spacing, colors, and responsive styles with GrapesJS.</p><div className="mt-4 rounded-lg bg-[#f6f7f9] p-3 text-[10px] leading-relaxed text-slate-500"><span className="font-semibold text-slate-700">Database-backed editor data</span><br />{projectId ? "Connected to this project." : "Sign in and save to persist it."}</div></div></aside>
   </div>;
