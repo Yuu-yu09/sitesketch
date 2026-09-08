@@ -23,6 +23,9 @@ export default function AuthPage() {
   });
 
   useEffect(() => {
+    const oauthError = new URLSearchParams(window.location.search).get("oauth_error");
+    if (oauthError === "google_not_configured") setFormError("Google login is not configured yet. Add the Google OAuth credentials to your environment.");
+    if (oauthError === "github_not_configured") setFormError("GitHub login is not configured yet. Add the GitHub OAuth credentials to your environment.");
     if (!loading && user) {
       setLocation("/dashboard");
     }

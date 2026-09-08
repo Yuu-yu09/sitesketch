@@ -31,7 +31,8 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
-  if (ENV.isProduction) {
+  const isProduction = ENV.isProduction || process.argv.includes("--production");
+  if (isProduction) {
     if (!ENV.databaseUrl) throw new Error("DATABASE_URL is required in production");
     if (ENV.cookieSecret.length < 32) throw new Error("JWT_SECRET must be at least 32 characters in production");
     const googleConfigured = Boolean(ENV.googleClientId || ENV.googleClientSecret);
@@ -75,7 +76,7 @@ async function startServer() {
     })
   );
   // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
+  if (!isProduction) {
     await setupVite(app, server);
   } else {
     serveStatic(app);

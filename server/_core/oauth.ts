@@ -80,12 +80,9 @@ export function registerOAuthRoutes(app: Express) {
         ? ENV.googleClientId && ENV.googleClientSecret
         : ENV.githubClientId && ENV.githubClientSecret;
       if (!configured) {
-        res.status(503).json({
-          error: `${provider[0].toUpperCase()}${provider.slice(1)} login is not configured`,
-          required: provider === "google"
-            ? ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
-            : ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
-        });
+        const providerName = `${provider[0].toUpperCase()}${provider.slice(1)}`;
+        console.error(`[OAuth] ${providerName} login is not configured`);
+        res.redirect(`/` + `?oauth_error=${provider}_not_configured`);
         return;
       }
 
