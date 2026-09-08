@@ -22,6 +22,22 @@ export async function getDb() {
   return _db;
 }
 
+export async function checkDatabaseConnection() {
+  if (!_pool && !process.env.DATABASE_URL) return false;
+  if (!_pool) await getDb();
+  if (!_pool) return false;
+  await _pool.query("SELECT 1");
+  return true;
+}
+
+export async function closeDatabaseConnection() {
+  if (_pool) {
+    await _pool.end();
+    _pool = null;
+    _db = null;
+  }
+}
+
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) {
     throw new Error("User openId is required for upsert");
