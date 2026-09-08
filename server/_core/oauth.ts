@@ -43,6 +43,7 @@ async function exchangeProviderCode(
     client_secret: clientSecret,
     code,
     redirect_uri: redirectUri,
+    grant_type: "authorization_code",
   });
   const tokenResponse = await fetch(tokenUrl, {
     method: "POST",
