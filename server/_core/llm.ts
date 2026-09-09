@@ -216,7 +216,8 @@ const resolveApiUrl = () => {
   if (!ENV.forgeApiUrl || ENV.forgeApiUrl.trim().length === 0) {
     throw new Error("BUILT_IN_FORGE_API_URL is not configured");
   }
-  return `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
+  const baseUrl = ENV.forgeApiUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+  return `${baseUrl}/v1/chat/completions`;
 };
 
 const assertApiKey = () => {
@@ -406,6 +407,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const response = await fetchWithBackoff(resolveApiUrl(), {
     method: "POST",
     headers: {
+      accept: "application/json",
       "content-type": "application/json",
       authorization: `Bearer ${ENV.forgeApiKey}`,
     },
@@ -419,7 +421,16 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     );
   }
 
-  return (await response.json()) as InvokeResult;
+  const responseText = await response.text();
+  try {
+    return JSON.parse(responseText) as InvokeResult;
+  } catch {
+    const contentType = response.headers.get("content-type") ?? "unknown";
+    const preview = responseText.replace(/\s+/g, " ").slice(0, 160);
+    throw new Error(
+      `LLM provider returned a non-JSON response (${contentType}): ${preview}. Check BUILT_IN_FORGE_API_URL and AI_MODEL.`
+    );
+  }
 }
 
 export type ModelInfo = {
@@ -440,7 +451,8 @@ export async function listLLMModels(): Promise<ModelsResponse> {
   if (!ENV.forgeApiUrl || ENV.forgeApiUrl.trim().length === 0) {
     throw new Error("BUILT_IN_FORGE_API_URL is not configured");
   }
-  const url = `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`;
+  const baseUrl = ENV.forgeApiUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const url = `${baseUrl}/v1/models`;
 
   const response = await fetchWithBackoff(url, {
     headers: { authorization: `Bearer ${ENV.forgeApiKey}` },
