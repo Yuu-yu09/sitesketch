@@ -8,6 +8,9 @@ Set these environment variables in the runtime environment:
 - `PORT` (the platform-provided port)
 - `DATABASE_URL` for PostgreSQL
 - `JWT_SECRET` with at least 32 random characters
+- `BUILT_IN_FORGE_API_URL` for the OpenAI-compatible AI provider base URL
+- `BUILT_IN_FORGE_API_KEY` for the AI provider; keep this secret
+- `AI_MODEL` set to a model ID returned by the provider's `/v1/models` endpoint
 
 OAuth is optional. If enabled, configure the provider client credentials and
 register these callback URLs:
@@ -19,6 +22,29 @@ Google login uses `prompt=select_account` so users can choose the Google
 account they want to use. GitHub uses the currently authorized GitHub account
 and requests the verified email scope. Never commit provider secrets; configure
 them in the deployment platform's secret manager.
+
+### AI provider audit
+
+In the Render service shell, verify the variables are present without printing
+their values:
+
+```sh
+test -n "$BUILT_IN_FORGE_API_URL" && echo "AI provider URL configured"
+test -n "$BUILT_IN_FORGE_API_KEY" && echo "AI provider key configured"
+test -n "$AI_MODEL" && echo "AI model configured: $AI_MODEL"
+```
+
+Then confirm the configured model is available. This prints model IDs only,
+not the API key:
+
+```sh
+curl --fail-with-body \
+  -H "Authorization: Bearer $BUILT_IN_FORGE_API_KEY" \
+  "$BUILT_IN_FORGE_API_URL/v1/models"
+```
+
+`AI_MODEL` must exactly match one of the returned `id` values. Do not paste
+the key or the full environment output into logs or source control.
 
 ## Database setup
 

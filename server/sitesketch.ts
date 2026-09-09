@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
+import { ENV } from "./_core/env";
 import { contentItems, pages, projectEditorData, projects } from "../drizzle/schema";
 
 export const sectionSchema = z.object({
@@ -228,7 +229,8 @@ export async function generateWebsiteSpec(prompt: string) {
         },
       },
     },
-      max_tokens: 2200,
+    model: ENV.aiModel || undefined,
+    max_tokens: 2200,
     });
   } catch (error) {
     console.error("[SiteSketch AI] LLM request failed", error);
