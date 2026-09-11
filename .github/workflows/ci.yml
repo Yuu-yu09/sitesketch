@@ -29,13 +29,14 @@ jobs:
       RUN_DB_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.4.1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.4.1 --activate
+          pnpm --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:push
       - run: pnpm check
