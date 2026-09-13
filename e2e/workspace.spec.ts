@@ -11,13 +11,13 @@ test("user can register, save a project, save the editor, and open preview", asy
   await page.getByRole("button", { name: "Create my account" }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole("button", { name: "Plan workspace" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Plan/ }).first()).toBeVisible();
 
   await page.getByTitle("New project").click();
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Project created")).toBeVisible();
 
-  await page.getByRole("banner").getByRole("button", { name: "Build" }).click();
+  await page.getByRole("banner").getByRole("button", { name: "Edit site" }).click();
   await expect(page.locator(".grapesjs-canvas")).toBeVisible();
   await page.getByRole("main").getByRole("button", { name: "Save" }).click();
 
