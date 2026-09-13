@@ -17,11 +17,11 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
   const loginMutation = trpc.auth.login.useMutation({
-    onSuccess: () => setLocation("/dashboard"),
+    onSuccess: () => window.location.assign("/dashboard"),
     onError: error => setFormError(error.message),
   });
   const registerMutation = trpc.auth.register.useMutation({
-    onSuccess: () => setLocation("/dashboard"),
+    onSuccess: () => window.location.assign("/dashboard"),
     onError: error => setFormError(error.message),
   });
 
