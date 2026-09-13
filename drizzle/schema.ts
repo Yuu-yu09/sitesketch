@@ -1,8 +1,10 @@
-import { integer, pgEnum, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { integer, pgSchema, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
-export const userRole = pgEnum("user_role", ["user", "admin"]);
+const siteSketchSchema = pgSchema("sitesketch");
 
-export const users = pgTable("users", {
+export const userRole = siteSketchSchema.enum("user_role", ["user", "admin"]);
+
+export const users = siteSketchSchema.table("users", {
   id: serial("id").primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
@@ -15,7 +17,7 @@ export const users = pgTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
-export const projects = pgTable("projects", {
+export const projects = siteSketchSchema.table("projects", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
   name: varchar("name", { length: 180 }).notNull(),
@@ -29,7 +31,7 @@ export const projects = pgTable("projects", {
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export const pages = pgTable("pages", {
+export const pages = siteSketchSchema.table("pages", {
   id: serial("id").primaryKey(),
   projectId: integer("projectId").notNull(),
   name: varchar("name", { length: 120 }).notNull(),
@@ -37,14 +39,14 @@ export const pages = pgTable("pages", {
   position: integer("position").notNull().default(0),
 });
 
-export const projectEditorData = pgTable("projectEditorData", {
+export const projectEditorData = siteSketchSchema.table("projectEditorData", {
   id: serial("id").primaryKey(),
   projectId: integer("projectId").notNull().unique(),
   dataJson: text("dataJson").notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export const contentItems = pgTable("contentItems", {
+export const contentItems = siteSketchSchema.table("contentItems", {
   id: serial("id").primaryKey(),
   projectId: integer("projectId").notNull(),
   pageId: integer("pageId"),
