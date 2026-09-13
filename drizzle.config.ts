@@ -9,6 +9,7 @@ export default defineConfig({
   schema: "./drizzle/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
+  schemaFilter: ["sitesketch"],
   dbCredentials: {
     url: connectionString,
   },

@@ -7,18 +7,21 @@ import { useLocation } from "wouter";
 export default function AuthPage() {
   const { loading, user } = useAuth();
   const [, setLocation] = useLocation();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(() => {
+    if (typeof window === "undefined") return "login";
+    return new URLSearchParams(window.location.search).get("mode") === "register" ? "register" : "login";
+  });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
   const loginMutation = trpc.auth.login.useMutation({
-    onSuccess: () => setLocation("/dashboard"),
+    onSuccess: () => window.location.assign("/dashboard"),
     onError: error => setFormError(error.message),
   });
   const registerMutation = trpc.auth.register.useMutation({
-    onSuccess: () => setLocation("/dashboard"),
+    onSuccess: () => window.location.assign("/dashboard"),
     onError: error => setFormError(error.message),
   });
 

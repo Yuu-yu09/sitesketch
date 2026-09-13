@@ -3,7 +3,18 @@ import { cloneProject, defaultProject, type ProjectState } from "./model";
 
 function loadLocalProject(): ProjectState {
   const saved = window.localStorage.getItem("sitesketch-project");
-  if (!saved) return cloneProject(defaultProject);
+  const pendingPrompt = window.localStorage.getItem("sitesketch-pending-prompt");
+  if (pendingPrompt?.trim()) window.localStorage.removeItem("sitesketch-pending-prompt");
+  if (!saved) {
+    if (pendingPrompt?.trim()) {
+      return {
+        ...cloneProject(defaultProject),
+        projectName: "Untitled project",
+        prompt: pendingPrompt.trim(),
+      };
+    }
+    return cloneProject(defaultProject);
+  }
   try {
     const parsed = JSON.parse(saved) as Partial<ProjectState>;
     if (

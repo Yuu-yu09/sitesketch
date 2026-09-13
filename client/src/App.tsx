@@ -7,6 +7,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import AuthPage from "./pages/AuthPage";
 import Home from "./pages/Home";
+import LandingPage from "./pages/LandingPage";
 
 function LoadingScreen() {
   return (
@@ -31,7 +32,8 @@ function ProtectedWorkspace() {
 function Router() {
   return (
     <Switch>
-      <Route path={"/"} component={AuthPage} />
+      <Route path={"/"} component={LandingPage} />
+      <Route path={"/auth"} component={AuthPage} />
       <Route path={"/dashboard"} component={ProtectedWorkspace} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
