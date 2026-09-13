@@ -11,17 +11,17 @@ test("user can register, save a project, save the editor, and open preview", asy
   await page.getByRole("button", { name: "Create my account" }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByText("Plan workspace")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Plan workspace" })).toBeVisible();
 
   await page.getByTitle("New project").click();
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Project created")).toBeVisible();
 
-  await page.getByRole("button", { name: "Build" }).click();
+  await page.getByRole("banner").getByRole("button", { name: "Build" }).click();
   await expect(page.locator(".grapesjs-canvas")).toBeVisible();
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Save" }).click();
 
-  await page.getByRole("button", { name: "Preview" }).click();
+  await page.getByRole("banner").getByRole("button", { name: "Preview" }).click();
   await expect(page.getByText("Saved editor output is ready to refine")).toBeVisible();
   await expect(page.locator("iframe[title*='Untitled project']")).toBeVisible();
 });
