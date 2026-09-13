@@ -12,8 +12,19 @@ function getQueryParam(req: Request, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function getRedirectUri(req: Request, provider: "google" | "github"): string {
-  const baseUrl = ENV.appUrl || `${req.protocol}://${req.get("host")}`;
+function isLocalHost(hostname: string | undefined) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+export function getRedirectUri(
+  req: Pick<Request, "hostname" | "protocol" | "get">,
+  provider: "google" | "github"
+): string {
+  // Host-only OAuth state cookies cannot move between localhost and 127.0.0.1.
+  // In local development, preserve the host the browser used to start login.
+  const baseUrl = isLocalHost(req.hostname)
+    ? `${req.protocol}://${req.get("host")}`
+    : ENV.appUrl || `${req.protocol}://${req.get("host")}`;
   return `${baseUrl.replace(/\/+$/, "")}/api/auth/${provider}/callback`;
 }
 
