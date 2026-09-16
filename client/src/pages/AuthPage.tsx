@@ -51,12 +51,17 @@ export default function AuthPage() {
 
   return (
     <main className="auth-shell" aria-label="SiteSketch authentication">
-      <section className="auth-card" aria-labelledby="auth-title">
-        <button type="button" className="auth-back-button" onClick={() => setLocation("/")}><ArrowLeft size={15} />Back to home</button>
-        <div className="auth-brand">
-          <div className="auth-mark">✦</div>
+      <header className="auth-header">
+        <button type="button" className="auth-brand" onClick={() => setLocation("/")} aria-label="SiteSketch home">
+          <span className="auth-mark" aria-hidden="true">✦</span>
           <span className="font-display">SITESKETCH</span>
-        </div>
+        </button>
+        <button type="button" className="auth-back-button" onClick={() => setLocation("/")}>
+          <ArrowLeft size={15} />
+          <span>Back to home</span>
+        </button>
+      </header>
+      <section className="auth-card" aria-labelledby="auth-title">
         <div className="auth-copy">
           <span className="eyebrow text-indigo-500">Your creative workspace</span>
           <h1 id="auth-title">Plan a clearer website.</h1>
