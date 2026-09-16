@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  blankProject,
   defaultProject,
   initialSections,
   projectTypeOptions,
@@ -67,6 +68,18 @@ const blockContent: Record<string, { eyebrow: string; title: string; body: strin
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+function EmptyWorkspace({ onNew }: { onNew: () => void }) {
+  return <section className="mx-auto flex min-h-[calc(100vh-190px)] max-w-[720px] items-center justify-center py-12 text-center">
+    <div className="w-full rounded-2xl border border-[#e5e7eb] bg-white px-6 py-12 shadow-[0_16px_50px_rgba(30,41,59,0.06)] sm:px-14">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600"><Plus size={26} strokeWidth={1.8} /></div>
+      <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-600">Your workspace is ready</p>
+      <h1 className="mt-3 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-900 sm:text-4xl">Start with a new project</h1>
+      <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-slate-500">Describe the site you want to make, then shape the plan and edit the working draft. Your projects will appear here when you save them.</p>
+      <button onClick={onNew} className="button-primary mx-auto mt-8"><Plus size={16} />Create new project</button>
+    </div>
+  </section>;
 }
 
 
@@ -124,6 +137,11 @@ export default function Home() {
       setEditorSectionIds(first.sections.map((section) => section.id));
       setIgnoreRemoteEditorData(false);
       setProject({ projectName: first.projectName, projectType: first.projectType, purpose: first.purpose, prompt: first.prompt, sections: first.sections, checklist: first.checklist, selectedBlock: first.selectedBlock });
+    } else if (projectsQuery.isSuccess && !first && !projectId && !hasChosenProject) {
+      setProject(blankProject);
+      setEditorData({});
+      setEditorSectionIds([]);
+      setIgnoreRemoteEditorData(true);
     }
   }, [user, projectsQuery.data, projectId, hasChosenProject, persistLocalProject]);
 
@@ -142,7 +160,7 @@ export default function Home() {
   };
 
   const openProject = (id: number) => { const saved = projectsQuery.data?.find((item) => item.id === id); if (!saved) return; setProjectId(saved.id); setHasChosenProject(true); setEditorData({}); setEditorSectionIds(saved.sections.map((section) => section.id)); setIgnoreRemoteEditorData(false); setProject({ projectName: saved.projectName, projectType: saved.projectType, purpose: saved.purpose, prompt: saved.prompt, sections: saved.sections, checklist: saved.checklist, selectedBlock: saved.selectedBlock }); setMode("plan"); toast(`Opened ${saved.projectName}`); };
-  const newProject = () => { setProjectId(undefined); setHasChosenProject(true); setEditorData({}); setGeneratedSections([]); setEditorSectionIds([]); setIgnoreRemoteEditorData(true); setEditorResetKey((value) => value + 1); setProject({ ...defaultProject, projectName: "Untitled project", prompt: "" }); setMode("plan"); toast("New project started"); };
+  const newProject = () => { setProjectId(undefined); setHasChosenProject(true); setEditorData({}); setGeneratedSections([]); setEditorSectionIds([]); setIgnoreRemoteEditorData(true); setEditorResetKey((value) => value + 1); setProject(blankProject); setMode("plan"); toast("New project started"); };
   const renameProjectById = (id: number) => { const saved = projectsQuery.data?.find((item) => item.id === id); setProjectDialog({ mode: "rename", id }); setProjectDialogValue(saved?.projectName ?? project.projectName); };
   const renameCurrentProject = () => { if (projectId) renameProjectById(projectId); else setProjectDialog({ mode: "rename", id: -1 }); setProjectDialogValue(project.projectName); };
   const deleteProjectById = (id: number) => { const saved = projectsQuery.data?.find((item) => item.id === id); setProjectDialog({ mode: "delete", id }); setProjectDialogValue(saved?.projectName ?? project.projectName); };
@@ -185,5 +203,6 @@ export default function Home() {
   const handleEditorData = useCallback((data: Record<string, unknown>) => setEditorData(data), []);
   const savedProjects = projectsQuery.data ?? [];
   if (loading) return <div className="min-h-screen bg-[#f8f9fb]" />;
-  return <div className="app-shell"><WorkspaceSidebar mode={mode} setMode={setMode} onNew={newProject} user={user} projects={savedProjects} activeProjectId={projectId} onOpenProject={openProject} onRenameProject={renameProjectById} onDeleteProject={deleteProjectById} /><div className="main-shell lg:pl-[252px]"><WorkspaceTopbar mode={mode} setMode={setMode} project={project} onSave={saveProject} user={user} projects={savedProjects} onNew={newProject} onOpenProject={openProject} onLogout={() => logout().then(() => { setProjectId(undefined); setEditorData({}); toast.success("Signed out"); }).catch((error) => toast.error("Sign out failed", { description: error.message }))} /><main className="mx-auto max-w-[1500px] px-5 py-7 sm:px-8 lg:px-10 lg:py-10">{mode === "plan" && <PlanView project={project} setProject={setProject} onGenerate={generate} isGenerating={generateAI.isPending} onOpenBuilder={() => setMode("build")} onRenameProject={renameCurrentProject} onDeleteProject={() => projectId ? deleteProjectById(projectId) : toast("Save this project before deleting it")} />}{mode === "build" && <WorkspaceBuilder projectId={projectId} editorSectionIds={editorSectionIds} generatedSections={generatedSections} ignoreRemoteData={ignoreRemoteEditorData} editorResetKey={editorResetKey} onDataChange={handleEditorData} />}{mode === "preview" && <WorkspacePreview project={project} editorData={editorData} setMode={setMode} />}</main><div className="mobile-bottom-nav lg:hidden"><button className={cn(mode === "plan" && "mobile-nav-active")} onClick={() => setMode("plan")}><LayoutDashboard size={17} /><span>Plan</span></button><button className={cn(mode === "build" && "mobile-nav-active")} onClick={() => setMode("build")}><Blocks size={17} />  <span>Edit</span></button><button className={cn(mode === "preview" && "mobile-nav-active")} onClick={() => setMode("preview")}><Eye size={17} /><span>Preview</span></button></div></div><div className="fixed bottom-5 right-5 hidden items-center gap-2 rounded-full bg-[#131b31] px-3 py-2 text-[10px] font-semibold text-slate-300 shadow-xl lg:flex"><span className="live-dot" />{projectProgress}% planned <span className="ml-1 text-slate-500">·</span> <CircleHelp size={13} /></div>{projectDialog && <ProjectDialog mode={projectDialog.mode} value={projectDialogValue} setValue={setProjectDialogValue} onCancel={closeProjectDialog} onConfirm={confirmProjectDialog} />}</div>;
+  const isFirstTime = Boolean(user && projectsQuery.isSuccess && savedProjects.length === 0 && !hasChosenProject);
+  return <div className="app-shell"><WorkspaceSidebar mode={mode} setMode={setMode} onNew={newProject} user={user} projects={savedProjects} activeProjectId={projectId} onOpenProject={openProject} onRenameProject={renameProjectById} onDeleteProject={deleteProjectById} /><div className="main-shell lg:pl-[252px]"><WorkspaceTopbar mode={mode} setMode={setMode} project={project} onSave={saveProject} user={user} projects={savedProjects} onNew={newProject} onOpenProject={openProject} onLogout={() => logout().then(() => { setProjectId(undefined); setEditorData({}); toast.success("Signed out"); }).catch((error) => toast.error("Sign out failed", { description: error.message }))} /><main className="mx-auto max-w-[1500px] px-5 py-7 sm:px-8 lg:px-10 lg:py-10">{isFirstTime ? <EmptyWorkspace onNew={newProject} /> : <>{mode === "plan" && <PlanView project={project} setProject={setProject} onGenerate={generate} isGenerating={generateAI.isPending} onOpenBuilder={() => setMode("build")} onRenameProject={renameCurrentProject} onDeleteProject={() => projectId ? deleteProjectById(projectId) : toast("Save this project before deleting it")} />}{mode === "build" && <WorkspaceBuilder projectId={projectId} editorSectionIds={editorSectionIds} generatedSections={generatedSections} ignoreRemoteData={ignoreRemoteEditorData} editorResetKey={editorResetKey} onDataChange={handleEditorData} />}{mode === "preview" && <WorkspacePreview project={project} editorData={editorData} setMode={setMode} />}</>}</main><div className="mobile-bottom-nav lg:hidden"><button className={cn(mode === "plan" && "mobile-nav-active")} onClick={() => setMode("plan")}><LayoutDashboard size={17} /><span>Plan</span></button><button className={cn(mode === "build" && "mobile-nav-active")} onClick={() => setMode("build")}><Blocks size={17} />  <span>Edit</span></button><button className={cn(mode === "preview" && "mobile-nav-active")} onClick={() => setMode("preview")}><Eye size={17} /><span>Preview</span></button></div></div><div className="fixed bottom-5 right-5 hidden items-center gap-2 rounded-full bg-[#131b31] px-3 py-2 text-[10px] font-semibold text-slate-300 shadow-xl lg:flex"><span className="live-dot" />{projectProgress}% planned <span className="ml-1 text-slate-500">·</span> <CircleHelp size={13} /></div>{projectDialog && <ProjectDialog mode={projectDialog.mode} value={projectDialogValue} setValue={setProjectDialogValue} onCancel={closeProjectDialog} onConfirm={confirmProjectDialog} />}</div>;
 }

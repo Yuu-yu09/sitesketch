@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { cloneProject, defaultProject, type ProjectState } from "./model";
+import { blankProject, cloneProject, type ProjectState } from "./model";
 
 function loadLocalProject(): ProjectState {
   const saved = window.localStorage.getItem("sitesketch-project");
@@ -8,12 +8,12 @@ function loadLocalProject(): ProjectState {
   if (!saved) {
     if (pendingPrompt?.trim()) {
       return {
-        ...cloneProject(defaultProject),
+        ...cloneProject(blankProject),
         projectName: "Untitled project",
         prompt: pendingPrompt.trim(),
       };
     }
-    return cloneProject(defaultProject);
+    return cloneProject(blankProject);
   }
   try {
     const parsed = JSON.parse(saved) as Partial<ProjectState>;
@@ -27,7 +27,7 @@ function loadLocalProject(): ProjectState {
       typeof parsed.checklist !== "object" ||
       typeof parsed.selectedBlock !== "string"
     ) {
-      return cloneProject(defaultProject);
+      return cloneProject(blankProject);
     }
     return {
       projectName: parsed.projectName,
@@ -39,7 +39,7 @@ function loadLocalProject(): ProjectState {
       selectedBlock: parsed.selectedBlock,
     };
   } catch {
-    return defaultProject;
+    return cloneProject(blankProject);
   }
 }
 
