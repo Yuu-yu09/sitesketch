@@ -24,6 +24,9 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .main-shell { min-height: 100vh; min-width: 0; overflow-x: hidden; }
 .auth-shell { display:flex; min-height:100vh; align-items:center; justify-content:center; background:radial-gradient(circle at 15% 15%,#eef0ff 0,transparent 34%),#f8f9fb; padding:24px; }
 .auth-card { width:min(100%,430px); border:1px solid #e5e8ed; border-radius:20px; background:rgba(255,255,255,.92); padding:34px; box-shadow:0 24px 70px rgba(35,45,70,.1); }
+.auth-back-button { display:inline-flex; align-items:center; gap:7px; border:0; background:transparent; padding:0; color:#7a8496; font-size:12px; font-weight:600; }
+.auth-back-button:hover { color:#4e5a72; }
+.auth-back-button:focus-visible { border-radius:5px; outline:2px solid #7b83e8; outline-offset:4px; }
 .auth-brand { display:flex; align-items:center; gap:10px; color:#202943; font-size:14px; font-weight:700; letter-spacing:.16em; }
 .auth-mark { display:flex; height:36px; width:36px; align-items:center; justify-content:center; border-radius:10px; background:linear-gradient(135deg,#6574ed,#8b63e9); color:white; box-shadow:0 8px 20px rgba(92,100,225,.24); }
 .auth-copy { margin-top:52px; }

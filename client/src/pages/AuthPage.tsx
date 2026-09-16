@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { ArrowRight, Eye, EyeOff, Github, LockKeyhole, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Github, LockKeyhole, Sparkles } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 
@@ -52,6 +52,7 @@ export default function AuthPage() {
   return (
     <main className="auth-shell" aria-label="SiteSketch authentication">
       <section className="auth-card" aria-labelledby="auth-title">
+        <button type="button" className="auth-back-button" onClick={() => setLocation("/")}><ArrowLeft size={15} />Back to home</button>
         <div className="auth-brand">
           <div className="auth-mark">✦</div>
           <span className="font-display">SITESKETCH</span>
