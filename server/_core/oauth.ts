@@ -119,6 +119,7 @@ export function registerOAuthRoutes(app: Express) {
       }
 
       const redirectUri = getRedirectUri(req, provider);
+      const intent = req.query.intent === "register" ? "register" : "login";
       const nonce = randomBytes(32).toString("base64url");
       res.cookie(OAUTH_STATE_COOKIE, nonce, {
         httpOnly: true,
@@ -132,7 +133,7 @@ export function registerOAuthRoutes(app: Express) {
         redirect_uri: redirectUri,
         response_type: "code",
         scope: provider === "google" ? "openid email profile" : "read:user user:email",
-        state: Buffer.from(JSON.stringify({ redirectUri, nonce })).toString("base64"),
+        state: Buffer.from(JSON.stringify({ redirectUri, nonce, intent })).toString("base64"),
       });
       if (provider === "google") params.set("prompt", "select_account");
       const authorizationUrl = provider === "google"
@@ -166,6 +167,10 @@ export function registerOAuthRoutes(app: Express) {
       try {
         const profile = await exchangeProviderCode(provider, code, redirectUri);
         const existingUser = profile.email ? await db.getUserByEmail(profile.email) : undefined;
+        if (existingUser && decoded.intent === "register") {
+          res.redirect(`/auth?mode=login&oauth_error=account_exists`);
+          return;
+        }
         const openId = existingUser?.openId ?? `${provider}:${profile.id}`;
         await db.upsertUser({
           openId,

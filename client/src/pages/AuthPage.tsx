@@ -22,13 +22,17 @@ export default function AuthPage() {
   });
   const registerMutation = trpc.auth.register.useMutation({
     onSuccess: () => window.location.assign("/dashboard"),
-    onError: error => setFormError(error.message),
+    onError: error => setFormError(error.data?.code === "CONFLICT" ? "You already have an account with this email. Try signing in instead." : error.message),
   });
 
   useEffect(() => {
     const oauthError = new URLSearchParams(window.location.search).get("oauth_error");
     if (oauthError === "google_not_configured") setFormError("Google login is not configured yet. Add the Google OAuth credentials to your environment.");
     if (oauthError === "github_not_configured") setFormError("GitHub login is not configured yet. Add the GitHub OAuth credentials to your environment.");
+    if (oauthError === "account_exists") {
+      setMode("login");
+      setFormError("You already have an account with this provider. We switched you to sign in.");
+    }
     if (!loading && user) {
       setLocation("/dashboard");
     }
@@ -46,7 +50,7 @@ export default function AuthPage() {
   };
 
   const startProviderLogin = (provider: "google" | "github") => {
-    window.location.href = `/api/auth/${provider}`;
+    window.location.href = `/api/auth/${provider}?intent=${mode}`;
   };
 
   return (
