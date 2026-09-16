@@ -51,7 +51,7 @@ import {
   type WorkspaceSection,
 } from "@/features/workspace/model";
 import { useWorkspaceProject } from "@/features/workspace/useWorkspaceProject";
-import { Blueprint, Checklist, ProjectDialog, SectionRow } from "@/features/workspace/components";
+import { Blueprint, ProjectDialog, SectionRow } from "@/features/workspace/components";
 import { WorkspaceSidebar, WorkspaceTopbar } from "@/features/workspace/chrome";
 import { useWorkspaceMutations } from "@/features/workspace/useWorkspaceMutations";
 import { WorkspaceBuilder, WorkspacePreview } from "@/features/workspace/views";
@@ -97,7 +97,7 @@ function PlanView({ project, setProject, onGenerate, isGenerating, onOpenBuilder
       <div className="card p-5"><div className="flex items-end justify-between"><div><div className="eyebrow text-slate-400">Your outline</div><h2 className="mt-2 font-display text-[20px] font-semibold text-slate-800">The parts of your site</h2></div><span className="count-badge">{project.sections.length} sections</span></div><div className="mt-5 space-y-1.5">{project.sections.map((section, index) => <SectionRow key={section.id} section={section} index={index} total={project.sections.length} onMove={move} onRemove={remove} onSelect={(id) => setProject({ ...project, selectedBlock: id })} />)}</div><div className="mt-4 flex gap-2"><select value={newSection} onChange={(e) => setNewSection(e.target.value)} className="select-field flex-1"><option value="">Add a section…</option>{sectionOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select><button onClick={addSection} className="button-primary px-3" disabled={!newSection}><Plus size={16} /></button></div><div className="mt-4 flex items-center gap-2 border-t border-[#edf0f3] pt-4 text-[11px] text-slate-400"><Check size={14} className="text-emerald-500" />{recommendedCount} smart recommendations based on your site type</div></div>
       <Blueprint sections={project.sections} selectedBlock={project.selectedBlock} onSelect={(id) => setProject({ ...project, selectedBlock: id })} />
     </div>
-    <div className="grid gap-5 lg:grid-cols-[1fr_1fr]"><Checklist checklist={project.checklist} setChecklist={(checklist) => setProject({ ...project, checklist })} /><div className="card flex items-center justify-between gap-5 p-5"><div><div className="eyebrow text-slate-400">Next step</div><h3 className="mt-2 font-display text-[18px] font-semibold text-slate-800">Make it visual.</h3><p className="mt-1 max-w-[360px] text-xs leading-relaxed text-slate-400">Your structure is a strong start. Move into the builder to shape the details with drag-and-drop blocks.</p></div><button onClick={onOpenBuilder} className="button-dark whitespace-nowrap">Open builder <ChevronRight size={14} /></button></div></div>
+    <div className="card flex items-center justify-between gap-5 p-5"><div><div className="eyebrow text-slate-400">Next step</div><h3 className="mt-2 font-display text-[18px] font-semibold text-slate-800">Make it visual.</h3><p className="mt-1 max-w-[360px] text-xs leading-relaxed text-slate-400">Your structure is a strong start. Move into the builder to shape the details with drag-and-drop blocks.</p></div><button onClick={onOpenBuilder} className="button-dark whitespace-nowrap">Open builder <ChevronRight size={14} /></button></div>
   </div>;
 }
 
