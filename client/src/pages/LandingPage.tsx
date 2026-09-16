@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ArrowRight, Check, ChevronDown, Menu, Sparkles, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Menu, Moon, Sparkles, Sun, X } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const DEFAULT_PROMPT =
   "A calm, editorial website for a small strategy studio helping ambitious teams find their next clear move.";
@@ -75,6 +76,7 @@ const valueCards = [
 export default function LandingPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -115,6 +117,7 @@ export default function LandingPage() {
             <button type="button" onClick={() => scrollTo("examples")}>Examples</button>
             <button type="button" onClick={() => scrollTo("why-sitesketch")}>Why SiteSketch</button>
             <div className="landing-nav-actions">
+              {toggleTheme && <button className="landing-theme-toggle" type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Use light mode" : "Use dark mode"} title={theme === "dark" ? "Use light mode" : "Use dark mode"}>{theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}</button>}
               <button className="landing-nav-signin" type="button" onClick={() => goToAuth("login")}>Sign in</button>
               <button className="landing-nav-cta" type="button" onClick={() => goToAuth("register")}>
                 {user ? "Open workspace" : "Create account"} <ArrowRight size={14} />

@@ -11,6 +11,103 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+/* SiteSketch night desk: dark-first workspace with restrained lavender/coral
+   accents. The theme switch adds .dark to html and keeps light mode available. */
+:root {
+  --ss-bg: #0b1020;
+  --ss-panel: #121a2d;
+  --ss-border: rgba(184, 192, 228, .14);
+  --ss-text: #f4f2fa;
+  --ss-muted: #9ca7c2;
+  --ss-accent: #b7a7ff;
+  --ss-accent-strong: #8f7cf1;
+}
+html.dark, html.dark body { background: var(--ss-bg); color: var(--ss-text); }
+html.dark .app-shell, html.dark .main-shell { background: var(--ss-bg); }
+html.dark .topbar { border-color: var(--ss-border) !important; background: rgba(11,16,32,.86) !important; color: var(--ss-text); }
+html.dark .sidebar { border-color: var(--ss-border); background: #090e1b; box-shadow: 14px 0 44px rgba(0,0,0,.22); }
+html.dark .mode-tabs { border-color: var(--ss-border); background: #11192b; }
+html.dark .mode-tabs button { color: #8994b1; }
+html.dark .mode-tab-active { background: #252f4b !important; color: #fff !important; box-shadow: 0 0 0 1px rgba(183,167,255,.16), 0 4px 12px rgba(0,0,0,.18); }
+html.dark .project-switcher-trigger, html.dark .topbar .font-medium { color: #aeb8d2; }
+html.dark .project-switcher-menu, html.dark .account-menu { border-color: var(--ss-border); background: #151e33; box-shadow: 0 18px 45px rgba(0,0,0,.35); }
+html.dark .project-switcher-heading, html.dark .project-switcher-empty { color: #8f9ab8; }
+html.dark .project-switcher-item { color: #dce1f0; }
+html.dark .project-switcher-item:hover, html.dark .account-menu-item:hover { background: #202b46; color: #fff; }
+html.dark .project-switcher-new { border-color: var(--ss-border); color: var(--ss-accent); }
+html.dark .account-menu .border-b { border-color: var(--ss-border); }
+html.dark .account-menu .text-slate-700 { color: #f1eff8; }
+html.dark .account-status, html.dark .account-menu-item { color: #aeb8d2; }
+html.dark .page-heading h1, html.dark .build-heading h1, html.dark .card h2, html.dark .card h3,
+html.dark .text-slate-900, html.dark .text-slate-800, html.dark .text-slate-700 { color: var(--ss-text) !important; }
+html.dark .page-heading p, html.dark .build-heading p, html.dark .text-slate-500, html.dark .text-slate-400 { color: var(--ss-muted) !important; }
+html.dark .card, html.dark .project-summary, html.dark .blueprint-wrap, html.dark .preview-window, html.dark .preview-bottom {
+  border-color: var(--ss-border); background: var(--ss-panel); color: var(--ss-text); box-shadow: 0 18px 42px rgba(0,0,0,.17);
+}
+html.dark .section-row:hover, html.dark .section-row:focus-within { background: #1b2741; }
+html.dark .section-row .text-slate-700 { color: #e9e8f2 !important; }
+html.dark .section-row .text-slate-400 { color: #8994b1 !important; }
+html.dark .select-field, html.dark .dialog-input { border-color: var(--ss-border); background: #0e1628; color: #f4f2fa; }
+html.dark .select-field:focus, html.dark .dialog-input:focus { border-color: var(--ss-accent-strong); box-shadow: 0 0 0 3px rgba(143,124,241,.18); }
+html.dark .project-summary .bg-\[\#f5f6f8\], html.dark .check-item:hover { background: #1b2741 !important; }
+html.dark .button-secondary { border-color: var(--ss-border); background: #17213a; color: #e8e7f1; }
+html.dark .button-secondary:hover { border-color: rgba(183,167,255,.45); background: #222e4b; }
+html.dark .button-primary, html.dark .button-ai { background: var(--ss-accent-strong); color: #100d20; }
+html.dark .button-primary:hover, html.dark .button-ai:hover { background: #aa99ff; }
+html.dark .blueprint-toolbar, html.dark .blueprint-wrap > .border-t { border-color: var(--ss-border) !important; }
+html.dark .blueprint-canvas { background-color: #0d1527; background-image: linear-gradient(rgba(183,167,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(183,167,255,.045) 1px, transparent 1px); }
+html.dark .wire-block { border-color: rgba(183,167,255,.25); background: #17213a; color: #d8d4ed; }
+html.dark .wire-block:hover, html.dark .wire-block-selected { border-color: var(--ss-accent); background: #263152; }
+html.dark .preview-browser { border-color: var(--ss-border); background: #0f172a; color: #9ca7c2; }
+html.dark .preview-bottom .text-slate-700 { color: #f3f1f7 !important; }
+html.dark .project-dialog-backdrop { background: rgba(2,4,12,.76); }
+html.dark .project-dialog { border-color: var(--ss-border); background: #151e33; color: var(--ss-text); }
+html.dark .project-dialog h2 { color: #fff; }
+html.dark .project-dialog p { color: var(--ss-muted); }
+html.dark .auth-shell { background: radial-gradient(circle at 12% 8%, rgba(143,124,241,.2), transparent 32%), radial-gradient(circle at 88% 90%, rgba(242,183,176,.13), transparent 28%), #0b1020; }
+html.dark .auth-card { border-color: var(--ss-border); background: rgba(18,26,45,.92); box-shadow: 0 24px 80px rgba(0,0,0,.35); }
+html.dark .auth-brand, html.dark .auth-copy h1 { color: #f7f4fb; }
+html.dark .auth-copy p, html.dark .auth-loading { color: var(--ss-muted); }
+html.dark .auth-tabs { border-color: var(--ss-border); background: #0e1628; }
+html.dark .auth-tab { color: #8e99b5; }
+html.dark .auth-tab-active { background: #242f4d; color: #fff; }
+html.dark .auth-input { border-color: var(--ss-border); background: #0e1628; color: #fff; }
+html.dark .auth-input::placeholder { color: #76829f; }
+html.dark .auth-provider { border-color: var(--ss-border); background: #151e33; color: #e5e5ef; }
+html.dark .auth-divider::before, html.dark .auth-divider::after { background: var(--ss-border); }
+html.dark .auth-promise { color: #8994b1; }
+
+/* Keep the same recognizable identity before sign-in. */
+.landing-page { background: #0b1020; color: #f4f2fa; }
+.landing-header { border-color: rgba(184,192,228,.14); background: rgba(11,16,32,.82); }
+.landing-brand, .landing-hero h1, .landing-section-heading h2, .landing-values-intro h2 { color: #f4f2fa; }
+.landing-hero { background: radial-gradient(circle at 82% 22%, rgba(143,124,241,.2), transparent 29%), radial-gradient(circle at 17% 5%, rgba(242,183,176,.14), transparent 27%), #0b1020; }
+.landing-hero-grid { opacity: .26; background-image: linear-gradient(rgba(183,167,255,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(183,167,255,.12) 1px, transparent 1px); }
+.landing-hero-copy, .landing-section-heading > p, .landing-gallery-card p { color: #a7b0c7; }
+.landing-prompt-card, .landing-gallery-card { border-color: rgba(184,192,228,.16); background: rgba(18,26,45,.9); box-shadow: 0 20px 55px rgba(0,0,0,.24); }
+.landing-prompt-card label, .landing-prompt-footer, .landing-prompt-examples, .landing-trust-line { color: #9ca7c2; }
+.landing-prompt-card textarea { color: #f4f2fa; }
+.landing-prompt-footer { border-color: rgba(184,192,228,.14); }
+.landing-prompt-examples button { border-color: rgba(184,192,228,.2); background: #151e33; color: #b9c1d8; }
+.landing-gallery-section { background: #0e1628; }
+.landing-gallery-browser { border-color: rgba(184,192,228,.14); }
+html.dark .landing-page { background: #0b1020; color: #f4f2fa; }
+html.dark .landing-header { border-color: rgba(184,192,228,.14); background: rgba(11,16,32,.82); }
+html.dark .landing-brand, html.dark .landing-hero h1, html.dark .landing-section-heading h2, html.dark .landing-values-intro h2 { color: #f4f2fa; }
+html.dark .landing-hero { background: radial-gradient(circle at 82% 22%, rgba(143,124,241,.2), transparent 29%), radial-gradient(circle at 17% 5%, rgba(242,183,176,.14), transparent 27%), #0b1020; }
+html.dark .landing-gallery-section { background: #0e1628; }
+.theme-toggle, .landing-theme-toggle { display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--ss-border); border-radius:8px; background:transparent; color:inherit; }
+.theme-toggle { height:28px; width:28px; margin-left:auto; }
+.landing-theme-toggle { height:30px; width:30px; color:#aeb8d2; }
+.theme-toggle:hover, .landing-theme-toggle:hover { border-color: rgba(183,167,255,.5); background: rgba(183,167,255,.1); color: var(--ss-accent); }
+
+@media (max-width: 640px) {
+  .landing-container { width: min(100% - 32px, 1160px); }
+  .landing-hero-content { padding-top: 76px; }
+  .landing-hero h1 { font-size: clamp(42px, 13vw, 68px); }
+  .auth-card { padding: 26px 20px; }
+}
+
 * { box-sizing: border-box; }
 html { background: #f8f9fb; }
 body { margin: 0; min-width: 320px; background: #f8f9fb; }

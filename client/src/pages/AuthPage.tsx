@@ -1,10 +1,12 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { ArrowRight, Eye, EyeOff, Github, LockKeyhole, Sparkles } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Github, LockKeyhole, Moon, Sparkles, Sun } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export default function AuthPage() {
+  const { theme, toggleTheme } = useTheme();
   const { loading, user } = useAuth();
   const [, setLocation] = useLocation();
   const [mode, setMode] = useState<"login" | "register">(() => {
@@ -55,6 +57,7 @@ export default function AuthPage() {
         <div className="auth-brand">
           <div className="auth-mark">✦</div>
           <span className="font-display">SITESKETCH</span>
+          {toggleTheme && <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={theme === "dark" ? "Use light mode" : "Use dark mode"} title={theme === "dark" ? "Use light mode" : "Use dark mode"}>{theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}</button>}
         </div>
         <div className="auth-copy">
           <span className="eyebrow text-indigo-500">Your creative workspace</span>
