@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import SiteSketchEditor from "@/components/SiteSketchEditor";
@@ -11,7 +11,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  CircleHelp,
   Eye,
   FileText,
   FolderOpen,
@@ -83,7 +82,7 @@ function EmptyWorkspace({ onNew }: { onNew: () => void }) {
 }
 
 
-function PlanView({ project, setProject, onGenerate, isGenerating, onOpenBuilder, onRenameProject, onDeleteProject }: { project: ProjectState; setProject: (project: ProjectState) => void; onGenerate: () => void; isGenerating: boolean; onOpenBuilder: () => void; onRenameProject: () => void; onDeleteProject: () => void }) {
+function PlanView({ project, setProject, onGenerate, isGenerating, onRenameProject, onDeleteProject }: { project: ProjectState; setProject: (project: ProjectState) => void; onGenerate: () => void; isGenerating: boolean; onRenameProject: () => void; onDeleteProject: () => void }) {
   const [newSection, setNewSection] = useState("");
   const recommendedCount = project.sections.filter((item) => item.status === "recommended").length;
   const move = (index: number, direction: number) => { const next = [...project.sections]; const target = index + direction; if (target < 0 || target >= next.length) return; [next[index], next[target]] = [next[target], next[index]]; setProject({ ...project, sections: next }); };
@@ -97,7 +96,7 @@ function PlanView({ project, setProject, onGenerate, isGenerating, onOpenBuilder
       <div className="card p-5"><div className="flex items-end justify-between"><div><div className="eyebrow text-slate-400">Your outline</div><h2 className="mt-2 font-display text-[20px] font-semibold text-slate-800">The parts of your site</h2></div><span className="count-badge">{project.sections.length} sections</span></div><div className="mt-5 space-y-1.5">{project.sections.map((section, index) => <SectionRow key={section.id} section={section} index={index} total={project.sections.length} onMove={move} onRemove={remove} onSelect={(id) => setProject({ ...project, selectedBlock: id })} />)}</div><div className="mt-4 flex gap-2"><select value={newSection} onChange={(e) => setNewSection(e.target.value)} className="select-field flex-1"><option value="">Add a section…</option>{sectionOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select><button onClick={addSection} className="button-primary px-3" disabled={!newSection}><Plus size={16} /></button></div><div className="mt-4 flex items-center gap-2 border-t border-[#edf0f3] pt-4 text-[11px] text-slate-400"><Check size={14} className="text-emerald-500" />{recommendedCount} smart recommendations based on your site type</div></div>
       <Blueprint sections={project.sections} selectedBlock={project.selectedBlock} onSelect={(id) => setProject({ ...project, selectedBlock: id })} />
     </div>
-    <div className="card flex items-center justify-between gap-5 p-5"><div><div className="eyebrow text-slate-400">Next step</div><h3 className="mt-2 font-display text-[18px] font-semibold text-slate-800">Make it visual.</h3><p className="mt-1 max-w-[360px] text-xs leading-relaxed text-slate-400">Your structure is a strong start. Move into the builder to shape the details with drag-and-drop blocks.</p></div><button onClick={onOpenBuilder} className="button-dark whitespace-nowrap">Open builder <ChevronRight size={14} /></button></div>
+    <div className="card p-5"><div className="eyebrow text-slate-400">Plan complete</div><h3 className="mt-2 font-display text-[18px] font-semibold text-slate-800">Your outline is ready.</h3><p className="mt-1 max-w-[460px] text-xs leading-relaxed text-slate-400">When you’re ready, choose Edit from the mode navigation to shape the visual details.</p></div>
   </div>;
 }
 
@@ -126,7 +125,6 @@ export default function Home() {
   const projectsQuery = trpc.projects.list.useQuery(undefined, { enabled: Boolean(user) });
   const editorQuery = trpc.projects.editor.load.useQuery({ id: projectId ?? 0 }, { enabled: Boolean(user && projectId) });
   const { createProject, updateProject, renameProject, deleteProject, saveEditor, generateAI } = useWorkspaceMutations();
-  const projectProgress = useMemo(() => Math.min(100, Math.round((project.sections.length / 7) * 100)), [project.sections.length]);
 
   useEffect(() => {
     if (!user) { persistLocalProject(project); return; }
@@ -204,5 +202,5 @@ export default function Home() {
   const savedProjects = projectsQuery.data ?? [];
   if (loading) return <div className="min-h-screen bg-[#f8f9fb]" />;
   const isFirstTime = Boolean(user && projectsQuery.isSuccess && savedProjects.length === 0 && !hasChosenProject);
-  return <div className="app-shell"><WorkspaceSidebar mode={mode} setMode={setMode} onNew={newProject} user={user} projects={savedProjects} activeProjectId={projectId} onOpenProject={openProject} onRenameProject={renameProjectById} onDeleteProject={deleteProjectById} /><div className="main-shell lg:pl-[252px]"><WorkspaceTopbar mode={mode} setMode={setMode} project={project} onSave={saveProject} user={user} projects={savedProjects} onNew={newProject} onOpenProject={openProject} onLogout={() => logout().then(() => { setProjectId(undefined); setEditorData({}); toast.success("Signed out"); }).catch((error) => toast.error("Sign out failed", { description: error.message }))} /><main className="mx-auto max-w-[1500px] px-5 py-7 sm:px-8 lg:px-10 lg:py-10">{isFirstTime ? <EmptyWorkspace onNew={newProject} /> : <>{mode === "plan" && <PlanView project={project} setProject={setProject} onGenerate={generate} isGenerating={generateAI.isPending} onOpenBuilder={() => setMode("build")} onRenameProject={renameCurrentProject} onDeleteProject={() => projectId ? deleteProjectById(projectId) : toast("Save this project before deleting it")} />}{mode === "build" && <WorkspaceBuilder projectId={projectId} editorSectionIds={editorSectionIds} generatedSections={generatedSections} ignoreRemoteData={ignoreRemoteEditorData} editorResetKey={editorResetKey} onDataChange={handleEditorData} />}{mode === "preview" && <WorkspacePreview project={project} editorData={editorData} setMode={setMode} />}</>}</main><div className="mobile-bottom-nav lg:hidden"><button className={cn(mode === "plan" && "mobile-nav-active")} onClick={() => setMode("plan")}><LayoutDashboard size={17} /><span>Plan</span></button><button className={cn(mode === "build" && "mobile-nav-active")} onClick={() => setMode("build")}><Blocks size={17} />  <span>Edit</span></button><button className={cn(mode === "preview" && "mobile-nav-active")} onClick={() => setMode("preview")}><Eye size={17} /><span>Preview</span></button></div></div><div className="fixed bottom-5 right-5 hidden items-center gap-2 rounded-full bg-[#131b31] px-3 py-2 text-[10px] font-semibold text-slate-300 shadow-xl lg:flex"><span className="live-dot" />{projectProgress}% planned <span className="ml-1 text-slate-500">·</span> <CircleHelp size={13} /></div>{projectDialog && <ProjectDialog mode={projectDialog.mode} value={projectDialogValue} setValue={setProjectDialogValue} onCancel={closeProjectDialog} onConfirm={confirmProjectDialog} />}</div>;
+  return <div className="app-shell"><WorkspaceSidebar mode={mode} setMode={setMode} onNew={newProject} user={user} projects={savedProjects} activeProjectId={projectId} onOpenProject={openProject} onRenameProject={renameProjectById} onDeleteProject={deleteProjectById} /><div className="main-shell lg:pl-[252px]"><WorkspaceTopbar mode={mode} setMode={setMode} project={project} onSave={saveProject} user={user} projects={savedProjects} onNew={newProject} onOpenProject={openProject} onLogout={() => logout().then(() => { setProjectId(undefined); setEditorData({}); toast.success("Signed out"); }).catch((error) => toast.error("Sign out failed", { description: error.message }))} /><main className="mx-auto max-w-[1500px] px-5 py-7 sm:px-8 lg:px-10 lg:py-10">{isFirstTime ? <EmptyWorkspace onNew={newProject} /> : <>{mode === "plan" && <PlanView project={project} setProject={setProject} onGenerate={generate} isGenerating={generateAI.isPending} onRenameProject={renameCurrentProject} onDeleteProject={() => projectId ? deleteProjectById(projectId) : toast("Save this project before deleting it")} />}{mode === "build" && <WorkspaceBuilder projectId={projectId} editorSectionIds={editorSectionIds} generatedSections={generatedSections} ignoreRemoteData={ignoreRemoteEditorData} editorResetKey={editorResetKey} onDataChange={handleEditorData} />}{mode === "preview" && <WorkspacePreview project={project} editorData={editorData} />}</>}</main></div>{projectDialog && <ProjectDialog mode={projectDialog.mode} value={projectDialogValue} setValue={setProjectDialogValue} onCancel={closeProjectDialog} onConfirm={confirmProjectDialog} />}</div>;
 }
