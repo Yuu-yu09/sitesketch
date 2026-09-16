@@ -1,35 +1,70 @@
 import { useState } from "react";
-import { Blocks, ChevronRight, Eye, FileText, FolderOpen, LayoutDashboard, LayoutTemplate, LogIn, LogOut, Menu, MoreHorizontal, Plus, Save, Sparkles, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, FolderOpen, LayoutTemplate, LogIn, LogOut, Menu, MoreHorizontal, Plus, Save, Trash2, X } from "lucide-react";
 import { startLogin } from "@/const";
 import type { ProjectState, WorkspaceMode } from "./model";
 
 const cn = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ");
-
 type SavedProject = { id: number; projectName: string; updatedAt: Date };
 
-export function WorkspaceSidebar({ mode, setMode, onNew, user, projects, activeProjectId, onOpenProject, onRenameProject, onDeleteProject }: {
+type WorkspaceTopbarProps = {
   mode: WorkspaceMode;
   setMode: (mode: WorkspaceMode) => void;
-  onNew: () => void;
-  user: { name?: string | null } | null;
+  project: ProjectState;
+  onSave: () => void;
+  user: { name?: string | null; email?: string | null } | null;
+  onLogout: () => void;
   projects: SavedProject[];
-  activeProjectId?: number;
+  onNew: () => void;
   onOpenProject: (id: number) => void;
-  onRenameProject: (id: number) => void;
-  onDeleteProject: (id: number) => void;
-}) {
-  const [openMenu, setOpenMenu] = useState<number | null>(null);
-  return <aside className="sidebar fixed inset-y-0 left-0 z-30 hidden w-[252px] flex-col border-r border-white/[0.08] bg-[#0d1325] px-5 py-6 lg:flex"><div className="flex items-center gap-3 px-1"><div className="brand-mark"><span>✦</span></div><div><div className="font-display text-[15px] font-semibold tracking-[0.16em] text-white">SITESKETCH</div><div className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">Your simple site workspace</div></div></div><button onClick={onNew} className="button-primary mt-10 w-full justify-center"><Plus size={16} />New project</button><div className="mt-9 px-1"><span className="eyebrow text-slate-500">Saved projects</span></div><div className="mt-3 space-y-1">{projects.length === 0 && <div className="px-2 py-3 text-[11px] text-slate-500">No saved projects yet.</div>}{projects.slice(0, 6).map((saved) => <div key={saved.id} className={cn("project-nav-item", activeProjectId === saved.id && "project-nav-active")}><button onClick={() => onOpenProject(saved.id)} className="project-nav-select"><div className="project-thumb"><LayoutTemplate size={14} /></div><div className="min-w-0 text-left"><div className="truncate text-[12px] font-medium text-slate-200">{saved.projectName}</div><div className="mt-0.5 text-[10px] text-slate-500">{new Date(saved.updatedAt).toLocaleDateString()}</div></div></button><button onClick={() => setOpenMenu(openMenu === saved.id ? null : saved.id)} className="project-nav-more" title="Project actions"><MoreHorizontal size={14} /></button>{openMenu === saved.id && <div className="project-menu project-menu-dark"><button onClick={() => { setOpenMenu(null); onRenameProject(saved.id); }}><FileText size={13} />Rename</button><button onClick={() => { setOpenMenu(null); onDeleteProject(saved.id); }}><Trash2 size={13} />Delete</button></div>}</div>)}</div><div className="mt-auto"><div className="mt-5 flex items-center gap-3 border-t border-white/[0.07] pt-4"><div className="avatar">{user ? (user.name || "AM").slice(0, 2).toUpperCase() : "AM"}</div><div className="min-w-0"><div className="truncate text-xs font-medium text-slate-200">{user?.name || "Your workspace"}</div><div className="text-[10px] text-slate-500">{user ? "Saved to your account" : "Sign in to sync"}</div></div></div></div></aside>;
-}
+  onRenameProject?: (id: number) => void;
+  onDeleteProject?: (id: number) => void;
+};
 
-export function WorkspaceTopbar({ mode, setMode, project, onSave, user, onLogout, projects, onNew, onOpenProject }: { mode: WorkspaceMode; setMode: (mode: WorkspaceMode) => void; project: ProjectState; onSave: () => void; user: { name?: string | null; email?: string | null } | null; onLogout: () => void; projects: SavedProject[]; onNew: () => void; onOpenProject: (id: number) => void }) {
+export function WorkspaceTopbar({ mode, setMode, project, onSave, user, onLogout, projects, onNew, onOpenProject, onRenameProject, onDeleteProject }: WorkspaceTopbarProps) {
   const [accountOpen, setAccountOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
-  const navigate = (nextMode: WorkspaceMode) => {
-    setMode(nextMode);
-    setMobileOpen(false);
-  };
+  const [projectActions, setProjectActions] = useState<number | null>(null);
   const modeLabels: Record<WorkspaceMode, string> = { plan: "Plan", build: "Edit site", preview: "Preview" };
-  return <header className="topbar relative sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-[#e4e6eb] bg-[#f8f9fb]/90 px-5 backdrop-blur-xl lg:pl-[30px] lg:pr-8"><div className="flex min-w-0 items-center gap-3 lg:gap-7"><button className="icon-button lg:hidden" onClick={() => setMobileOpen(!mobileOpen)} aria-label={mobileOpen ? "Close workspace menu" : "Open workspace menu"} aria-expanded={mobileOpen}><Menu size={19} /></button><div className="relative hidden min-w-0 items-center gap-2 text-xs text-slate-400 sm:flex"><button onClick={() => setProjectsOpen(!projectsOpen)} className="project-switcher-trigger" aria-expanded={projectsOpen}><FolderOpen size={13} />My projects<ChevronRight size={13} /></button><span className="truncate font-medium text-slate-600">{project.projectName}</span>{projectsOpen && <div className="project-switcher-menu"><div className="project-switcher-heading">Your projects</div>{projects.length === 0 ? <div className="project-switcher-empty">No saved projects yet.</div> : projects.map((saved) => <button key={saved.id} onClick={() => { setProjectsOpen(false); onOpenProject(saved.id); }} className={cn("project-switcher-item", saved.projectName === project.projectName && "project-switcher-item-active")}><LayoutTemplate size={14} /><span className="truncate">{saved.projectName}</span></button>)}<button onClick={() => { setProjectsOpen(false); onNew(); }} className="project-switcher-new"><Plus size={14} />New project</button></div>}</div><div className="mode-tabs">{(["plan", "build", "preview"] as WorkspaceMode[]).map((item) => <button key={item} onClick={() => navigate(item)} className={cn(mode === item && "mode-tab-active")}>{modeLabels[item]}</button>)}</div><span className="mobile-current-mode">{modeLabels[mode]}</span></div><div className="flex items-center gap-2 sm:gap-3"><span className="hidden items-center gap-1.5 text-[11px] font-medium text-slate-400 sm:flex"><span className="save-indicator" />Saved</span><button onClick={onSave} className="button-secondary hidden sm:flex"><Save size={14} />Save changes</button>{user ? <div className="relative"><button onClick={() => setAccountOpen(!accountOpen)} className="avatar avatar-top" title="Account"><span>{(user.name || "AM").slice(0, 2).toUpperCase()}</span></button>{accountOpen && <div className="account-menu"><div className="border-b border-[#edf0f3] px-3 py-2.5"><div className="truncate text-[11px] font-semibold text-slate-700">{user.name || "Signed-in user"}</div><div className="mt-0.5 truncate text-[10px] text-slate-400">{user.email || "Signed-in session"}</div></div><div className="px-1.5 py-1.5"><div className="account-status"><span className="save-indicator" />Saved to your account</div><button onClick={() => { setAccountOpen(false); onLogout(); }} className="account-menu-item"><LogOut size={13} />Sign out</button></div></div>}</div> : <button onClick={() => startLogin()} className="button-primary"><LogIn size={14} />Sign in</button>}</div>{mobileOpen && <div className="mobile-workspace-menu" style={{ display: "block" }}><div className="px-3 pb-2 text-[11px] font-semibold text-slate-500">{project.projectName}</div>{(["plan", "build", "preview"] as WorkspaceMode[]).map((item) => <button key={item} onClick={() => navigate(item)} className={cn("mobile-workspace-link", mode === item && "mobile-workspace-link-active")}>{modeLabels[item]}<ChevronRight size={14} /></button>)}<button onClick={() => { onSave(); setMobileOpen(false); }} className="button-secondary mt-2 w-full justify-center"><Save size={14} />Save changes</button></div>}</header>;
+  const navigate = (nextMode: WorkspaceMode) => { setMode(nextMode); setMobileOpen(false); };
+  const openProjects = () => { setProjectsOpen(value => !value); setProjectActions(null); };
+
+  return <header className="topbar relative sticky top-0 z-20 border-b border-[#e4e6eb] bg-[#f8f9fb]/95 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
+    <div className="flex min-h-[76px] items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <button className="icon-button lg:hidden" onClick={() => setMobileOpen(value => !value)} aria-label={mobileOpen ? "Close workspace menu" : "Open workspace menu"} aria-expanded={mobileOpen}>{mobileOpen ? <X size={18} /> : <Menu size={19} />}</button>
+        <div className="workspace-brand"><span className="workspace-brand-mark">✦</span><span>SiteSketch</span></div>
+        <div className="relative hidden min-w-0 sm:block">
+          <button onClick={openProjects} className="project-switcher-trigger" aria-expanded={projectsOpen}><FolderOpen size={13} />My projects<ChevronDown size={13} /></button>
+          {projectsOpen && <div className="project-switcher-menu">
+            <div className="project-switcher-heading">Your projects</div>
+            {projects.length === 0 && <div className="project-switcher-empty">No saved projects yet.</div>}
+            {projects.map(saved => <div key={saved.id} className="project-switcher-row">
+              <button onClick={() => { onOpenProject(saved.id); setProjectsOpen(false); }} className={cn("project-switcher-item", saved.projectName === project.projectName && "project-switcher-item-active")}><LayoutTemplate size={14} /><span className="truncate">{saved.projectName}</span></button>
+              <button className="project-switcher-actions" title={`Actions for ${saved.projectName}`} aria-label={`Actions for ${saved.projectName}`} onClick={() => setProjectActions(projectActions === saved.id ? null : saved.id)}><MoreHorizontal size={14} /></button>
+              {projectActions === saved.id && <div className="project-menu project-menu-light"><button onClick={() => { onRenameProject?.(saved.id); setProjectsOpen(false); }}><FileText size={13} />Rename</button><button onClick={() => { onDeleteProject?.(saved.id); setProjectsOpen(false); }}><Trash2 size={13} />Delete</button></div>}
+            </div>)}
+            <button onClick={() => { onNew(); setProjectsOpen(false); }} className="project-switcher-new"><Plus size={14} />New project</button>
+          </div>}
+        </div>
+        <span className="hidden truncate text-xs font-medium text-slate-600 sm:block">{project.projectName}</span>
+      </div>
+      <nav className="mode-tabs" aria-label="Project steps">{(["plan", "build", "preview"] as WorkspaceMode[]).map(item => <button key={item} onClick={() => navigate(item)} className={cn(mode === item && "mode-tab-active")}>{modeLabels[item]}</button>)}</nav><span className="mobile-current-mode">{modeLabels[mode]}</span>
+      <div className="flex items-center gap-2 sm:gap-3">
+        <span className="hidden items-center gap-1.5 text-[11px] font-medium text-slate-400 md:flex"><span className="save-indicator" />Saved</span>
+        <button onClick={onSave} className="button-secondary hidden sm:flex"><Save size={14} />Save</button>
+        {user ? <div className="relative"><button onClick={() => setAccountOpen(value => !value)} className="avatar avatar-top" title="Account" aria-label="Account"><span>{(user.name || "AM").slice(0, 2).toUpperCase()}</span></button>{accountOpen && <div className="account-menu"><div className="border-b border-[#edf0f3] px-3 py-2.5"><div className="truncate text-[11px] font-semibold text-slate-700">{user.name || "Signed-in user"}</div><div className="mt-0.5 truncate text-[10px] text-slate-400">{user.email || "Signed-in session"}</div></div><div className="px-1.5 py-1.5"><div className="account-status"><span className="save-indicator" />Saved to your account</div><button onClick={() => { setAccountOpen(false); onLogout(); }} className="account-menu-item"><LogOut size={13} />Sign out</button></div></div>}</div> : <button onClick={() => startLogin()} className="button-primary"><LogIn size={14} />Sign in</button>}
+      </div>
+    </div>
+    {mobileOpen && <div className="mobile-workspace-menu" style={{ display: "block" }}>
+      <div className="flex items-center justify-between px-3 pb-2"><span className="text-[11px] font-semibold text-slate-500">{project.projectName}</span><button className="mobile-projects-toggle" onClick={openProjects}>{projects.length ? `${projects.length} projects` : "No saved projects"}<ChevronRight size={13} /></button></div>
+      {projectsOpen && <div className="mobile-project-list">{projects.map(saved => <div key={saved.id} className="mobile-project-row"><button onClick={() => { onOpenProject(saved.id); setMobileOpen(false); setProjectsOpen(false); }} className="mobile-workspace-link"><span className="flex min-w-0 items-center gap-2"><LayoutTemplate size={14} /> <span className="truncate">{saved.projectName}</span></span><ChevronRight size={14} /></button><button className="project-switcher-actions" aria-label={`Actions for ${saved.projectName}`} onClick={() => setProjectActions(projectActions === saved.id ? null : saved.id)}><MoreHorizontal size={14} /></button>{projectActions === saved.id && <div className="project-menu project-menu-light"><button onClick={() => { onRenameProject?.(saved.id); setMobileOpen(false); }}><FileText size={13} />Rename</button><button onClick={() => { onDeleteProject?.(saved.id); setMobileOpen(false); }}><Trash2 size={13} />Delete</button></div>}</div>)}</div>}
+      <button onClick={() => { onNew(); setMobileOpen(false); }} className="mobile-workspace-link"><span className="flex items-center gap-2"><Plus size={14} />New project</span><ChevronRight size={14} /></button>
+      {(["plan", "build", "preview"] as WorkspaceMode[]).map(item => <button key={item} onClick={() => navigate(item)} className={cn("mobile-workspace-link", mode === item && "mobile-workspace-link-active")}>{modeLabels[item]}<ChevronRight size={14} /></button>)}
+      <button onClick={() => { onSave(); setMobileOpen(false); }} className="button-secondary mt-2 w-full justify-center"><Save size={14} />Save</button>
+    </div>}
+  </header>;
 }
+
+/** Kept as a compatibility export for integrations that imported the old chrome. */
+export function WorkspaceSidebar() { return null; }
