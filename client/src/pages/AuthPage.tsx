@@ -57,7 +57,7 @@ export default function AuthPage() {
     <main className="auth-shell" aria-label="SiteSketch authentication">
       <header className="auth-header">
         <button type="button" className="auth-brand" onClick={() => setLocation("/")} aria-label="SiteSketch home">
-          <span className="auth-mark" aria-hidden="true">✦</span>
+          <span className="auth-mark" aria-hidden="true">S</span>
           <span className="font-display">SITESKETCH</span>
         </button>
         <button type="button" className="auth-back-button" onClick={() => setLocation("/")}>

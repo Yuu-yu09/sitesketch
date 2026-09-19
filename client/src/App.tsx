@@ -13,7 +13,7 @@ function LoadingScreen() {
   return (
     <main className="auth-shell">
       <div className="auth-card">
-        <div className="auth-mark">✦</div>
+        <div className="auth-mark" aria-hidden="true">S</div>
         <div className="auth-loading">Loading your workspace...</div>
       </div>
     </main>

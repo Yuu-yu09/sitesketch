@@ -106,7 +106,7 @@ export default function LandingPage() {
       <header className="landing-header">
         <div className="landing-container landing-header-inner">
           <button className="landing-brand" type="button" onClick={() => scrollTo("top")} aria-label="SiteSketch home">
-            <span className="landing-brand-mark" aria-hidden="true">✦</span>
+            <span className="landing-brand-mark" aria-hidden="true">S</span>
             <span className="font-display">SITESKETCH</span>
           </button>
 
@@ -275,7 +275,7 @@ export default function LandingPage() {
 
       <footer className="landing-footer">
         <div className="landing-container landing-footer-inner">
-          <div className="landing-brand landing-footer-brand"><span className="landing-brand-mark" aria-hidden="true">✦</span><span className="font-display">SITESKETCH</span></div>
+          <div className="landing-brand landing-footer-brand"><span className="landing-brand-mark" aria-hidden="true">S</span><span className="font-display">SITESKETCH</span></div>
           <p>Plan with intention. Build with confidence.</p>
           <button type="button" onClick={() => goToAuth("login")}>Sign in <ArrowRight size={13} /></button>
         </div>
