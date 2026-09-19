@@ -72,8 +72,8 @@ export default function AuthPage() {
           <p>Sign in to continue, or create an account to save your projects and plans.</p>
         </div>
         <div className="auth-tabs" role="tablist" aria-label="Account options">
-          <button type="button" className={mode === "login" ? "auth-tab auth-tab-active" : "auth-tab"} onClick={() => { setMode("login"); setFormError(""); }}>Sign in</button>
-          <button type="button" className={mode === "register" ? "auth-tab auth-tab-active" : "auth-tab"} onClick={() => { setMode("register"); setFormError(""); }}>Create account</button>
+          <button type="button" role="tab" aria-selected={mode === "login"} className={mode === "login" ? "auth-tab auth-tab-active" : "auth-tab"} onClick={() => { setMode("login"); setFormError(""); }}>Sign in</button>
+          <button type="button" role="tab" aria-selected={mode === "register"} className={mode === "register" ? "auth-tab auth-tab-active" : "auth-tab"} onClick={() => { setMode("register"); setFormError(""); }}>Create account</button>
         </div>
         <form onSubmit={submit}>
           {mode === "register" && <input className="auth-input" value={name} onChange={event => setName(event.target.value)} placeholder="Your name" aria-label="Your name" autoComplete="name" required />}
