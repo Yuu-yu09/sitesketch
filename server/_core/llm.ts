@@ -226,6 +226,31 @@ const assertApiKey = () => {
   }
 };
 
+const resolveOllamaUrl = (path: string) => {
+  const baseUrl = ENV.ollamaBaseUrl.trim().replace(/\/+$/, "");
+  if (!baseUrl) {
+    throw new Error("OLLAMA_BASE_URL is not configured");
+  }
+  return `${baseUrl}${path}`;
+};
+
+const getSchemaFormat = (
+  normalizedResponseFormat:
+    | { type: "json_schema"; json_schema: JsonSchema }
+    | { type: "text" }
+    | { type: "json_object" }
+    | undefined
+) => {
+  if (!normalizedResponseFormat) return undefined;
+  if (normalizedResponseFormat.type === "json_schema") {
+    return normalizedResponseFormat.json_schema.schema;
+  }
+  if (normalizedResponseFormat.type === "json_object") {
+    return "json";
+  }
+  return undefined;
+};
+
 const normalizeResponseFormat = ({
   responseFormat,
   response_format,
@@ -343,8 +368,6 @@ const fetchWithBackoff = async (
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  assertApiKey();
-
   const {
     messages,
     tools,
@@ -360,6 +383,72 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     maxTokens,
     max_tokens,
   } = params;
+
+  const normalizedResponseFormat = normalizeResponseFormat({
+    responseFormat,
+    response_format,
+    outputSchema,
+    output_schema,
+  });
+
+  if (ENV.aiProvider.toLowerCase() === "ollama") {
+    if (tools && tools.length > 0) {
+      throw new Error("Ollama generation does not support tools in SiteSketch yet");
+    }
+
+    const resolvedMaxTokens = max_tokens ?? maxTokens;
+    const format = getSchemaFormat(normalizedResponseFormat);
+    const payload: Record<string, unknown> = {
+      model: model || ENV.ollamaModel,
+      messages: messages.map(normalizeMessage),
+      stream: false,
+    };
+    if (format) payload.format = format;
+    if (typeof resolvedMaxTokens === "number") {
+      payload.options = { num_predict: resolvedMaxTokens };
+    }
+
+    const response = await fetchWithBackoff(resolveOllamaUrl("/api/chat"), {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Ollama request failed: ${response.status} ${response.statusText} – ${errorText}`
+      );
+    }
+
+    const result = (await response.json()) as {
+      model?: string;
+      created_at?: string;
+      message?: { role?: Role; content?: string };
+      done?: boolean;
+    };
+    if (!result.message?.content) {
+      throw new Error("Ollama returned an empty website specification");
+    }
+    return {
+      id: `ollama-${Date.now()}`,
+      created: result.created_at ? Date.parse(result.created_at) : Date.now(),
+      model: result.model || model || ENV.ollamaModel,
+      choices: [{
+        index: 0,
+        message: {
+          role: result.message.role || "assistant",
+          content: result.message.content,
+        },
+        finish_reason: result.done === false ? null : "stop",
+      }],
+    };
+  }
+
+  assertApiKey();
 
   const payload: Record<string, unknown> = {
     messages: messages.map(normalizeMessage),
@@ -392,13 +481,6 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   if (reasoning) {
     payload.reasoning = reasoning;
   }
-
-  const normalizedResponseFormat = normalizeResponseFormat({
-    responseFormat,
-    response_format,
-    outputSchema,
-    output_schema,
-  });
 
   if (normalizedResponseFormat) {
     payload.response_format = normalizedResponseFormat;

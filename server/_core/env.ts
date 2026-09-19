@@ -13,4 +13,7 @@ export const ENV = {
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   aiModel: process.env.AI_MODEL ?? "",
+  aiProvider: process.env.AI_PROVIDER ?? "forge",
+  ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434",
+  ollamaModel: process.env.OLLAMA_MODEL ?? "qwen2.5:7b",
 };

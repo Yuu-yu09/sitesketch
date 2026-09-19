@@ -8,9 +8,28 @@ Set these environment variables in the runtime environment:
 - `PORT` (the platform-provided port)
 - `DATABASE_URL` for PostgreSQL
 - `JWT_SECRET` with at least 32 random characters
+- `AI_PROVIDER=forge` for the hosted OpenAI-compatible provider
 - `BUILT_IN_FORGE_API_URL` for the OpenAI-compatible AI provider base URL
-- `BUILT_IN_FORGE_API_KEY` for the AI provider; keep this secret
+- `BUILT_IN_FORGE_API_KEY` for the hosted provider; keep this secret
 - `AI_MODEL` set to a model ID returned by the provider's `/v1/models` endpoint
+
+For local, keyless generation with Ollama, use:
+
+```sh
+AI_PROVIDER=ollama
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=qwen2.5:7b
+```
+
+Install Ollama from [ollama.com](https://ollama.com), then download the model
+before starting SiteSketch:
+
+```sh
+ollama pull qwen2.5:7b
+```
+
+Ollama must be running wherever the SiteSketch server runs. This mode does not
+send prompts to a hosted AI provider and does not require an API key.
 
 OAuth is optional. If enabled, configure the provider client credentials and
 register these callback URLs:
