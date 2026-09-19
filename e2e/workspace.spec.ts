@@ -11,17 +11,21 @@ test("user can register, save a project, save the editor, and open preview", asy
   await page.getByRole("button", { name: "Create my account" }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByText("Plan workspace")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Start with a new project" })).toBeVisible();
+  await expect(page.getByText("Northstar Studio")).toHaveCount(0);
+  await expect(page.locator(".sidebar")).toHaveCount(0);
+  await expect(page.getByText("SiteSketch", { exact: true })).toBeVisible();
 
-  await page.getByTitle("New project").click();
+  await page.getByRole("button", { name: "Create new project" }).click();
+  await expect(page.getByRole("heading", { name: "Let’s make your idea clear." })).toBeVisible();
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Project created")).toBeVisible();
 
-  await page.getByRole("button", { name: "Build" }).click();
+  await page.getByRole("banner").getByRole("button", { name: "Edit site", exact: true }).click();
   await expect(page.locator(".grapesjs-canvas")).toBeVisible();
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("main").getByRole("button", { name: "Save" }).click();
 
-  await page.getByRole("button", { name: "Preview" }).click();
+  await page.getByRole("banner").getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText("Saved editor output is ready to refine")).toBeVisible();
   await expect(page.locator("iframe[title*='Untitled project']")).toBeVisible();
 });

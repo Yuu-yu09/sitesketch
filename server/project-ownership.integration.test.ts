@@ -13,7 +13,7 @@ describe.skipIf(!runDatabaseTests)("project ownership integration", () => {
   let projectId = 0;
 
   beforeAll(async () => {
-    await pool.query("INSERT INTO users (id, \"openId\", name, email, role) VALUES ($1, $2, 'Ownership Owner', $3, 'user'), ($4, $5, 'Ownership Other', $6, 'user') ON CONFLICT (\"openId\") DO NOTHING", [
+    await pool.query("INSERT INTO sitesketch.users (id, \"openId\", name, email, role) VALUES ($1, $2, 'Ownership Owner', $3, 'user'), ($4, $5, 'Ownership Other', $6, 'user') ON CONFLICT (\"openId\") DO NOTHING", [
       ownerId, openIds[0], `${openIds[0]}@example.com`, otherUserId, openIds[1], `${openIds[1]}@example.com`,
     ]);
     const created = await createUserProject(ownerId, {
@@ -30,7 +30,7 @@ describe.skipIf(!runDatabaseTests)("project ownership integration", () => {
 
   afterAll(async () => {
     if (projectId) await deleteUserProject(ownerId, projectId);
-    await pool.query('DELETE FROM users WHERE "openId" = ANY($1)', [openIds]);
+    await pool.query('DELETE FROM sitesketch.users WHERE "openId" = ANY($1)', [openIds]);
     await pool.end();
   });
 

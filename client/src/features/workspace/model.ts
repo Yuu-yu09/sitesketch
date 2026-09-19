@@ -68,6 +68,17 @@ export const defaultProject: ProjectState = {
   selectedBlock: "hero",
 };
 
+// Used for a new or first-time workspace. Keep the starter content separate
+// from the example project so an authenticated user never sees sample data.
+export const blankProject: ProjectState = {
+  ...defaultProject,
+  projectName: "Untitled project",
+  prompt: "",
+  sections: initialSections.map(section => ({ ...section })),
+  checklist: { headline: false, proof: false, services: false, cta: false },
+  selectedBlock: "hero",
+};
+
 export const sectionOptions = ["Testimonials", "FAQ", "Pricing", "Gallery", "Case studies", "Opening hours"];
 
 const recommendationRules: Array<{ match: RegExp; sectionIds: string[] }> = [
