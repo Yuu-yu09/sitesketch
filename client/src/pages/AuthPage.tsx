@@ -76,10 +76,10 @@ export default function AuthPage() {
           <button type="button" className={mode === "register" ? "auth-tab auth-tab-active" : "auth-tab"} onClick={() => { setMode("register"); setFormError(""); }}>Create account</button>
         </div>
         <form onSubmit={submit}>
-          {mode === "register" && <input className="auth-input" value={name} onChange={event => setName(event.target.value)} placeholder="Your name" autoComplete="name" required />}
-          <input className="auth-input" value={email} onChange={event => setEmail(event.target.value)} placeholder="Email address" type="email" autoComplete="email" required />
+          {mode === "register" && <input className="auth-input" value={name} onChange={event => setName(event.target.value)} placeholder="Your name" aria-label="Your name" autoComplete="name" required />}
+          <input className="auth-input" value={email} onChange={event => setEmail(event.target.value)} placeholder="Email address" aria-label="Email address" type="email" autoComplete="email" required />
           <div className="auth-password-field">
-            <input className="auth-input" value={password} onChange={event => setPassword(event.target.value)} placeholder="Password (8+ characters)" type={showPassword ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={8} required />
+            <input className="auth-input" value={password} onChange={event => setPassword(event.target.value)} placeholder="Password (8+ characters)" aria-label="Password" type={showPassword ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={8} required />
             <button type="button" className="auth-password-toggle" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"}>
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
