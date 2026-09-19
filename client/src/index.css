@@ -107,6 +107,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .mode-tabs button { border:0; border-radius:6px; padding:6px 12px; color:#9199aa; font-size:11px; font-weight:600; transition:all .18s var(--ease-out); }
 .mode-tab-active { background:white !important; color:#26304a !important; box-shadow:0 1px 3px rgba(30,40,70,.08); }
 .mobile-current-mode, .mobile-workspace-menu { display:none; }
+.workspace-menu-toggle { display:none; }
 .mobile-projects-toggle { display:flex; align-items:center; gap:4px; border:0; background:transparent; color:#697489; font-size:10px; }
 .mobile-project-list { margin:0 0 5px; border-top:1px solid #edf0f3; border-bottom:1px solid #edf0f3; padding:4px 0; }
 .mobile-project-row { position:relative; display:flex; align-items:center; }
@@ -949,6 +950,7 @@ select:focus-visible {
   .landing-section { padding: 68px 0; }
   .preview-hero { min-height: 390px; padding-top: 64px; }
   .preview-hero h2 { font-size: clamp(38px, 11vw, 48px); }
+  .workspace-menu-toggle { display:inline-flex; }
 }
 
 @media (max-width: 480px) {
@@ -973,6 +975,22 @@ select:focus-visible {
     transition-duration: .01ms !important;
   }
 }
+
+/* Workspace navigation: one project switcher on desktop, one labeled panel on mobile. */
+.mobile-nav-section-label {
+  padding: 6px 12px 4px;
+  color: var(--ink-faint);
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.mobile-nav-section-label-spaced { margin-top: 8px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.mobile-workspace-menu .mobile-projects-toggle { justify-content: flex-start; gap: 8px; }
+.mobile-workspace-menu .mobile-projects-toggle svg:last-child { margin-left: auto; }
+.save-indicator-saving { animation: save-pulse 1s ease-in-out infinite; }
+@keyframes save-pulse { 50% { opacity: .35; } }
 
   /* Navigation refinement: a quiet, consistent chrome across public and private surfaces. */
   .landing-header,
@@ -1164,5 +1182,14 @@ select:focus-visible {
 
     .workspace-menu-toggle {
       order: 4;
+    }
+
+    .topbar > .flex:last-child .account-trigger,
+    .topbar > .flex:last-child > .button-primary {
+      display: none;
+    }
+
+    .mobile-workspace-menu {
+      padding: 10px;
     }
 }
