@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: sitesketch
+    runtime: node
+    buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm build
+    startCommand: corepack pnpm start
+    healthCheckPath: /readyz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AI_PROVIDER
+        value: gemini
+      - key: BUILT_IN_FORGE_API_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: BUILT_IN_FORGE_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gemini-2.5-flash
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false
