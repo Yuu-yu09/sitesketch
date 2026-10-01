@@ -9,7 +9,7 @@
 > 3. Automatic generation of a complete working website
 > 4. Website hosting or publishing
 >
-> Decisions made: **Real LLM API (Google Gemini)**, **self-hosted publishing on the Flask server**, **Supabase (Postgres) as the database**, **GitHub + VS Code for version control**, **plan first → approve → build**.
+> Decisions made: **Real LLM API (Google Gemini)**, **Supabase (Postgres + Storage)** for data & hosted sites, **GitHub** as repo, **Vercel free tier** to host the app (domain `*.vercel.app`), **plan first → approve → build**.
 
 ---
 
@@ -22,7 +22,7 @@ Describe your site ──► AI generates plan ──► Drag-and-drop builder �
      (LLM)                (pages/sections)      (edit/reorder)            a real website
                                                                            │
                                               Publish ◄────────────────────┘
-                                          (live URL on your server + ZIP export)
+                                        (live URL /site/<slug> + ZIP export)
 ```
 
 The original planning features (type/goal selection, recommendations, checklist, save/load) are **kept** — they become step 1 of the pipeline.
@@ -48,7 +48,9 @@ Keeps your proposal's stack (HTML/CSS/JS + Flask) and adds three things.
 | Backend | Python Flask | App logic, AI proxy, site server |
 | Database | **Supabase** (managed Postgres) via `supabase-py` | Users, projects, plan JSON, site registry — keys in `.env`, accessed server-side only |
 | AI | **Google Gemini API** (free tier) | Plan + content generation (key in `.env`, calls proxied through Flask — never exposed to browser) |
-| Publishing | Flask static routes | Serves published sites at `/site/<slug>` |
+| Hosting | **Supabase Storage** (bucket `sites`) | Compiled websites are stored here — works on Vercel's read-only serverless filesystem |
+| Publishing | Flask route `/site/<slug>` | Streams the compiled site from Supabase Storage |
+| Deployment | **Vercel (free)** | Hosts the Flask app + gives the `*.vercel.app` domain; repo lives on GitHub, deploys on push |
 | Templates | Jinja2 (ships with Flask) | Compiles plan JSON → working HTML/CSS |
 | Design / VCS / IDE | Figma, GitHub, VS Code | Unchanged |
 
@@ -74,6 +76,9 @@ sitesketch/
 │   ├── builder.py          # builder API (CRUD on plan JSON)
 │   ├── ai_routes.py        # AI endpoints (server-side only)
 │   └── publish.py          # publish / unpublish / /site/<slug> / ZIP
+├── vercel.json             # route rewrites: everything -> /api/index
+├── api/
+│   └── index.py            # WSGI entry point for Vercel (imports `app` from app.py)
 ├── static/
 │   ├── js/builder.js       # canvas, drag-and-drop, palette, inline edit
 │   ├── js/ai.js            # generate buttons, streaming/error UI
@@ -83,10 +88,9 @@ sitesketch/
 │   └── themes/             # Jinja2 themes for generated sites
 │       ├── modern/         #   index.html.j2, page.html.j2, style.css.j2
 │       └── classic/
-├── published/              # generated live sites (gitignored)
-├── exports/                # ZIP builds (gitignored)
 └── tests/                  # pytest: auth, plan CRUD, compiler, publish
 ```
+> Note: no `published/` folder — compiled sites go **in-memory → Supabase Storage** (Vercel can't write to disk; this way the same code runs locally and in production).
 
 ### Core contract: the Plan JSON (single source of truth)
 
@@ -190,19 +194,19 @@ Two entry points:
 Key handling: `.env` → `config.py` → server route → Gemini REST (`generativelanguage.googleapis.com`, `gemini-2.5-flash` or `gemini-2.0-flash`). Never ship the key to the browser. On quota/network failure → clear error toast + optional template fallback so demos never die.
 
 ### C. Automatic generation of a complete working website
-`services/compiler.py`: Plan JSON + theme → Jinja2 render → real static site:
+`services/compiler.py`: Plan JSON + theme → Jinja2 render → real static site (in memory):
 - One HTML file per page (`index.html`, `about.html`, …), shared `style.css`, images/placeholders.
 - Escaping handled by Jinja2 (no XSS from user content).
 - Two bundled themes minimum (theme picker in builder).
-- Output written to `published/<user_id>/<slug>/`.
-- **Live preview iframe** inside the builder (render on demand without publishing).
-- Bonus: **Download as .zip** (`zipfile` module).
+- **Live preview iframe** inside the builder (rendered on demand without publishing).
+- Bonus: **Download as .zip** (built in `io.BytesIO` → `send_file`).
 
-### D. Website hosting / publishing (self-hosted)
-- **Publish** → compiles → `is_published=1`, assigns slug → site live at **`http://<your-host>/site/<slug>`**.
-- Route: resolves slug → ownership check → `send_from_directory`.
-- **Unpublish / Republish** (recompile), slug editing, view counter.
-- Flask serves the folder statically; works on localhost for the demo and on any Python host (PythonAnywhere/Render) for real access. *Domain registration stays Out of Scope.*
+### D. Website hosting / publishing (Vercel + Supabase Storage)
+- **Publish** → compile in memory → upload files to **Supabase Storage bucket** `sites/<user_id>/<slug>/` → `is_published = true`.
+- Site is live at **`https://<your-app>.vercel.app/site/<slug>`** (and `/site/<slug>/about` for subpages).
+- Route resolves slug → ownership check → fetch file from Storage → stream with correct `Content-Type`.
+- **Unpublish / Republish** (recompile + overwrite bucket path), slug editing, view counter.
+- Vercel free tier function timeout is short → Gemini calls use tight timeouts; Storage keeps the site serving fast without hitting limits. *Domain registration stays Out of Scope* (Vercel's free `*.vercel.app` domain covers the requirement).
 
 ### Original features (kept)
 Auth, type & goal selection, section recommendations, checklist, save/load — all become the "Planning" module feeding the builder.
@@ -244,9 +248,9 @@ Auth, type & goal selection, section recommendations, checklist, save/load — a
 7. To identify basic content the user may still need to prepare. → *Checklist*
 8. To allow users to save and reopen their website projects. → *Save/load*
 
-**Tech stack rows to add:** **Supabase (PostgreSQL)** — database/storage · **Gemini API** (AI generation) · **SortableJS** (drag-and-drop) · **Jinja2** (site compilation) · **GitHub** (source code management). *Replace the "SQLite" row with Supabase.*
+**Tech stack rows to add:** **Supabase (PostgreSQL + Storage)** — database and hosted site files · **Gemini API** (AI generation) · **SortableJS** (drag-and-drop) · **Jinja2** (site compilation) · **Vercel** (web hosting / free domain) · **GitHub** (source code management). *Replace the "SQLite" row with Supabase.*
 
-**Version control:** GitHub repository **`sitesketch`** (private), commits made from VS Code.
+**Version control & hosting:** GitHub repository **`sitesketch`** (private), pushed from VS Code; **Vercel** imports the repo and auto-deploys every push to `main` → live at `https://sitesketch.vercel.app`.
 
 ---
 
@@ -271,7 +275,7 @@ Auth, type & goal selection, section recommendations, checklist, save/load — a
 - W5: Compiler + themes + live preview + ZIP
 - W6: Publishing (`/site/<slug>`) + admin module
 - W7: Gemini AI integration (plan + section generation)
-- W8: Integration, testing, UI polish, documentation, presentation
+- W8: Integration, testing, UI polish, GitHub → Vercel deployment, documentation, presentation
 
 *(If your prof insists the timeline stay exactly 8 weeks, use this table — W3–W4 are the heaviest; AI can be demoed with one key flow: description → full plan.)*
 
@@ -288,7 +292,10 @@ Auth, type & goal selection, section recommendations, checklist, save/load — a
 | LLM returns malformed JSON | Gemini JSON mode + schema validation + one repair retry |
 | Scope creep in "advanced" drag-and-drop | Section-level DnD defined explicitly (§4A) — no pixel positioning |
 | XSS via user content in published sites | Jinja2 auto-escaping; sanitize in compiler |
-| Windows path issues for published sites | `pathlib` + `send_from_directory` throughout |
+| Windows path issues for published sites | `pathlib` everywhere; production stores sites in Supabase Storage, not disk |
+| Vercel free function timeout (Gemini calls) | Tight request timeout + graceful "AI busy" fallback so the app never hangs |
+| Vercel read-only filesystem | Publishing designed around Supabase Storage from day one (works locally + in prod) |
+| Secrets missing in Vercel | Same `.env` names configured in Vercel Project → Settings → Environment Variables |
 
 ---
 
@@ -300,6 +307,7 @@ Auth, type & goal selection, section recommendations, checklist, save/load — a
 - [ ] AI: type a description → full editable plan appears
 - [ ] Compiler produces a real multi-page site; preview works in iframe
 - [ ] Publish → site loads at `/site/<slug>` in a fresh browser tab
+- [ ] App deployed on Vercel; everything above works on the live `*.vercel.app` URL
 - [ ] ZIP export opens locally as a working site
 - [ ] Unpublish removes public access; only owner can publish
 - [ ] Admin can add a website type and its recommended sections
@@ -333,9 +341,21 @@ GEMINI_API_KEY=...   (from https://aistudio.google.com/apikey)
 
 - [x] Git installed (2.55) + commit identity set (`Nicole <nicolesoriae@gmail.com>`)
 - [x] GitHub CLI installed (2.102)
-- [ ] GitHub login (device code `E6EB-7FC9` at **https://github.com/login/device**)
+- [ ] GitHub login (device code at **https://github.com/login/device** — code currently active: `A804-5A40`)
 - [ ] Create private repo `sitesketch` + push
-- [ ] Open project in VS Code (`code .`)
-- [ ] Recommended VS Code extensions: **Python**, **Pylance**, **SQLite Viewer** (reads nothing now — use **SQLTools** if desired), **ESLint** optional
+- [ ] Open project in VS Code (`code .`) ✓ *(already opened)*
+- [ ] Recommended VS Code extensions: **Python**, **Pylance**, **SQLTools** (optional), **Vercel** (optional)
 
 **Workflow once connected:** I commit in logical chunks; you review changes in VS Code's Source Control tab and push — or I run `git push` for you. Never commit `.env`.
+
+## 12. Appendix C — Vercel deployment (after the repo exists)
+
+1. Push code to GitHub (`sitesketch`, private).
+2. Go to **vercel.com → Add New → Project → Import** the `sitesketch` repo (you're already logged in).
+3. Framework preset: **Other** (it's Flask, not a JS framework).
+4. **Environment Variables** — add the same 4 from `.env`:
+   `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`, `SECRET_KEY`
+5. **Deploy** → you get **`https://sitesketch.vercel.app`**.
+6. From then on: **push to `main` = automatic redeploy**. (No local `published/` folder needed — sites live in Supabase Storage, so serverless is fine.)
+
+*Note: local development (`flask run`) and Vercel use the exact same code path — nothing to switch.*
