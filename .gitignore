@@ -1,0 +1,18 @@
+# Secrets — NEVER commit
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Generated sites & exports
+published/
+exports/
+
+# Editors / OS
+.vscode/
+.DS_Store
+Thumbs.db
