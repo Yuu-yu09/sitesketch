@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>shot harness</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #fff; overflow: hidden; }
+    iframe { display: block; border: 0; }
+  </style>
+</head>
+<body>
+  <iframe id="f" src="about:blank" scrolling="no"></iframe>
+  <script>
+    var qs = new URLSearchParams(location.search);
+    var page = qs.get("page") || "index.html";
+    var walk = qs.get("walk");
+    var w = parseInt(qs.get("w") || "390", 10);
+    var h = parseInt(qs.get("h") || "844", 10);
+    var f = document.getElementById("f");
+    f.style.width = w + "px";
+    f.style.height = h + "px";
+
+    /* walk=plan: click through the wizard (type -> goal -> step 3) after load,
+       so captures can show step 3 instead of the landing step. */
+    function maybeWalk() {
+      if (walk !== "plan") return;
+      var doc;
+      try { doc = f.contentDocument; } catch (e) { return; }
+      if (!doc || !doc.getElementById("typeGrid")) return; // not on plan yet
+      if (window.__walk) return;
+      window.__walk = true;
+      (function step() {
+        var d;
+        try { d = f.contentDocument; } catch (e) { return; }
+        if (!d) return;
+        var s1 = d.getElementById("step1"), s2 = d.getElementById("step2"), s3 = d.getElementById("step3");
+        if (s1 && !s1.hidden && !window.__w1) {
+          window.__w1 = true;
+          var tc = d.querySelector("#typeGrid .type-card");
+          if (tc) tc.click();
+        } else if (s2 && !s2.hidden && !window.__w2) {
+          window.__w2 = true;
+          var gp = d.querySelector("#goalList .goal-pill");
+          if (gp) gp.click();
+          var n2 = d.getElementById("next2");
+          if (n2) n2.click();
+        } else if (s3 && !s3.hidden) {
+          return; // done
+        }
+        setTimeout(step, 40);
+      })();
+    }
+    f.addEventListener("load", maybeWalk);
+    f.src = page;
+  </script>
+</body>
+</html>

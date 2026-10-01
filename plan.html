@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>New plan — SiteSketch</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%23fff' stroke='%2316283C' stroke-width='2.5'/%3E%3Cpath d='M16 3.5v25M3.5 16h25' stroke='%2316283C' stroke-width='1.4' opacity='.35'/%3E%3Crect x='17.5' y='4.5' width='10' height='10' fill='%23D6452F'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="static/css/fonts.css">
+  <link rel="stylesheet" href="static/icons/bootstrap-icons.css">
+  <link rel="stylesheet" href="static/css/app.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="dashboard.html" aria-label="SiteSketch dashboard">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="6" fill="#fff" stroke="#16283C" stroke-width="2.5"/>
+          <path d="M16 3.5v25M3.5 16h25" stroke="#16283C" stroke-width="1.4" opacity=".35"/>
+          <rect x="17.5" y="4.5" width="10" height="10" fill="#D6452F"/>
+        </svg>
+        SiteSketch
+      </a>
+      <nav class="topbar-nav" aria-label="Main">
+        <a class="navlink" href="dashboard.html">My plans</a>
+        <span class="user-chip" id="userChip"><span class="av" aria-hidden="true">?</span><span id="userName">…</span></span>
+        <button class="icon-btn" id="logoutBtn" title="Sign out" aria-label="Sign out">
+          <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="wrap" style="max-width: 880px;">
+
+      <ol class="steps" id="steps">
+        <li data-step="1" aria-current="step"><span class="n">1</span> Type</li>
+        <li data-step="2"><span class="n">2</span> Goal</li>
+        <li data-step="3"><span class="n">3</span> Sections</li>
+      </ol>
+
+      <!-- ================= STEP 1: TYPE ================= -->
+      <section id="step1">
+        <div class="page-head">
+          <div>
+            <h1>What kind of website?</h1>
+            <p>Pick the closest type — you can change it later.</p>
+          </div>
+        </div>
+
+        <div class="type-grid" id="typeGrid" role="group" aria-label="Website types"></div>
+
+        <div class="ai-box" style="margin-top: 2rem;">
+          <label for="aiDesc">Or describe it — AI drafts your whole plan</label>
+          <textarea id="aiDesc" rows="3" placeholder="Try: &quot;a menu website for my aunt's carinderia&quot;"></textarea>
+          <div style="display:flex; gap:.8rem; align-items:center; flex-wrap:wrap; margin-top:.8rem;">
+            <button class="btn btn-primary" id="aiBtn" type="button">
+              <i class="bi bi-lightning" aria-hidden="true"></i> Generate my plan
+            </button>
+            <span class="hand" id="aiNote" hidden>sketching your plan…</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= STEP 2: GOAL ================= -->
+      <section id="step2" hidden>
+        <div class="page-head">
+          <div>
+            <h1>What's its main goal?</h1>
+            <p id="goalFor">The one thing this website should do for you.</p>
+          </div>
+        </div>
+
+        <div class="goal-list" id="goalList" role="group" aria-label="Website goals"></div>
+
+        <div class="wizard-foot">
+          <button class="btn" id="back2" type="button"><i class="bi bi-chevron-left" aria-hidden="true"></i> Back</button>
+          <button class="btn btn-primary" id="next2" type="button" disabled>Continue</button>
+        </div>
+      </section>
+
+      <!-- ================= STEP 3: SECTIONS ================= -->
+      <section id="step3" hidden>
+        <div class="page-head">
+          <div>
+            <h1>Recommended for you</h1>
+            <p id="recSub">Based on your type and goal. Untick anything you don't need.</p>
+          </div>
+        </div>
+
+        <div class="field" id="fSiteName">
+          <label for="siteName">Site name</label>
+          <input type="text" id="siteName" placeholder="e.g. Lola's Kitchen" maxlength="60">
+          <p class="err">Give your site a name.</p>
+        </div>
+
+        <div class="rec-list" id="recList" role="group" aria-label="Recommended sections"></div>
+
+        <div class="wizard-foot">
+          <button class="btn" id="back3" type="button"><i class="bi bi-chevron-left" aria-hidden="true"></i> Back</button>
+          <button class="btn btn-primary" id="finish" type="button">Open the builder <i class="bi bi-arrow-right" aria-hidden="true"></i></button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script src="static/js/api.js"></script>
+  <script src="static/js/site.js"></script>
+  <script>
+    (function () {
+      var user = API.requireAuth();
+      if (!user) return;
+      document.getElementById("userName").textContent = user.name;
+      document.querySelector("#userChip .av").textContent = user.name.charAt(0).toUpperCase();
+      document.getElementById("logoutBtn").addEventListener("click", function () {
+        API.logout();
+        location.href = "index.html";
+      });
+
+      /* state */
+      var state = { type: null, goal: null, selected: [], siteName: "", plan: null };
+
+      /* ---------- steps ---------- */
+      function goStep(n) {
+        [1, 2, 3].forEach(function (i) {
+          document.getElementById("step" + i).hidden = i !== n;
+        });
+        document.querySelectorAll("#steps li").forEach(function (li) {
+          var s = +li.getAttribute("data-step");
+          li.classList.toggle("done", s < n);
+          if (s === n) li.setAttribute("aria-current", "step");
+          else li.removeAttribute("aria-current");
+        });
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      /* ---------- step 1: types ---------- */
+      var typeGrid = document.getElementById("typeGrid");
+      API.TYPES.forEach(function (t) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "type-card";
+        b.setAttribute("aria-pressed", "false");
+        b.innerHTML =
+          '<span class="ti"><i class="bi ' + t.icon + '" aria-hidden="true"></i></span>' +
+          "<strong>" + SS.esc(t.name) + "</strong><span>" + SS.esc(t.desc) + "</span>";
+        b.addEventListener("click", function () {
+          state.type = t.id;
+          state.goal = null;
+          typeGrid.querySelectorAll(".type-card").forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+          b.setAttribute("aria-pressed", "true");
+          setTimeout(function () { renderGoals(); goStep(2); }, 180);
+        });
+        typeGrid.appendChild(b);
+      });
+
+      /* ---------- step 2: goals ---------- */
+      function renderGoals() {
+        var typeName = API.TYPES.filter(function (t) { return t.id === state.type; })[0].name;
+        document.getElementById("goalFor").textContent = "The one thing this " + typeName + " website should do.";
+        var list = document.getElementById("goalList");
+        list.innerHTML = "";
+        API.goalsFor(state.type).forEach(function (g) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "goal-pill";
+          b.setAttribute("aria-pressed", "false");
+          b.innerHTML = '<span class="radio" aria-hidden="true"></span>' + SS.esc(g.name);
+          b.addEventListener("click", function () {
+            state.goal = g.id;
+            list.querySelectorAll(".goal-pill").forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+            b.setAttribute("aria-pressed", "true");
+            document.getElementById("next2").disabled = false;
+          });
+          list.appendChild(b);
+        });
+        document.getElementById("next2").disabled = true;
+      }
+
+      document.getElementById("back2").addEventListener("click", function () { goStep(1); });
+      document.getElementById("next2").addEventListener("click", function () { renderRecs(); goStep(3); });
+
+      /* ---------- step 3: recommendations ---------- */
+      function ensurePlan() {
+        if (!state.plan) state.plan = makeStarterPlan();
+        return state.plan;
+      }
+
+      function makeStarterPlan() {
+        return {
+          meta: { type: state.type, goal: state.goal, theme: "modern", siteName: state.siteName || "" },
+          pages: [{ id: "home", name: "Home", sections: [] }]
+        };
+      }
+
+      function renderRecs() {
+        if (!state.siteName) {
+          var guess = { business: "My Business", portfolio: "My Portfolio", restaurant: "My Restaurant", store: "My Store", school: "My Project", blog: "My Blog" };
+          state.siteName = guess[state.type] || "My Website";
+        }
+        document.getElementById("siteName").value = state.siteName;
+
+        var recs = API.recommendedFor(state.type);
+        if (!state.selected.length) state.selected = recs.slice();
+
+        var list = document.getElementById("recList");
+        list.innerHTML = "";
+
+        recs.forEach(function (key) {
+          var s = API.SECTIONS[key];
+          var checked = state.selected.indexOf(key) !== -1;
+          var item = document.createElement("label");
+          item.className = "rec-item";
+          item.setAttribute("for", "sec_" + key);
+          item.innerHTML =
+            '<span class="ri"><i class="bi ' + s.icon + '" aria-hidden="true"></i></span>' +
+            "<span><strong>" + SS.esc(s.name) + "</strong><small>" + SS.esc(s.blurb) + "</small></span>" +
+            '<input type="checkbox" id="sec_' + key + '"' + (checked ? " checked" : "") +
+            ' aria-label="Include ' + SS.esc(s.name) + '">';
+          item.querySelector("input").addEventListener("change", function () {
+            if (this.checked) { if (state.selected.indexOf(key) === -1) state.selected.push(key); }
+            else state.selected = state.selected.filter(function (k) { return k !== key; });
+            updateFinish();
+          });
+          list.appendChild(item);
+        });
+
+        updateFinish();
+      }
+
+      function updateFinish() {
+        var nameOk = document.getElementById("siteName").value.trim().length > 0;
+        document.getElementById("finish").disabled = !(state.selected.length && nameOk);
+      }
+
+      document.getElementById("siteName").addEventListener("input", function () {
+        state.siteName = this.value;
+        document.getElementById("fSiteName").classList.remove("invalid");
+        updateFinish();
+      });
+
+      document.getElementById("back3").addEventListener("click", function () { goStep(2); });
+
+      document.getElementById("finish").addEventListener("click", function () {
+        if (!state.siteName.trim()) {
+          document.getElementById("fSiteName").classList.add("invalid");
+          return;
+        }
+        var plan = state.plan || makeStarterPlan();
+        plan.meta.type = state.type;
+        plan.meta.goal = state.goal;
+        plan.meta.siteName = state.siteName.trim();
+
+        /* keep AI-drafted sections, top them up with the selection */
+        var home = plan.pages[0];
+        var have = home.sections.map(function (s) { return s.type; });
+        state.selected.forEach(function (key) {
+          if (have.indexOf(key) === -1) {
+            var s = API.SECTIONS[key];
+            home.sections.push({
+              id: "s_" + Math.random().toString(36).slice(2, 9),
+              type: key,
+              title: s.name,
+              subtitle: s.blurb,
+              fields: {},
+              ready: 0
+            });
+          }
+        });
+        home.sections = home.sections.filter(function (s) { return state.selected.indexOf(s.type) !== -1; });
+
+        var proj = API.createProject(plan.meta.siteName, state.type, state.goal);
+        API.savePlan(proj.id, plan);
+        location.href = "builder.html?id=" + proj.id;
+      });
+
+      /* ---------- AI path ---------- */
+      document.getElementById("aiBtn").addEventListener("click", function () {
+        var desc = document.getElementById("aiDesc").value.trim();
+        var btn = this;
+        if (desc.length < 8) {
+          SS.toast("Describe your site in a sentence first", "bi-lightning");
+          document.getElementById("aiDesc").focus();
+          return;
+        }
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i> Generating…';
+        document.getElementById("aiNote").hidden = false;
+
+        API.generatePlan(desc).then(function (res) {
+          state.type = res.type;
+          state.goal = res.goal;
+          state.plan = res.plan;
+          state.selected = API.recommendedFor(res.type);
+          state.siteName = res.plan.meta.siteName;
+
+          typeGrid.querySelectorAll(".type-card").forEach(function (x, i) {
+            x.setAttribute("aria-pressed", API.TYPES[i].id === res.type ? "true" : "false");
+          });
+
+          btn.disabled = false;
+          btn.innerHTML = '<i class="bi bi-lightning" aria-hidden="true"></i> Generate my plan';
+          document.getElementById("aiNote").hidden = true;
+          renderRecs();
+          goStep(3);
+          SS.toast("Plan drafted — review it below", "bi-lightning");
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

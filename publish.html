@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Publish — SiteSketch</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%23fff' stroke='%2316283C' stroke-width='2.5'/%3E%3Cpath d='M16 3.5v25M3.5 16h25' stroke='%2316283C' stroke-width='1.4' opacity='.35'/%3E%3Crect x='17.5' y='4.5' width='10' height='10' fill='%23D6452F'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="static/css/fonts.css">
+  <link rel="stylesheet" href="static/icons/bootstrap-icons.css">
+  <link rel="stylesheet" href="static/css/app.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="dashboard.html" aria-label="SiteSketch dashboard">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="6" fill="#fff" stroke="#16283C" stroke-width="2.5"/>
+          <path d="M16 3.5v25M3.5 16h25" stroke="#16283C" stroke-width="1.4" opacity=".35"/>
+          <rect x="17.5" y="4.5" width="10" height="10" fill="#D6452F"/>
+        </svg>
+        SiteSketch
+      </a>
+      <a class="navlink" href="dashboard.html" style="text-decoration:none;"><i class="bi bi-chevron-left" aria-hidden="true"></i> My plans</a>
+      <strong class="builder-title" id="projTitle">…</strong>
+      <nav class="topbar-nav" aria-label="Main">
+        <a class="btn btn-sm" id="backToBuilder" href="#">Back to builder</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="wrap" style="max-width: 980px;">
+
+      <div class="page-head">
+        <div>
+          <h1>Publish your website</h1>
+          <p>Choose an address, go live, and share the link anywhere.</p>
+        </div>
+        <span class="hand" style="transform: rotate(-2deg);">that's a wrap!</span>
+      </div>
+
+      <div class="pub-grid">
+
+        <!-- ============ left: settings ============ -->
+        <div class="card card-pad">
+          <dl style="margin: 0 0 1.3rem;">
+            <div class="kv"><dt>Site name</dt><dd id="kvName">—</dd></div>
+            <div class="kv"><dt>Type</dt><dd id="kvType">—</dd></div>
+            <div class="kv"><dt>Pages</dt><dd id="kvPages">—</dd></div>
+            <div class="kv"><dt>Sections</dt><dd id="kvSections">—</dd></div>
+            <div class="kv"><dt>Last edited</dt><dd id="kvEdited">—</dd></div>
+          </dl>
+
+          <div class="field" id="fSlug">
+            <label for="slug">Site address</label>
+            <div class="slug-row">
+              <span class="prefix" aria-hidden="true">/site/</span>
+              <input type="text" id="slug" placeholder="my-website" spellcheck="false"
+                     autocapitalize="off" autocomplete="off" maxlength="48"
+                     aria-describedby="slugHint">
+            </div>
+            <p class="hint" id="slugHint">Lowercase letters, numbers, and dashes only.</p>
+            <p class="err">Use lowercase letters, numbers, and dashes (at least 3 characters).</p>
+          </div>
+
+          <div class="checklist-box" style="margin-top:1.2rem;">
+            <h2 class="h-sub"><i class="bi bi-clipboard-check" aria-hidden="true"></i> Before you publish</h2>
+            <ul class="check-list" id="preCheck"></ul>
+          </div>
+
+          <div style="display:flex; gap:.8rem; flex-wrap:wrap; margin-top:1.4rem;">
+            <button class="btn btn-primary" id="pubBtn" type="button">
+              <i class="bi bi-rocket-takeoff" aria-hidden="true"></i> Publish site
+            </button>
+            <button class="btn" id="zipBtn" type="button">
+              <i class="bi bi-download" aria-hidden="true"></i> Export ZIP
+            </button>
+          </div>
+        </div>
+
+        <!-- ============ right: status ============ -->
+        <div class="card card-pad" id="statusCard">
+          <h2 id="statusHead" class="h-sub" style="margin-bottom:.6rem;">Not published yet</h2>
+          <p id="statusBlurb" style="font-size:.94rem;">Your plan compiles into a real website; it just needs an address.</p>
+
+          <div class="pub-status" id="liveBox" hidden>
+            <div class="row">
+              <span class="status live"><span class="line"></span> Live</span>
+              <span class="token" id="viewCount">0 views</span>
+            </div>
+            <div class="live-url">
+              <i class="bi bi-link-45deg" aria-hidden="true"></i>
+              <span id="liveUrl">—</span>
+            </div>
+            <div style="display:flex; gap:.6rem; flex-wrap:wrap;">
+              <a class="btn btn-sm" id="openLink" href="#" target="_blank" rel="noopener">
+                <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Open site
+              </a>
+              <button class="btn btn-sm" id="copyBtn" type="button">
+                <i class="bi bi-copy" aria-hidden="true"></i> Copy link
+              </button>
+              <button class="btn btn-sm" id="unpubBtn" type="button">
+                <i class="bi bi-cloud-slash" aria-hidden="true"></i> Take offline
+              </button>
+            </div>
+          </div>
+
+          <p class="note" style="margin-top:1.1rem; display:block;" id="protoNote">
+            Prototype: publishing is simulated in the browser until the Flask backend connects.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script src="static/js/api.js"></script>
+  <script src="static/js/site.js"></script>
+  <script>
+    (function () {
+      var user = API.requireAuth();
+      if (!user) return;
+
+      var params = new URLSearchParams(location.search);
+      var proj = (params.get("id") && API.getProject(params.get("id"))) || API.listProjects()[0];
+      if (!proj) { location.href = "plan.html"; return; }
+
+      var baseUrl = API.baseUrl();
+      var slugInput = document.getElementById("slug");
+      var pubBtn = document.getElementById("pubBtn");
+      var liveBox = document.getElementById("liveBox");
+
+      document.getElementById("projTitle").textContent = proj.name;
+      document.getElementById("backToBuilder").href = "builder.html?id=" + proj.id;
+
+      /* ---------- summary ---------- */
+      function typeName(id) {
+        var t = API.TYPES.filter(function (x) { return x.id === id; })[0];
+        return t ? t.name : id;
+      }
+      var plan = proj.plan_json;
+      var secCount = plan.pages.reduce(function (n, p) { return n + p.sections.length; }, 0);
+      document.getElementById("kvName").textContent = proj.name;
+      document.getElementById("kvType").textContent = typeName(proj.type);
+      document.getElementById("kvPages").textContent = plan.pages.length;
+      document.getElementById("kvSections").textContent = secCount;
+      document.getElementById("kvEdited").textContent = SS.fmtDate(proj.updated_at);
+
+      /* ---------- pre-publish checklist (derived, honest) ---------- */
+      function fillChecklist() {
+        var items = [];
+        items.push({ ok: plan.pages.length > 0, text: "At least one page exists" });
+        items.push({ ok: secCount >= 3, text: "At least 3 sections on your pages" });
+        var hero = plan.pages[0].sections[0];
+        items.push({ ok: !hero || (hero.title && hero.title.length > 3), text: "Homepage headline is written" });
+        var empties = 0;
+        plan.pages.forEach(function (p) {
+          p.sections.forEach(function (s) { if (!s.title || s.title.length < 2) empties++; });
+        });
+        items.push({ ok: empties === 0, text: empties === 0 ? "Every section has a title" : empties + " section(s) still need a title" });
+        document.getElementById("preCheck").innerHTML = items.map(function (i) {
+          return '<li class="' + (i.ok ? "done" : "") + '"><span class="box">' +
+            (i.ok ? '<i class="bi bi-check-lg" aria-hidden="true"></i>' : "") + "</span>" +
+            SS.esc(i.text) + "</li>";
+        }).join("");
+        return items.every(function (i) { return i.ok; });
+      }
+
+      /* ---------- slug ---------- */
+      function slugify(v) {
+        return v.toLowerCase().trim().replace(/[^a-z0-9-\s]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-");
+      }
+      var slugTouched = false;
+      slugInput.addEventListener("input", function () {
+        slugTouched = true;
+        this.value = slugify(this.value);
+        document.getElementById("fSlug").classList.remove("invalid");
+      });
+      function validSlug() { return /^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(slugInput.value); }
+
+      /* ---------- status render ---------- */
+      function render() {
+        document.title = "Publish — " + proj.name + " — SiteSketch";
+        if (!slugTouched) {
+          slugInput.value = proj.slug || slugify(proj.name);
+        }
+
+        if (proj.is_published) {
+          var url = baseUrl + "/site/" + proj.slug;
+          document.getElementById("statusHead").textContent = "Your site is live";
+          document.getElementById("statusBlurb").textContent = "Anyone with this link can see it. Republish after edits to push them live.";
+          document.getElementById("liveUrl").textContent = url.replace(/\//g, "/\u200B");
+          document.getElementById("openLink").href = url;
+          document.getElementById("viewCount").textContent = "Demo · " + proj.view_count + " view" + (proj.view_count === 1 ? "" : "s");
+          liveBox.hidden = false;
+          pubBtn.innerHTML = '<i class="bi bi-arrow-repeat" aria-hidden="true"></i> Republish changes';
+          slugInput.disabled = false;
+        } else {
+          document.getElementById("statusHead").textContent = "Not published yet";
+          document.getElementById("statusBlurb").textContent = "Your plan compiles into a real website; it just needs an address.";
+          liveBox.hidden = true;
+          pubBtn.innerHTML = '<i class="bi bi-rocket-takeoff" aria-hidden="true"></i> Publish site';
+          slugInput.disabled = false;
+        }
+        fillChecklist();
+      }
+
+      /* ---------- publish flow ---------- */
+      pubBtn.addEventListener("click", function () {
+        var f = document.getElementById("fSlug");
+        if (!validSlug()) {
+          f.classList.add("invalid");
+          slugInput.focus();
+          return;
+        }
+        var republish = proj.is_published;
+        pubBtn.disabled = true;
+        pubBtn.innerHTML = '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i> ' +
+          (republish ? "Republishing…" : "Publishing…");
+
+        setTimeout(function () {
+          proj = API.setPublished(proj.id, true, slugInput.value);
+          pubBtn.disabled = false;
+          render();
+          SS.toast(republish ? "Changes pushed live" : "Published! Your site is live", "bi-rocket-takeoff");
+        }, 1200);
+      });
+
+      document.getElementById("unpubBtn").addEventListener("click", function () {
+        /* two-step confirm: first press arms the button */
+        if (this.dataset.armed !== "1") {
+          var el = this;
+          el.dataset.armed = "1";
+          el.classList.add("is-armed");
+          SS.toast("Click Unpublish again to take the site offline", "bi-exclamation-triangle");
+          setTimeout(function () {
+            if (el.dataset.armed === "1") { el.dataset.armed = "0"; el.classList.remove("is-armed"); }
+          }, 3000);
+          return;
+        }
+        this.dataset.armed = "0";
+        this.classList.remove("is-armed");
+        proj = API.setPublished(proj.id, false);
+        render();
+        SS.toast("Site taken offline", "bi-cloud-slash");
+      });
+
+      function fallbackCopy(url) {
+        var ta = document.createElement("textarea");
+        ta.value = url;
+        ta.style.cssText = "position:fixed;opacity:0;top:0;left:0;";
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        SS.toast(ok ? "Link copied" : "Press Ctrl+C to copy the link shown above", ok ? "bi-copy" : "bi-link-45deg");
+      }
+
+      document.getElementById("copyBtn").addEventListener("click", function () {
+        var url = baseUrl + "/site/" + proj.slug;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(
+            function () { SS.toast("Link copied", "bi-copy"); },
+            function () { fallbackCopy(url); }
+          );
+        } else fallbackCopy(url);
+      });
+
+      document.getElementById("zipBtn").addEventListener("click", function () {
+        SS.toast("Prototype: ZIP export runs through the Flask backend (Phase 2)", "bi-download");
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>

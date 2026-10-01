@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create your account — SiteSketch</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%23fff' stroke='%2316283C' stroke-width='2.5'/%3E%3Cpath d='M16 3.5v25M3.5 16h25' stroke='%2316283C' stroke-width='1.4' opacity='.35'/%3E%3Crect x='17.5' y='4.5' width='10' height='10' fill='%23D6452F'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="static/css/fonts.css">
+  <link rel="stylesheet" href="static/icons/bootstrap-icons.css">
+  <link rel="stylesheet" href="static/css/app.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html" aria-label="SiteSketch home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="6" fill="#fff" stroke="#16283C" stroke-width="2.5"/>
+          <path d="M16 3.5v25M3.5 16h25" stroke="#16283C" stroke-width="1.4" opacity=".35"/>
+          <rect x="17.5" y="4.5" width="10" height="10" fill="#D6452F"/>
+        </svg>
+        SiteSketch
+      </a>
+      <nav class="topbar-nav" aria-label="Main">
+        <a class="navlink" href="index.html">Back to home</a>
+        <a class="btn btn-sm" href="login.html">Sign in</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="auth-wrap">
+    <div class="card tape auth-card">
+      <h1>Start your plan</h1>
+      <p class="auth-sub">Create your account — it takes about 10 seconds.</p>
+
+      <div class="form-error" id="formError" role="alert"></div>
+
+      <form id="regForm" novalidate>
+        <div class="field" id="fName">
+          <label for="name">Name</label>
+          <input type="text" id="name" name="name" autocomplete="name" placeholder="Your name" required>
+          <p class="err">Enter your name (at least 2 characters).</p>
+        </div>
+
+        <div class="field" id="fEmail">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" autocomplete="email" placeholder="you@example.com" required>
+          <p class="err">Enter a valid email address.</p>
+        </div>
+
+        <div class="field" id="fPw">
+          <label for="password">Password</label>
+          <div class="pw-wrap">
+            <input type="password" id="password" name="password" autocomplete="new-password" required aria-describedby="pwHint">
+            <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password">
+              <i class="bi bi-eye" aria-hidden="true"></i>
+            </button>
+          </div>
+          <p class="hint" id="pwHint">At least 8 characters.</p>
+          <p class="err">Password must be at least 8 characters.</p>
+        </div>
+
+        <div class="field" id="fPw2">
+          <label for="password2">Confirm password</label>
+          <input type="password" id="password2" name="password2" autocomplete="new-password" required>
+          <p class="err">Passwords don't match.</p>
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit">Create account</button>
+      </form>
+
+      <p class="auth-alt">Already have an account? <a href="login.html">Sign in</a></p>
+    </div>
+  </main>
+
+  <script src="static/js/api.js"></script>
+  <script src="static/js/site.js"></script>
+  <script>
+    (function () {
+      if (API.currentUser()) { location.href = "dashboard.html"; return; }
+
+      var form = document.getElementById("regForm");
+      var formError = document.getElementById("formError");
+      var name = document.getElementById("name");
+      var email = document.getElementById("email");
+      var pw = document.getElementById("password");
+      var pw2 = document.getElementById("password2");
+
+      document.getElementById("pwToggle").addEventListener("click", function () {
+        var show = pw.type === "password";
+        pw.type = show ? "text" : "password";
+        this.setAttribute("aria-label", show ? "Hide password" : "Show password");
+        this.innerHTML = '<i class="bi ' + (show ? "bi-eye-slash" : "bi-eye") + '" aria-hidden="true"></i>';
+      });
+
+      function invalid(id, bad) {
+        document.getElementById(id).classList.toggle("invalid", bad);
+        return bad;
+      }
+
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        formError.classList.remove("show");
+
+        var bad = false;
+        bad = invalid("fName", name.value.trim().length < 2) || bad;
+        bad = invalid("fEmail", !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) || bad;
+        bad = invalid("fPw", pw.value.length < 8) || bad;
+        bad = invalid("fPw2", pw2.value !== pw.value || pw.value.length < 8) || bad;
+        if (bad) { (document.querySelector(".field.invalid input") || {}).focus(); return; }
+
+        var res = API.register(name.value.trim(), email.value.trim(), pw.value);
+        if (!res.ok) {
+          formError.textContent = res.error;
+          formError.classList.add("show");
+          return;
+        }
+        location.href = "dashboard.html";
+      });
+    })();
+  </script>
+</body>
+</html>

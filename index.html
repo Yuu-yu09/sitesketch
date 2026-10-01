@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SiteSketch — Plan your website before you build it</title>
+  <meta name="description" content="SiteSketch recommends the pages, sections, and content your website needs, then builds and publishes it for you.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%23fff' stroke='%2316283C' stroke-width='2.5'/%3E%3Cpath d='M16 3v26M3 16h26' stroke='%2316283C' stroke-width='1.4' opacity='.35'/%3E%3Crect x='17.5' y='4.5' width='10' height='10' fill='%23D6452F'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="static/css/fonts.css">
+  <link rel="stylesheet" href="static/icons/bootstrap-icons.css">
+  <link rel="stylesheet" href="static/css/app.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html" aria-label="SiteSketch home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="6" fill="#fff" stroke="#16283C" stroke-width="2.5"/>
+          <path d="M16 3.5v25M3.5 16h25" stroke="#16283C" stroke-width="1.4" opacity=".35"/>
+          <rect x="17.5" y="4.5" width="10" height="10" fill="#D6452F"/>
+        </svg>
+        SiteSketch
+      </a>
+      <nav class="topbar-nav" aria-label="Main">
+        <a class="navlink" href="#how">How it works</a>
+        <a class="navlink" href="#features">Features</a>
+        <a class="navlink" href="login.html">Sign in</a>
+        <a class="btn btn-primary btn-sm" href="register.html">Start your plan</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ============ hero: the plan draws itself ============ -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <h1>
+            <span class="circle-word">Sketch<svg viewBox="0 0 220 76" preserveAspectRatio="none" aria-hidden="true"><path d="M104 9 C46 5 10 20 11 40 C12 62 68 72 122 70 C174 68 212 56 210 36 C208 16 164 5 104 10 C86 12 66 16 55 23"/></svg></span>
+            your website before you build it
+          </h1>
+          <p class="lead">SiteSketch recommends the pages, sections, and content your website needs, then builds and publishes it for you.</p>
+          <div class="hero-ctas">
+            <a class="btn btn-primary" href="register.html">Start your plan</a>
+            <a class="btn" href="builder.html">See the builder</a>
+          </div>
+        </div>
+
+        <div class="hero-demo">
+          <div class="card tape demo-card js-stagger">
+            <div class="demo-head">
+              <span class="token">Lola's Kitchen · Restaurant</span>
+              <span class="token" style="color: var(--accent-ink);">Recommended</span>
+            </div>
+            <div class="demo-body">
+              <div class="demo-sec"><i class="bi bi-window" aria-hidden="true"></i> Hero <i class="bi bi-check2 check" aria-hidden="true"></i></div>
+              <div class="demo-sec"><i class="bi bi-list-ul" aria-hidden="true"></i> Menu highlights <i class="bi bi-check2 check" aria-hidden="true"></i></div>
+              <div class="demo-sec"><i class="bi bi-clock" aria-hidden="true"></i> Hours &amp; location <i class="bi bi-check2 check" aria-hidden="true"></i></div>
+              <div class="demo-sec"><i class="bi bi-envelope" aria-hidden="true"></i> Get in touch <i class="bi bi-check2 check" aria-hidden="true"></i></div>
+            </div>
+            <div class="demo-foot">
+              <span class="hand demo-note">picked from your type &amp; goal</span>
+              <svg class="demo-arrow" viewBox="0 0 72 56" fill="none" aria-hidden="true">
+                <path d="M65 51 C 60 35, 44 17, 17 11" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M28 5 L16 11 L21 22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <a class="btn btn-sm" href="plan.html">Try the planner</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ flow: describe -> plan -> build -> publish ============ -->
+    <section class="flow" id="how">
+      <div class="wrap">
+        <div class="flow-row">
+          <div class="flow-card">
+            <h2 class="h-sub">Describe</h2>
+            <p>Tell SiteSketch what your site is for — or pick a type and goal yourself.</p>
+          </div>
+          <span class="flow-arrow" aria-hidden="true"><svg width="46" height="18" viewBox="0 0 46 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 C 14 5.5, 27 14, 42 9"/><path d="M34 3.5 L42 9 L33 14"/></svg></span>
+          <div class="flow-card">
+            <h2 class="h-sub">Plan</h2>
+            <p>Get recommended pages and sections that fit what your site is for.</p>
+          </div>
+          <span class="flow-arrow" aria-hidden="true"><svg width="46" height="18" viewBox="0 0 46 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 C 14 5.5, 27 14, 42 9"/><path d="M34 3.5 L42 9 L33 14"/></svg></span>
+          <div class="flow-card">
+            <h2 class="h-sub">Build</h2>
+            <p>Drag, drop, and edit every section in the builder until it feels right.</p>
+          </div>
+          <span class="flow-arrow" aria-hidden="true"><svg width="46" height="18" viewBox="0 0 46 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 C 14 5.5, 27 14, 42 9"/><path d="M34 3.5 L42 9 L33 14"/></svg></span>
+          <div class="flow-card">
+            <h2 class="h-sub">Publish</h2>
+            <p>SiteSketch compiles a real website and puts it live to share.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ features: editorial split ============ -->
+    <section class="features" id="features">
+      <div class="wrap features-grid">
+        <h2>Everything a beginner needs — nothing they don't</h2>
+        <div>
+          <div class="feature-row">
+            <span class="fi"><i class="bi bi-grip-vertical" aria-hidden="true"></i></span>
+            <div>
+              <h3>Drag-and-drop builder</h3>
+              <p>Reorder sections and pages with real drag-and-drop, right in your browser. No code, no pixel-pushing.</p>
+            </div>
+          </div>
+          <div class="feature-row">
+            <span class="fi"><i class="bi bi-lightning" aria-hidden="true"></i></span>
+            <div>
+              <h3>AI drafts your plan</h3>
+              <p>Describe your site in one sentence and get a full structure (pages, sections, and starter content) to edit.</p>
+            </div>
+          </div>
+          <div class="feature-row">
+            <span class="fi"><i class="bi bi-window" aria-hidden="true"></i></span>
+            <div>
+              <h3>A complete website, generated</h3>
+              <p>Your plan compiles into a real multi-page website with styled pages, ready to preview at any time.</p>
+            </div>
+          </div>
+          <div class="feature-row">
+            <span class="fi"><i class="bi bi-globe" aria-hidden="true"></i></span>
+            <div>
+              <h3>Publish in one click</h3>
+              <p>Your site goes live at its own address — and you can update and republish whenever you like.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ blueprint showcase ============ -->
+    <section class="showcase">
+      <div class="wrap">
+        <div class="showcase-frame">
+          <div class="showcase-bar">
+            <span class="token">Blueprint · Lola's Kitchen</span>
+            <span class="token">2 pages · 5 sections</span>
+          </div>
+          <div class="showcase-body">
+            <div class="bp-tree">
+              <div class="bp-group">
+                <div class="bp-page"><i class="bi bi-file-earmark-richtext" aria-hidden="true"></i> Home</div>
+                <ul class="bp-sections">
+                  <li>Hero — home-cooked comfort food</li>
+                  <li>Menu highlights</li>
+                  <li>Hours &amp; location</li>
+                </ul>
+              </div>
+              <div class="bp-group">
+                <div class="bp-page"><i class="bi bi-file-earmark-richtext" aria-hidden="true"></i> About</div>
+                <ul class="bp-sections">
+                  <li>Our story</li>
+                  <li>Get in touch</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <span class="hand showcase-note">you'll know exactly what to prepare</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ final CTA ============ -->
+    <section class="cta-band">
+      <div class="wrap">
+        <div class="cta-card tape">
+          <h2>Ready to sketch your website?</h2>
+          <p>Start with your type and goal. SiteSketch handles the structure.</p>
+          <a class="btn btn-primary" href="register.html">Start your plan</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <div>
+        <span class="token">© 2026 SiteSketch</span>
+      </div>
+      <nav aria-label="Footer">
+        <a href="#how">How it works</a>
+        <a href="#features">Features</a>
+        <a href="login.html">Sign in</a>
+      </nav>
+    </div>
+  </footer>
+
+</body>
+</html>

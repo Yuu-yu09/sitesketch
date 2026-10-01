@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My plans — SiteSketch</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%23fff' stroke='%2316283C' stroke-width='2.5'/%3E%3Cpath d='M16 3.5v25M3.5 16h25' stroke='%2316283C' stroke-width='1.4' opacity='.35'/%3E%3Crect x='17.5' y='4.5' width='10' height='10' fill='%23D6452F'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="static/css/fonts.css">
+  <link rel="stylesheet" href="static/icons/bootstrap-icons.css">
+  <link rel="stylesheet" href="static/css/app.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="dashboard.html" aria-label="SiteSketch dashboard">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="6" fill="#fff" stroke="#16283C" stroke-width="2.5"/>
+          <path d="M16 3.5v25M3.5 16h25" stroke="#16283C" stroke-width="1.4" opacity=".35"/>
+          <rect x="17.5" y="4.5" width="10" height="10" fill="#D6452F"/>
+        </svg>
+        SiteSketch
+      </a>
+      <nav class="topbar-nav" aria-label="Main">
+        <a class="navlink" href="dashboard.html" aria-current="page">My plans</a>
+        <a class="btn btn-primary btn-sm" href="plan.html">New plan</a>
+        <span class="user-chip" id="userChip"><span class="av" aria-hidden="true">?</span><span id="userName">…</span></span>
+        <button class="icon-btn" id="logoutBtn" title="Sign out" aria-label="Sign out">
+          <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="wrap">
+      <div class="page-head">
+        <div>
+          <h1 id="greeting">My plans</h1>
+          <p id="subline">Loading your projects…</p>
+        </div>
+        <span class="hand" style="transform: rotate(-2deg);">everything saves automatically</span>
+      </div>
+
+      <div class="proj-grid" id="grid"></div>
+    </div>
+  </main>
+
+  <script src="static/js/api.js"></script>
+  <script src="static/js/site.js"></script>
+  <script>
+    (function () {
+      var user = API.requireAuth();
+      if (!user) return;
+
+      document.getElementById("userName").textContent = user.name;
+      document.querySelector("#userChip .av").textContent = user.name.charAt(0).toUpperCase();
+
+      var h = new Date().getHours();
+      var part = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+      document.getElementById("greeting").textContent = part + ", " + user.name;
+
+      document.getElementById("logoutBtn").addEventListener("click", function () {
+        API.logout();
+        location.href = "index.html";
+      });
+
+      var grid = document.getElementById("grid");
+
+      function typeName(id) {
+        var t = API.TYPES.filter(function (x) { return x.id === id; })[0];
+        return t ? t.name : id;
+      }
+
+      function render() {
+        var projects = API.listProjects();
+        grid.innerHTML = "";
+
+        if (!projects.length) {
+          var empty = document.createElement("div");
+          empty.className = "empty";
+          empty.style.gridColumn = "1 / -1";
+          empty.innerHTML =
+            '<h2 class="h-sub">No plans yet</h2>' +
+            "<p>Every website starts as a blank page — sketch your first plan and SiteSketch will fill in the structure.</p>";
+          grid.appendChild(empty);
+        }
+
+        projects.forEach(function (p) {
+          var live = p.is_published;
+          var card = document.createElement("article");
+          card.className = "card proj-card";
+          card.innerHTML =
+            '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;">' +
+              "<h2 class=\"h-sub\"><a href=\"builder.html?id=" + p.id + "\" style=\"text-decoration:none;\">" + SS.esc(p.name) + "</a></h2>" +
+              '<button class="icon-btn danger" data-del="' + p.id + '" aria-label="Delete ' + SS.esc(p.name) + '"><i class="bi bi-trash3" aria-hidden="true"></i></button>' +
+            "</div>" +
+            '<div class="proj-meta">' +
+              '<span class="chip">' + SS.esc(typeName(p.type)) + "</span>" +
+              '<span class="status ' + (live ? "live" : "") + '"><span class="line"></span>' + (live ? "Live" : "Draft") + "</span>" +
+            "</div>" +
+            '<div class="proj-foot">' +
+              "<span>Edited " + SS.fmtDate(p.updated_at) + "</span>" +
+              (live
+                ? '<a href="publish.html?id=' + p.id + '" style="color:inherit;">View live ↗</a>'
+                : '<a href="builder.html?id=' + p.id + '" style="color:inherit;">Open builder →</a>') +
+            "</div>";
+          grid.appendChild(card);
+        });
+
+        var add = document.createElement("a");
+        add.className = "card proj-card proj-new";
+        add.href = "plan.html";
+        add.innerHTML =
+          '<span class="plus"><i class="bi bi-plus-lg" aria-hidden="true"></i></span>' +
+          "<strong>New plan</strong><span style=\"font-size:.85rem;\">Start from a website type</span>";
+        grid.appendChild(add);
+
+        var liveCount = projects.filter(function (p) { return p.is_published; }).length;
+        document.getElementById("subline").textContent = projects.length
+          ? projects.length + " plan" + (projects.length > 1 ? "s" : "") + " · " + liveCount + " live"
+          : "Let's fix that.";
+
+        grid.querySelectorAll("[data-del]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            /* two-step confirm — first press arms the button, second deletes */
+            if (this.dataset.armed !== "1") {
+              var el = this;
+              el.dataset.armed = "1";
+              el.classList.add("is-armed");
+              el.title = "Click again to confirm";
+              setTimeout(function () {
+                if (el.dataset.armed === "1") { el.dataset.armed = "0"; el.classList.remove("is-armed"); el.title = "Delete"; }
+              }, 3000);
+              return;
+            }
+            this.dataset.armed = "0";
+            this.classList.remove("is-armed");
+            API.deleteProject(this.getAttribute("data-del"));
+            render();
+            SS.toast("Plan deleted", "bi-trash3");
+          });
+        });
+      }
+
+      render();
+    })();
+  </script>
+</body>
+</html>
