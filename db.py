@@ -32,8 +32,11 @@ def connection():
 
 
 def query(sql: str, params: Sequence[Any] | None = None) -> list[dict]:
+    """Run a read. Returns [] for statements that produce no rows."""
     with connection() as conn, conn.cursor() as cur:
         cur.execute(sql, params or ())
+        if cur.description is None:      # INSERT/UPDATE/DELETE
+            return []
         return list(cur.fetchall())
 
 
