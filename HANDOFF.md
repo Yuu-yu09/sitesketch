@@ -77,7 +77,10 @@ Last session: **Oct 11, 2026**. Read this first when resuming.
 
 ## 4. Verified-working behaviour (don't regress)
 
-- Demo login: `demo@sitesketch.app` / `demo1234`, or `?demo=1` auto-sign-in.
+- **No demo door.** Users must register or log in. `POST /api/auth/demo` no longer
+  exists (404), `?demo=1` is gone from `api.js`, and the login page offers no demo
+  link or demo credentials. The screenshot harness signs in with a throwaway
+  `shot@local.test` account and deletes it afterwards, so captures still work.
 - Planner: type → goal → step 3; site name auto-derives from type; finish enabled.
 - Builder: page tabs (inline rename on dblclick, two-step delete), per-section ⚡ AI fill,
   "AI fill this page", drag reorder (SortableJS).
@@ -150,7 +153,7 @@ Notes that matter next session:
 3. [ ] Run `supabase/bootstrap.py` (blocked: the Supabase project ref in `.env` does not
    exist - see §6)
 3. Auth: register/login with `werkzeug` password hashes + `flask-jwt-extended`
-   (`JWT_SECRET`); drop `?demo=1` to a dev-only flag in production
+   (`JWT_SECRET`). No demo endpoint by design.
 4. OAuth: `/api/auth/google` + `/api/auth/github` redirect flow (Authlib), upsert into
    `oauth_accounts`; callback URLs to register with both providers
 5. AI: `/api/plan`, `/api/design` (Gemini structured output matching the `design.js`

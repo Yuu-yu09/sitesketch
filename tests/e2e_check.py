@@ -221,12 +221,10 @@ def t_projects_require_auth():
     call("POST", "/api/projects", {"name": "sneaky", "type": "business", "goal": "get-contact"}, expect=401)
 
 
-def t_demo_login():
-    status, data, _ = call("POST", "/api/auth/demo", expect=200)
-    assert data["token"], data
-    status, projects, _ = call("GET", "/api/projects", token=data["token"], expect=200)
-    assert len(projects) >= 2, f"demo account has {len(projects)} projects"
-    return f"{len(projects)} demo projects"
+def t_no_demo_door():
+    """Registration or login must be the only way in."""
+    status, data, _ = call("POST", "/api/auth/demo", expect=404)
+    assert "token" not in (data or {}), data
 
 
 # ------------------------------------------------------------------- ai
@@ -305,7 +303,7 @@ for name, fn in [
     ("unpublish keeps the slug", t_unpublish),
     ("republish with same slug", t_republish_same_slug),
     ("projects endpoints need a token", t_projects_require_auth),
-    ("demo sign-in returns a populated account", t_demo_login),
+    ("no demo door: registration required", t_no_demo_door),
     ("AI design generation", t_ai_design),
     ("AI rejects an empty brief", t_ai_design_validation),
     ("all pages render with the right title", t_pages_render),

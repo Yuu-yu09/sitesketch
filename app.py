@@ -64,7 +64,6 @@ def health():
         port=config.PORT,
         gemini_configured=bool(config.GEMINI_API_KEY),
         supabase_key_configured=bool(config.SUPABASE_KEY),
-        demo_mode=config.DEMO_MODE,
         missing=config.missing(),
     )
 

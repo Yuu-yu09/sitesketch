@@ -8,13 +8,11 @@ stored, logged, or returned. OAuth sign-in lives in oauth.py.
 from __future__ import annotations
 
 import re
-import secrets
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, jwt_required
 from werkzeug.security import check_password_hash, generate_password_hash
 
-import config
 import db
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -91,36 +89,6 @@ def login():
     token = create_access_token(
         identity=str(row["id"]),
         additional_claims={"username": row["username"]},
-    )
-    return jsonify(token=token, user=_public(row))
-
-
-@bp.post("/demo")
-def demo():
-    """
-    One-click sign-in for ?demo=1, for local screenshots and walkthroughs only.
-
-    Disabled unless DEMO_MODE=1, so the public deployment has no demo door.
-    Creates the demo account on first use and returns a real token.
-    """
-    if not config.DEMO_MODE:
-        return jsonify(error="Not found"), 404
-
-    demo_email = config.DEMO_EMAIL
-    row = db.query_one(
-        f"select {PUBLIC_USER} from users where lower(email) = %s",
-        (demo_email,),
-    )
-    if not row:
-        row = db.query_one(
-            f"insert into users (username, email, password_hash) values (%s, %s, %s) "
-            f"returning {PUBLIC_USER}",
-            ("demo", demo_email, generate_password_hash(secrets.token_urlsafe(24))),
-        )
-
-    token = create_access_token(
-        identity=str(row["id"]),
-        additional_claims={"username": row["username"], "provider": "demo"},
     )
     return jsonify(token=token, user=_public(row))
 

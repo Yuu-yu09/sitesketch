@@ -14,11 +14,44 @@
     var qs = new URLSearchParams(location.search);
     var page = qs.get("page") || "index.html";
     var walk = qs.get("walk");
+    var signin = qs.get("signin");
     var w = parseInt(qs.get("w") || "390", 10);
     var h = parseInt(qs.get("h") || "844", 10);
     var f = document.getElementById("f");
     f.style.width = w + "px";
     f.style.height = h + "px";
+
+    /* signin=1: get a real session so authenticated pages can be captured.
+       There is no demo door - this registers a dedicated capture account
+       (shot@local.test) and signs in with it, exactly like a person would. */
+    var CAPTURE = { username: "shot", email: "shot@local.test", password: "capture-account-1" };
+
+    function signIn() {
+      return fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(CAPTURE)
+      })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; })
+        .then(function (created) {
+          if (created && created.token) return created;
+          return fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: CAPTURE.email, password: CAPTURE.password })
+          }).then(function (r) { return r.ok ? r.json() : null; });
+        })
+        .then(function (session) {
+          if (!session || !session.token) return false;
+          localStorage.setItem("sitesketch_token_v1", session.token);
+          localStorage.setItem("sitesketch_user_v1", JSON.stringify(Object.assign({}, session.user, {
+            name: session.user.name || session.user.username
+          })));
+          return true;
+        })
+        .catch(function () { return false; });
+    }
 
     /* walk=plan: click through the wizard (type -> goal -> step 3) after load,
        so captures can show step 3 instead of the landing step. */
@@ -51,7 +84,12 @@
       })();
     }
     f.addEventListener("load", maybeWalk);
-    f.src = page;
+
+    if (signin === "1") {
+      signIn().then(function () { f.src = page; });
+    } else {
+      f.src = page;
+    }
   </script>
 </body>
 </html>

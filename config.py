@@ -58,12 +58,6 @@ GITHUB_CLIENT_SECRET = _get("GITHUB_CLIENT_SECRET")
 # storage bucket for compiled sites
 SITES_BUCKET = _get("SITES_BUCKET", "sites")
 
-# ?demo=1 sign-in. Off by default so the public deployment has no demo door;
-# set DEMO_MODE=1 in a local .env (and never in production) to use it for
-# screenshots and walkthroughs.
-DEMO_MODE = _get("DEMO_MODE", "0").lower() not in ("0", "", "false", "no")
-DEMO_EMAIL = _get("DEMO_EMAIL", "demo@sitesketch.app")
-
 
 def missing() -> list[str]:
     """Names of required-but-empty settings (used by /api/health)."""
