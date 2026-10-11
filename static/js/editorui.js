@@ -225,6 +225,158 @@
 
   /* ----------------------------------------------------------------- styles */
 
+  /* --------------------------------------------------------------- footer */
+
+  /* Editing the footer is the same idea as editing a block: click the
+     text and type. Social link URLs cannot be typed inline, so they get
+     real inputs here. */
+  EditorUI.footerPanel = function (host) {
+    var Editor = window.Editor;
+    host.hidden = false;
+    var plan = Editor.plan;
+    plan.footer = plan.footer || {};
+    var f = plan.footer;
+    var data = window.SS.footerData(plan);
+    var style = f.style || {};
+
+    function refresh() { EditorUI.footerPanel(host); }
+    function set(key, value) {
+      if (value === null || value === "" || value === undefined) delete f[key];
+      else f[key] = value;
+      Editor.render();
+      if (Editor.onChange) Editor.onChange("footer:" + key);
+    }
+    function setStyle(key, value) {
+      f.style = f.style || {};
+      if (value === null || value === "") delete f.style[key];
+      else f.style[key] = value;
+      Editor.render();
+      if (Editor.onChange) Editor.onChange("footer:style");
+    }
+
+    var socials = data.socials.map(function (s, i) {
+      return '<div class="social-row">' +
+        '<input type="text" class="social-label" data-social="' + i + '" value="' + SS.esc(s.label || "") +
+          '" aria-label="Label for link ' + (i + 1) + '" placeholder="Label">' +
+        '<input type="url" class="social-url" data-social="' + i + '" value="' + SS.esc(s.url || "") +
+          '" aria-label="Address for link ' + (i + 1) + '" placeholder="https://">' +
+        '<button type="button" class="icon-btn" data-remove-social="' + i + '" aria-label="Remove link ' + (i + 1) + '">' +
+          '<i class="bi bi-x-lg" aria-hidden="true"></i></button>' +
+        "</div>";
+    }).join("");
+
+    host.innerHTML =
+      '<div class="panel-section">' +
+        "<h3>Footer</h3>" +
+        '<p class="hint">Click any text in the footer on the page to edit it.</p>' +
+        '<label class="field"><span>Columns</span>' +
+          '<select id="footCols">' +
+            ["1.4fr 1fr 1fr", "1fr 1fr", "1fr 1fr 1fr"].map(function (c) {
+              return '<option value="' + c + '"' + ((style.columns || "1.4fr 1fr 1fr") === c ? " selected" : "") + ">" +
+                c.split(" ").length + " columns</option>";
+            }).join("") +
+          "</select></label>" +
+        '<label class="field"><span>Text alignment</span>' +
+          '<select id="footAlign">' +
+            ["", "left", "center"].map(function (a) {
+              return '<option value="' + a + '"' + ((style.align || "") === a ? " selected" : "") + ">" +
+                (a === "" ? "Default" : a) + "</option>";
+            }).join("") +
+          "</select></label>" +
+      "</div>" +
+
+      '<div class="panel-section">' +
+        "<h3>Colours</h3>" +
+        '<label class="field"><span>Background</span>' +
+          '<span class="colour-row">' +
+            '<input type="color" id="footBg" value="' + SS.esc(normHex(style.bg) || "#ffffff") + '">' +
+            '<button type="button" class="btn btn-sm" data-clear="bg">Use theme</button>' +
+          "</span></label>" +
+        '<label class="field"><span>Link colour</span>' +
+          '<span class="colour-row">' +
+            '<input type="color" id="footAccent" value="' + SS.esc(normHex(style.accent) || "#1d4ed8") + '">' +
+            '<button type="button" class="btn btn-sm" data-clear="accent">Use theme</button>' +
+          "</span></label>" +
+      "</div>" +
+
+      '<div class="panel-section">' +
+        "<h3>Social links</h3>" +
+        '<div class="social-list">' + socials + "</div>" +
+        '<button type="button" class="btn btn-block" id="addSocial">' +
+          '<i class="bi bi-plus-lg" aria-hidden="true"></i> Add a link</button>' +
+      "</div>" +
+
+      '<div class="panel-section">' +
+        '<button type="button" class="btn btn-block" id="footToggle">' +
+          (data.hidden ? "Show the footer" : "Hide the footer") + "</button>" +
+      "</div>";
+
+    host.querySelector("#footCols").addEventListener("change", function () {
+      setStyle("columns", this.value === "1.4fr 1fr 1fr" ? null : this.value);
+    });
+    host.querySelector("#footAlign").addEventListener("change", function () {
+      setStyle("align", this.value || null);
+    });
+    var bgInput = host.querySelector("#footBg");
+    if (bgInput) bgInput.addEventListener("input", function () { setStyle("bg", this.value); });
+    var accentInput = host.querySelector("#footAccent");
+    if (accentInput) accentInput.addEventListener("input", function () { setStyle("accent", this.value); });
+
+    host.querySelectorAll("[data-clear]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        setStyle(button.getAttribute("data-clear"), null);
+        refresh();
+      });
+    });
+
+    /* link labels are edited on the page; URLs live here because they
+       cannot be typed into visible text */
+    host.querySelectorAll(".social-url").forEach(function (input) {
+      input.addEventListener("change", function () {
+        var i = parseInt(input.getAttribute("data-social"), 10);
+        plan.footer.socials = plan.footer.socials || data.socials;
+        plan.footer.socials[i] = plan.footer.socials[i] || {};
+        plan.footer.socials[i].url = input.value.trim();
+        Editor.render();
+        if (Editor.onChange) Editor.onChange("footer:social");
+      });
+    });
+    host.querySelectorAll(".social-label").forEach(function (input) {
+      input.addEventListener("change", function () {
+        var i = parseInt(input.getAttribute("data-social"), 10);
+        plan.footer.socials = plan.footer.socials || data.socials;
+        plan.footer.socials[i] = plan.footer.socials[i] || {};
+        plan.footer.socials[i].label = input.value.trim();
+        Editor.render();
+        if (Editor.onChange) Editor.onChange("footer:social");
+      });
+    });
+    host.querySelectorAll("[data-remove-social]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var i = parseInt(button.getAttribute("data-remove-social"), 10);
+        var list = (plan.footer.socials && plan.footer.socials.length) ? plan.footer.socials : data.socials;
+        list.splice(i, 1);
+        plan.footer.socials = list;
+        Editor.render();
+        if (Editor.onChange) Editor.onChange("footer:social");
+        refresh();
+      });
+    });
+    host.querySelector("#addSocial").addEventListener("click", function () {
+      plan.footer.socials = (plan.footer.socials && plan.footer.socials.length) ? plan.footer.socials : data.socials;
+      plan.footer.socials.push({ label: "New link", url: "https://" });
+      Editor.render();
+      if (Editor.onChange) Editor.onChange("footer:social");
+      refresh();
+    });
+    host.querySelector("#footToggle").addEventListener("click", function () {
+      f.hidden = !f.hidden;
+      Editor.render();
+      if (Editor.onChange) Editor.onChange("footer:hidden");
+      refresh();
+    });
+  };
+
   /* ------------------------------------------------------- block settings */
 
   /* The WordPress "block settings" sidebar: everything you can change

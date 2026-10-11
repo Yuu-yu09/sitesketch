@@ -472,22 +472,98 @@
       '<div class="ss-navlinks">' + links + "</div></div></nav>";
   }
 
-  function footerHTML(plan, spec) {
+  /* The footer is a real block. It lives in plan.footer and is edited
+     inline like every other block, using the same data-edit hooks, so
+     users can type into it and set real URLs on the social links. */
+  function footerData(plan) {
+    var meta = plan.meta || {};
+    var f = plan.footer || {};
+    return {
+      tagline: f.tagline !== undefined ? f.tagline : "Made with SiteSketch.",
+      aboutTitle: f.aboutTitle !== undefined ? f.aboutTitle : "",
+      linkTitle: f.linkTitle !== undefined ? f.linkTitle : "Pages",
+      contactTitle: f.contactTitle !== undefined ? f.contactTitle : "Contact",
+      socials: Array.isArray(f.socials) && f.socials.length
+        ? f.socials
+        : [
+          { label: "Email us", url: "mailto:hello@example.com" },
+          { label: "Instagram", url: "https://instagram.com" },
+          { label: "Facebook", url: "https://facebook.com" }
+        ],
+      copyright: f.copyright !== undefined ? f.copyright : "",
+      style: f.style || {},
+      hidden: f.hidden === true
+    };
+  }
+  SS.footerData = footerData;
+
+  function footerHTML(plan, spec, editable) {
     var meta = plan.meta || {};
     var name = meta.siteName || "SiteSketch";
-    var links = (plan.pages || []).map(function (p) { return '<a href="#' + esc(p.id) + '">' + esc(p.name) + "</a>"; }).join("");
-    if (!spec.footer) {
-      return '<footer class="ss-footer"><div class="ss-wrap" style="display:flex;justify-content:space-between;gap:1.5rem;flex-wrap:wrap">' +
-        '<span class="ss-foot-note">' + esc(name) + "</span>" +
-        '<span class="ss-foot-note">' + esc(name) + " · " + new Date().getFullYear() + "</span></div></footer>";
+    var f = footerData(plan);
+    if (f.hidden) return "";
+
+    var year = new Date().getFullYear();
+    var links = (plan.pages || []).map(function (p) {
+      return '<a href="#' + esc(p.id) + '">' + esc(p.name) + "</a>";
+    }).join("");
+
+    var socials = f.socials.map(function (s, i) {
+      var href = s.url || "#";
+      return '<a href="' + esc(href) + '"' + ed("socials:" + i + ":label") +
+        ' rel="noopener" target="_blank">' + esc(s.label || "Link") + "</a>";
+    }).join("");
+
+    var copyright = f.copyright || (name + " \u00d7 " + year);
+
+    var rich = spec.footer !== false;
+    var html = rich
+      ? '<footer class="ss-footer ss-footer--rich" data-foot="1"><div class="ss-wrap">' +
+          '<div class="ss-foot-col">' +
+            '<a class="ss-brand" href="#">' + esc(name) + "</a>" +
+            '<p class="ss-foot-note"' + ed("aboutTitle") + ' style="margin-top:.6rem">' +
+              esc(f.aboutTitle || f.tagline) + "</p>" +
+          "</div>" +
+          '<div class="ss-foot-col"><h3' + ed("linkTitle") + ">" + esc(f.linkTitle) + "</h3>" +
+            '<div class="ss-foot-links">' + links + "</div></div>" +
+          '<div class="ss-foot-col"><h3' + ed("contactTitle") + ">" + esc(f.contactTitle) + "</h3>" +
+            '<div class="ss-foot-links">' + socials + "</div></div>" +
+        "</div>" +
+        '<div class="ss-wrap ss-foot-bottom">' +
+          '<span class="ss-foot-note"' + ed("copyright") + ">" + esc(copyright) + "</span>" +
+        "</div>" +
+        "</footer>"
+      : '<footer class="ss-footer" data-foot="1"><div class="ss-wrap" style="display:flex;justify-content:space-between;gap:1.5rem;flex-wrap:wrap">' +
+          '<span class="ss-foot-note"' + ed("copyright") + ">" + esc(copyright) + "</span>" +
+          '<span class="ss-foot-note">' + esc(name) + "</span>" +
+        "</div></footer>";
+
+    html = applyFooterStyle(html, f);
+    if (editable) {
+      var grip = '<button type="button" class="sec-grip" data-grip aria-label="Reorder or edit the footer">' +
+        '<i class="bi bi-grip-vertical" aria-hidden="true"></i></button>';
+      html = html.replace(/^(<footer\b[^>]*>)/, function (whole) { return whole + grip; });
     }
-    return '<footer class="ss-footer ss-footer--rich"><div class="ss-wrap">' +
-      '<div class="ss-foot-col"><a class="ss-brand" href="#">' + esc(name) + "</a>" +
-        '<p class="ss-foot-note" style="margin-top:.6rem">Made with SiteSketch.</p></div>' +
-      '<div class="ss-foot-col"><h3>Pages</h3><div class="ss-foot-links">' + links + "</div></div>" +
-      '<div class="ss-foot-col"><h3>Contact</h3><div class="ss-foot-links">' +
-        '<a href="#">Email us</a><a href="#">Instagram</a><a href="#">Facebook</a></div></div>' +
-      "</div></footer>";
+    return html;
+  }
+
+  function applyFooterStyle(html, f) {
+    var css = [];
+    if (f.style.bg) css.push("--sec-bg:" + f.style.bg);
+    if (f.style.textColor) css.push("--sec-text:" + f.style.textColor);
+    if (f.style.accent) css.push("--sec-accent:" + f.style.accent);
+    if (f.style.align) css.push("--sec-align:" + f.style.align);
+    if (f.style.columns !== undefined) css.push("--foot-cols:" + f.style.columns);
+    if (!css.length) return html;
+    return html.replace(/^(<footer\b[^>]*?)(\s*>)/, function (whole, head, tail) {
+      var merged = css.join(";") + ";";
+      var existing = /style="([^"]*)"/.exec(head);
+      if (existing) {
+        head = head.replace(existing[0], ' style="' + merged + existing[1] + '"');
+        return head + tail;
+      }
+      return head + ' style="' + merged + '"' + tail;
+    });
   }
 
   /* Black or white, whichever is readable on this colour.
@@ -605,7 +681,7 @@
     return '<div class="' + cls + '" style="' + cssVars + '">' +
       navHTML(plan, page.id, spec) +
       '<main data-reveal>' + body + "</main>" +
-      footerHTML(plan, spec) +
+      footerHTML(plan, spec, options.editable) +
       "</div>";
   };
 

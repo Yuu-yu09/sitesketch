@@ -33,6 +33,8 @@
   function sectionOf(plan, pageId, sectionId) {
     var page = (plan.pages || []).filter(function (p) { return p.id === pageId; })[0];
     if (!page) return null;
+    /* the footer is edited like a block but lives outside the page sections */
+    if (sectionId === "footer") return plan.footer || (plan.footer = {});
     if (!sectionId) return page.sections[0] || null;
     return page.sections.filter(function (s) { return s.id === sectionId; })[0] || null;
   }
@@ -41,6 +43,14 @@
     var section = sectionOf(plan, pageId, sectionId);
     if (!section) return null;
     var parts = String(path).split(":");
+
+    if (parts[0] === "socials") {
+      var si = parseInt(parts[1], 10);
+      if (isNaN(si)) return { section: section, key: "socials" };
+      section.socials = section.socials || [];
+      if (!section.socials[si]) section.socials[si] = { label: "Link", url: "#" };
+      return { section: section, socials: true, index: si, field: parts[2] || "label" };
+    }
 
     if (parts.length === 1) return { section: section, key: parts[0] };
     if (parts[0] === "fields") return { section: section, key: "fields", field: parts[1] };
@@ -56,6 +66,7 @@
     var t = resolve(plan, pageId, sectionId, path);
     if (!t) return "";
     if (t.key === "fields") return (t.section.fields || {})[t.field] || "";
+    if (t.socials) return (t.section.socials[t.index] || {})[t.field] || "";
     if (t.items) return (t.section.items[t.index] || {})[t.field] || "";
     return t.section[t.key] || "";
   }
@@ -66,6 +77,10 @@
     if (t.key === "fields") {
       t.section.fields = t.section.fields || {};
       t.section.fields[t.field] = value;
+    } else if (t.socials) {
+      t.section.socials = t.section.socials || [];
+      t.section.socials[t.index] = t.section.socials[t.index] || { label: "", url: "" };
+      t.section.socials[t.index][t.field] = value;
     } else if (t.items) {
       t.section.items[t.index][t.field] = value;
     } else {
@@ -74,10 +89,20 @@
     return true;
   }
 
-  /* the section a DOM node belongs to */
+  /* the block a DOM node belongs to: a section, or the footer */
   function sectionIdOf(node) {
-    var host = node && node.closest ? node.closest(".ss-sec") : null;
-    return host ? host.dataset.sect : null;
+    if (!node || !node.closest) return null;
+    var host = node.closest(".ss-sec");
+    if (host) return host.dataset.sect;
+    var foot = node.closest("[data-foot]");
+    return foot ? "footer" : null;
+  }
+
+  /* the footer node for a block id, so the toolbar can sit above it */
+  function nodeFor(blockId) {
+    if (!Editor.root) return null;
+    if (blockId === "footer") return Editor.root.querySelector("[data-foot]");
+    return Editor.root.querySelector('.ss-sec[data-sect="' + cssEscape(blockId) + '"]');
   }
 
   /* the section the block toolbar/panel is acting on */
@@ -139,11 +164,14 @@
     Array.prototype.forEach.call(Editor.root.querySelectorAll(".ss-sec"), function (node) {
       node.classList.toggle("is-selected", node.dataset.sect === Editor.selectedId);
     });
+    var foot = Editor.root.querySelector("[data-foot]");
+    if (foot) foot.classList.toggle("is-selected", Editor.selectedId === "footer");
   };
 
   Editor.select = function (id) {
     Editor.selectedId = id;
     Editor.markSelection();
+    ensureToolbar().updateFor(id);
     positionToolbar();
     if (Editor.onSelectionChange) Editor.onSelectionChange(id);
   };
@@ -278,13 +306,23 @@
       event.stopPropagation();
       Editor.command(button.dataset.do);
     });
+
+    /* the footer supports fewer actions than a section */
+    toolbar.updateFor = function (blockId) {
+      var isFooter = blockId === "footer";
+      ["up", "down", "layout", "image", "crop", "ai", "dup", "del"].forEach(function (action) {
+        var button = toolbar.querySelector('[data-do="' + action + '"]');
+        if (button) button.hidden = isFooter;
+      });
+      toolbar.querySelectorAll(".toolbar-sep").forEach(function (sep) { sep.hidden = isFooter; });
+    };
     return toolbar;
   }
 
   function positionToolbar() {
     var bar = ensureToolbar();
     if (!Editor.selectedId || !Editor.root) { bar.hidden = true; return; }
-    var section = Editor.root.querySelector('.ss-sec[data-sect="' + cssEscape(Editor.selectedId) + '"]');
+    var section = nodeFor(Editor.selectedId);
     if (!section) { bar.hidden = true; return; }
     var box = section.getBoundingClientRect();
     bar.hidden = false;
@@ -298,6 +336,14 @@
   Editor.command = function (what) {
     var page = Editor.plan.pages.filter(function (p) { return p.id === Editor.pageId; })[0];
     if (!page) return;
+
+    /* the footer is editable, but it cannot be reordered, duplicated
+       or AI-rewritten like a section */
+    if (Editor.selectedId === "footer") {
+      if (what === "settings" && Editor.onOpenSettings) Editor.onOpenSettings("footer");
+      return;
+    }
+
     var index = page.sections.findIndex(function (s) { return s.id === Editor.selectedId; });
     if (index === -1) return;
     var section = page.sections[index];
@@ -404,6 +450,11 @@
       var section = event.target.closest(".ss-sec");
       if (section) {
         Editor.select(section.dataset.sect);
+        return;
+      }
+      var footer = event.target.closest("[data-foot]");
+      if (footer) {
+        Editor.select("footer");
       }
     });
 

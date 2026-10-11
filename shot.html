@@ -60,6 +60,7 @@
        so captures show the block settings panel in action. */
     function maybeWalk() {
       if (walk === "block") return walkBuilder();
+      if (walk === "footer") return walkFooter();
       if (walk !== "plan") return;
       var doc;
       try { doc = f.contentDocument; } catch (e) { return; }
@@ -111,6 +112,29 @@
         if (pad) { pad.value = "96"; pad.dispatchEvent(new Event("change", { bubbles: true })); }
         Editor.select(pick.id);
         Editor.command("settings");
+      })();
+    }
+
+    /* walk=footer: scroll to the footer and open its settings panel */
+    function walkFooter() {
+      var tries = 0;
+      (function step() {
+        if (++tries > 80) return;
+        var d;
+        try { d = f.contentDocument; } catch (e) { return; }
+        if (!d || !d.body) { setTimeout(step, 100); return; }
+        var Editor = d.defaultView && d.defaultView.Editor;
+        if (!Editor || !Editor.plan) { setTimeout(step, 100); return; }
+        /* wait until the page has actually rendered its blocks */
+        if (!d.querySelector(".ss-sec")) { setTimeout(step, 100); return; }
+
+        var foot = d.querySelector("[data-foot]");
+        if (!foot) { setTimeout(step, 100); return; }
+
+        var btn = d.getElementById("footerBtn");
+        if (btn) btn.click();
+        foot.scrollIntoView({ block: "end" });
+        Editor.select("footer");
       })();
     }
 

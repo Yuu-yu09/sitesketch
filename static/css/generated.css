@@ -376,13 +376,35 @@
 .v-stack { text-align: center; }
 .v-stack .ss-form-row { margin-inline: auto; }
 
-.ss-footer { border-top: 1px solid var(--line); padding-block: 2.6rem; margin-top: var(--pad); }
-.ss-footer--rich .ss-wrap { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 2rem; }
-.ss-foot-col h3 { font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+/* the footer is a block: it takes the same --sec-* overrides and grid
+   control as any section */
+.ss-footer {
+  border-top: 1px solid var(--line);
+  padding-block: 2.6rem;
+  margin-top: var(--pad);
+  position: relative;
+  background: var(--sec-bg, transparent);
+  color: var(--sec-text, inherit);
+  text-align: var(--sec-align, inherit);
+}
+.ss-footer--rich .ss-wrap:first-of-type {
+  display: grid;
+  grid-template-columns: var(--foot-cols, 1.4fr 1fr 1fr);
+  gap: 2rem;
+}
+.ss-foot-col h3 { font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 .7rem; }
 .ss-foot-links { display: grid; gap: .5rem; }
 .ss-foot-links a { color: var(--muted); text-decoration: none; }
+.ss-foot-links a:hover { color: var(--sec-accent, var(--text)); }
 .ss-foot-note { color: var(--muted); font-size: .9rem; }
-@media (max-width: 720px) { .ss-footer--rich .ss-wrap { grid-template-columns: 1fr; } }
+.ss-foot-bottom {
+  margin-top: 2rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 720px) {
+  .ss-footer--rich .ss-wrap:first-of-type { grid-template-columns: 1fr; }
+}
 
 /* ---------- motion ---------- */
 @media (prefers-reduced-motion: no-preference) {

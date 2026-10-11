@@ -19,6 +19,9 @@
     </div>
 
     <div class="builder-top-right">
+      <button class="btn btn-sm" id="footerBtn" type="button" aria-pressed="false">
+        <i class="bi bi-layout-text-footer" aria-hidden="true"></i> Footer
+      </button>
       <button class="btn btn-sm" id="stylesBtn" type="button" aria-pressed="false">
         <i class="bi bi-palette" aria-hidden="true"></i> Design
       </button>
@@ -201,8 +204,12 @@
 
       /* ---------------- styles panel ---------------- */
       document.getElementById("stylesBtn").addEventListener("click", function () {
-        if (!stylesPanel.hidden) closePanel();
+        if (!stylesPanel.hidden && panelMode === "styles") closePanel();
         else openPanel("styles");
+      });
+      document.getElementById("footerBtn").addEventListener("click", function () {
+        if (!stylesPanel.hidden && panelMode === "footer") closePanel();
+        else openPanel("footer");
       });
       document.getElementById("publishBtn").addEventListener("click", function () {
         location.href = "publish.html?id=" + plan.id;
@@ -264,8 +271,8 @@
       function openPanel(mode) {
         panelMode = mode;
         stylesPanel.hidden = false;
-        var btn = document.getElementById("stylesBtn");
-        btn.setAttribute("aria-pressed", String(true));
+        document.getElementById("stylesBtn").setAttribute("aria-pressed", String(mode === "styles"));
+        document.getElementById("footerBtn").setAttribute("aria-pressed", String(mode === "footer"));
         renderPanel();
       }
 
@@ -273,11 +280,13 @@
         panelMode = "styles";
         stylesPanel.hidden = true;
         document.getElementById("stylesBtn").setAttribute("aria-pressed", String(false));
+        document.getElementById("footerBtn").setAttribute("aria-pressed", String(false));
       }
 
       function renderPanel() {
         if (stylesPanel.hidden) return;
-        if (panelMode === "block") EditorUI.blockPanel(stylesPanel);
+        if (panelMode === "footer") EditorUI.footerPanel(stylesPanel);
+        else if (panelMode === "block") EditorUI.blockPanel(stylesPanel);
         else EditorUI.stylesPanel(stylesPanel);
       }
 
@@ -355,7 +364,7 @@
           onSelectionChange: function () { renderPanel(); },
           onOpenSettings: function (id) {
             Editor.select(id);
-            openPanel("block");
+            openPanel(id === "footer" ? "footer" : "block");
           },
           onAI: aiSection
         });
