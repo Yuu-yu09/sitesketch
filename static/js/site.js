@@ -119,12 +119,55 @@
     return "<" + (tag || "p") + (cls ? ' class="' + cls + '"' : "") + ed(path) + ">" + esc(value) + "</" + (tag || "p") + ">";
   }
 
-  function picture(src, slot, alt, cls) {
+  /* Images are cropped non-destructively, the way WordPress does it:
+     the uploaded file is never modified, we store the crop rectangle
+     (fractions of the image, 0-1) on the block and apply it with
+     object-fit/position. That keeps crops instant, reversible, and
+     working on library photos we do not own. */
+  function cropOf(plan, pageId, sectionId, slot) {
+    var page = (plan.pages || []).filter(function (p) { return p.id === pageId; })[0];
+    if (!page) return null;
+    var section = page.sections.filter(function (s) { return s.id === sectionId; })[0];
+    if (!section || !section.crops) return null;
+    return section.crops[slot] || null;
+  }
+
+  function cropStyle(crop) {
+    if (!crop) return "";
+    var x = clamp01(crop.x), y = clamp01(crop.y);
+    var w = clampRange(crop.w, 0.05, 1), h = clampRange(crop.h, 0.05, 1);
+    /* never let the window spill outside the image */
+    if (x + w > 1) { w = 1 - x; }
+    if (y + h > 1) { h = 1 - y; }
+    if (w <= 0 || h <= 0) return "";
+    return "object-fit:cover;" +
+      "object-position:" + (x + w / 2) * 100 + "% " + (y + h / 2) * 100 + "%;";
+  }
+
+  function clamp01(n) {
+    n = Number(n);
+    if (!isFinite(n)) return 0;
+    return Math.min(1, Math.max(0, n));
+  }
+  function clampRange(n, lo, hi) {
+    n = Number(n);
+    if (!isFinite(n)) return hi;
+    return Math.min(hi, Math.max(lo, n));
+  }
+
+  SS.cropOf = cropOf;
+  SS.cropStyle = cropStyle;
+
+  /* ctx is optional: crops only apply to the page being rendered */
+  function picture(src, slot, alt, cls, crop) {
     if (!src) {
       return '<div class="ss-img ss-img--empty" data-img-slot="' + esc(slot) + '"' +
         ' role="button" tabindex="0" aria-label="Add an image"></div>';
     }
+    var style = cropStyle(crop);
     return '<img src="' + esc(src) + '" alt="' + esc(alt || "") + '" loading="lazy"' +
+      (style ? ' style="' + style + '"' : "") +
+      (crop ? ' data-cropped="1"' : "") +
       ' data-img-slot="' + esc(slot) + '"' + (cls ? ' class="' + cls + '"' : "") + ">";
   }
 
@@ -138,8 +181,7 @@
     var body = text(s.subtitle, "subtitle");
 
     if (v === "overlay") {
-      return picture(ctx.image, "img", s.title, "ss-bg") &&
-        '<section class="ss-sec g-hero v-overlay" ' + ctx.wrapAttrs + '>' +
+      return '<section class="ss-sec g-hero v-overlay" ' + ctx.wrapAttrs + '>' +
           '<div class="ss-wrap">' + ctx.imageTag +
             '<p class="ss-eyebrow"' + ed("subtitle") + ">" + esc(s.subtitle || "") + "</p>" +
             "<h1" + ed("title") + ">" + esc(s.title || "") + "</h1>" +
@@ -188,7 +230,7 @@
       return '<article class="ss-card">' +
         /* always render the slot, so every card is clickable for a
            picture even before the user chooses one */
-        picture(item.img || fallbackImage, path + ":" + i + ":img", item.title) +
+        picture(item.img || fallbackImage, path + ":" + i + ":img", item.title, null, ctx.crop(path + ":" + i + ":img")) +
         "<h3" + ed(path + ":" + i + ":title") + ">" + esc(item.title || "Title") + "</h3>" +
         text(item.text || "A line about this.", path + ":" + i + ":text", "p") +
         "</article>";
@@ -216,7 +258,7 @@
     var s = ctx.section;
     var cards = items(s).slice(0, 8).map(function (item, i) {
       return '<article class="ss-card">' +
-        (item.img ? picture(item.img, "items:" + i + ":img", item.title) : picture(ctx.poolImage, "items:" + i + ":img", item.title)) +
+        picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title, null, ctx.crop("items:" + i + ":img")) +
         "<h3" + ed("items:" + i + ":title") + ">" + esc(item.title) + "</h3>" +
         text(item.text || "", "items:" + i + ":text", "p") +
         (item.price ? '<p class="ss-row-price" style="margin:.6rem 0 0">' + esc(item.price) + "</p>" : "") +
@@ -251,7 +293,7 @@
     var s = ctx.section;
     var cards = items(s).slice(0, 9).map(function (item, i) {
       return '<figure class="ss-card" style="padding:.6rem">' +
-        picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title || s.title) +
+        picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title || s.title, null, ctx.crop("items:" + i + ":img")) +
         (item.text ? '<figcaption style="margin-top:.5rem;font-size:.86rem;color:var(--muted)">' +
           '<span' + ed("items:" + i + ":text") + ">" + esc(item.text) + "</span></figcaption>" : "") +
         "</figure>";
@@ -269,7 +311,7 @@
         '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
         '<div class="ss-rows">' + items(s).map(function (item, i) {
           return '<div class="ss-row"><div style="display:flex;gap:1rem;align-items:center">' +
-            picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title, "ss-avatar") +
+            picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title, "ss-avatar", ctx.crop("items:" + i + ":img")) +
             "<div><h3" + ed("items:" + i + ":title") + ">" + esc(item.title) + "</h3>" +
             text(item.text || "", "items:" + i + ":text", "p") + "</div></div></div>";
         }).join("") + "</div></div></section>";
@@ -298,7 +340,7 @@
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       '<div class="ss-grid">' + posts.map(function (item, i) {
         return '<article class="ss-card ss-post">' +
-          (item.img ? picture(item.img, "items:" + i + ":img", item.title) : picture(ctx.poolImage, "items:" + i + ":img", item.title)) +
+          picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title, null, ctx.crop("items:" + i + ":img")) +
           '<p class="ss-post-meta"' + ed("items:" + i + ":text") + ">" + esc(item.text || "") + "</p>" +
           "<h3" + ed("items:" + i + ":title") + '><a href="#">' + esc(item.title) + "</a></h3></article>";
       }).join("") + "</div></div></section>";
@@ -448,7 +490,7 @@
       "</div></footer>";
   }
 
-  function sectionHTML(section, index, plan, spec, editable) {
+  function sectionHTML(section, index, plan, spec, editable, pageId) {
     var block = BLOCKS[section.type] || BLOCKS.about;
     var variant = variantOf(plan, section, spec);
     var image = imgOf(plan, section, spec, "img");
@@ -456,13 +498,17 @@
     var poolKey = pools.length ? pools[index % pools.length] : null;
     var poolImage = window.DESIGN ? ((DESIGN.IMAGES[poolKey] || [])[index % 3] || "") : "";
 
+    /* the section's own crop, if the user has set one */
+    function crop(slot) { return cropOf(plan, pageId, section.id, slot); }
+
     var ctx = {
       section: section,
       index: index,
       variant: variant,
       image: image,
-      imageTag: picture(image, "img", section.title),
+      imageTag: picture(image, "img", section.title, null, crop("img")),
       poolImage: poolImage,
+      crop: crop,
       wrapAttrs: ' data-sect="' + esc(section.id) + '" data-sect-label="' + esc(section.type) + '"',
       editable: !!editable,
     };
@@ -496,7 +542,7 @@
           return k + ":" + section.style[k];
         }).join(";") + '"';
       }
-      var html = sectionHTML(section, i, plan, spec, options.editable);
+      var html = sectionHTML(section, i, plan, spec, options.editable, page.id);
       return style ? html.replace(' data-sect="', style + ' data-sect="') : html;
     }).join("\n");
 

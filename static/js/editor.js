@@ -192,7 +192,36 @@
   Editor.setImage = function (sectionId, slot, url) {
     /* slot is "img" for a whole section, or "items:2:img" for a list entry */
     writeValue(Editor.plan, Editor.pageId, sectionId, slot, url || "");
+    /* a new image has no crop yet */
+    var section = sectionOf(Editor.plan, Editor.pageId, sectionId);
+    if (section && section.crops) delete section.crops[slot];
     if (Editor.onChange) Editor.onChange(slot);
+  };
+
+  /* Non-destructive crop: stored on the section as fractions of the image. */
+  Editor.setCrop = function (sectionId, slot, crop) {
+    var section = sectionOf(Editor.plan, Editor.pageId, sectionId);
+    if (!section) return;
+    if (!crop) {
+      if (section.crops) delete section.crops[slot];
+    } else {
+      section.crops = section.crops || {};
+      section.crops[slot] = {
+        x: Math.round(crop.x * 1e4) / 1e4,
+        y: Math.round(crop.y * 1e4) / 1e4,
+        w: Math.round(crop.w * 1e4) / 1e4,
+        h: Math.round(crop.h * 1e4) / 1e4
+      };
+    }
+    if (Editor.onChange) Editor.onChange("crop:" + slot);
+    /* repaint so the new framing is visible straight away */
+    Editor.render();
+  };
+
+  Editor.cropFor = function (sectionId, slot) {
+    var section = sectionOf(Editor.plan, Editor.pageId, sectionId);
+    if (!section || !section.crops) return null;
+    return section.crops[slot] || null;
   };
 
   /* ---------------- styles (the theme.json equivalent) ---------------- */
@@ -227,6 +256,7 @@
       '<span class="toolbar-sep" aria-hidden="true"></span>' +
       '<button class="icon-btn" data-do="layout" title="Change layout" aria-label="Change layout"><i class="bi bi-layout-text-window" aria-hidden="true"></i></button>' +
       '<button class="icon-btn" data-do="image" title="Change image" aria-label="Change image"><i class="bi bi-image" aria-hidden="true"></i></button>' +
+      '<button class="icon-btn" data-do="crop" title="Crop image" aria-label="Crop image"><i class="bi bi-crop" aria-hidden="true"></i></button>' +
       '<button class="icon-btn" data-do="ai" title="Rewrite with AI" aria-label="Rewrite with AI"><i class="bi bi-lightning" aria-hidden="true"></i></button>' +
       '<span class="toolbar-sep" aria-hidden="true"></span>' +
       '<button class="icon-btn" data-do="dup" title="Duplicate" aria-label="Duplicate section"><i class="bi bi-copy" aria-hidden="true"></i></button>' +
@@ -293,6 +323,18 @@
     } else if (what === "image") {
       if (window.EditorUI) EditorUI.openMedia(section.id, "img");
       return;
+    } else if (what === "crop") {
+      var cropSlot = Editor.selectedImageSlot || "img";
+      var src = Editor.imageFor(section.id, cropSlot);
+      if (window.Crop) {
+        Crop.open({
+          sectionId: section.id,
+          slot: cropSlot,
+          src: src,
+          crop: Editor.cropFor(section.id, cropSlot)
+        });
+      }
+      return;
     } else if (what === "ai") {
       if (Editor.onAI) Editor.onAI(section);
       return;
@@ -330,7 +372,20 @@
         event.preventDefault();
         var host = imageSlot.closest(".ss-sec");
         if (host) Editor.select(host.dataset.sect);
-        if (window.EditorUI) EditorUI.openMedia(host ? host.dataset.sect : null, imageSlot.dataset.imgSlot);
+        /* remember which image the toolbar's crop button should act on */
+        Editor.selectedImageSlot = imageSlot.dataset.imgSlot || "img";
+        /* clicking a picture you already chose crops it; otherwise pick one */
+        var hasImage = imageSlot.tagName === "IMG";
+        if (hasImage && event.detail === 2 && window.Crop) {
+          Crop.open({
+            sectionId: host ? host.dataset.sect : null,
+            slot: Editor.selectedImageSlot,
+            src: imageSlot.getAttribute("src"),
+            crop: Editor.cropFor(host ? host.dataset.sect : null, Editor.selectedImageSlot)
+          });
+          return;
+        }
+        if (window.EditorUI) EditorUI.openMedia(host ? host.dataset.sect : null, Editor.selectedImageSlot);
         return;
       }
 
