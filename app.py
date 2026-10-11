@@ -29,6 +29,28 @@ jwt = JWTManager(app)
 app.register_blueprint(auth.bp)
 app.register_blueprint(projects.bp)
 
+
+# Every rejected token answers 401 with the same shape, so the client has one
+# code path to handle instead of chasing 401/422 variants.
+@jwt.unauthorized_loader
+def _no_token(reason):
+    return jsonify(error="Please sign in."), 401
+
+
+@jwt.invalid_token_loader
+def _bad_token(reason):
+    return jsonify(error="Your session is not valid. Please sign in again."), 401
+
+
+@jwt.expired_token_loader
+def _expired_token(jwt_header, jwt_payload):
+    return jsonify(error="Your session expired. Please sign in again."), 401
+
+
+@jwt.revoked_token_loader
+def _revoked_token(jwt_header, jwt_payload):
+    return jsonify(error="That session is no longer valid."), 401
+
 PAGES = ("", "index", "login", "register", "dashboard", "plan", "builder", "publish")
 
 
