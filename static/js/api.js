@@ -182,48 +182,46 @@
     };
   }
 
-  /* ---------- AI (Gemini later; canned draft now) ---------- */
+  /* ---------- AI plan drafting (server side, Gemini) ---------- */
 
+  /* The server decides what kind of site this is and writes the copy.
+     Guessing the type from keywords here got it badly wrong: a full stack
+     web programming course matched no keyword, fell back to "business",
+     and then used restaurant interiors as its photography. */
   function generatePlan(description) {
-    return new Promise(function (resolve) {
-      var text = (description || "").toLowerCase();
-      var typeId = "business";
-      if (/(food|restaurant|menu|dish|cafe|kitchen|eat|cook)/.test(text)) typeId = "restaurant";
-      else if (/(shop|store|sell|product|price|buy|ecommerce|boutique)/.test(text)) typeId = "store";
-      else if (/(portfolio|photo|designer|art|creative|showcase|work)/.test(text)) typeId = "portfolio";
-      else if (/(school|class|club|event|project|student|teacher)/.test(text)) typeId = "school";
-      else if (/(blog|article|post|write|news)/.test(text)) typeId = "blog";
-
-      var goal = GOALS[typeId][0].id;
-
-      /* name: quoted phrase if present, else the meaningful words before " for ..." */
-      var quoted = description.match(/["“']([^"”']{2,40})["”']/);
-      var siteName;
-      if (quoted) siteName = quoted[1];
-      else {
-        var STOP = { website: 1, site: 1, page: 1, landing: 1, online: 1, and: 1, with: 1, my: 1, our: 1, the: 1, for: 1, that: 1, this: 1, an: 1, a: 1, want: 1, need: 1, create: 1, make: 1, build: 1 };
-        var base = description.split(/\s+for\s+/i)[0]
-          .replace(/^(i want |i need |a |an |the |create |make |build )/i, "");
-        var words = base.split(/\s+/).filter(function (w) {
-          return w.length > 2 && !STOP[w.toLowerCase()];
-        }).slice(0, 3);
-        siteName = words.map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" ") || "My Website";
-      }
-
-      var plan = makePlan(typeId, goal, siteName);
-      /* AI-drafted plans arrive with some content already written */
-      plan.pages[0].sections.forEach(function (s, i) {
-        if (i === 0) {
-          s.title = siteName;
-          s.subtitle = description.slice(0, 90);
-        }
+    return request("/api/plan", { method: "POST", body: { description: description } })
+      .then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error, detail: res.detail };
+        return { ok: true, result: res.data };
       });
+  }
 
-      /* simulate network + model latency */
-      setTimeout(function () {
-        resolve({ type: typeId, goal: goal, plan: plan });
-      }, 1100);
+  /* turn the server's draft into a Plan the builder can open */
+  function planFromDraft(draft) {
+    var plan = makePlan(draft.type, draft.goal, draft.siteName || "My Website");
+    var written = draft.sections || [];
+
+    plan.pages[0].sections.forEach(function (section) {
+      var match = null;
+      for (var i = 0; i < written.length; i++) {
+        if (written[i].type === section.type) { match = written[i]; break; }
+      }
+      if (!match) return;
+      section.title = match.title || section.title;
+      section.subtitle = match.subtitle || section.subtitle;
+      if (match.buttonText) {
+        section.fields = section.fields || {};
+        section.fields.buttonText = match.buttonText;
+      }
     });
+
+    /* the hero should open with the headline the model wrote */
+    var hero = plan.pages[0].sections[0];
+    if (hero && draft.headline) {
+      hero.title = draft.headline;
+      hero.subtitle = draft.tagline || hero.subtitle;
+    }
+    return plan;
   }
 
   /* ---------- AI content filling (Gemini later; canned copy now) ---------- */
@@ -384,6 +382,7 @@
       });
     },
     generatePlan: generatePlan,
+    planFromDraft: planFromDraft,
     fillSection: fillSection,
     fillPage: fillPage
   };

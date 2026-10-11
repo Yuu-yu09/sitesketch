@@ -297,22 +297,34 @@
         document.getElementById("aiNote").hidden = false;
 
         API.generatePlan(desc).then(function (res) {
-          state.type = res.type;
-          state.goal = res.goal;
-          state.plan = res.plan;
-          state.selected = API.recommendedFor(res.type);
-          state.siteName = res.plan.meta.siteName;
-
-          typeGrid.querySelectorAll(".type-card").forEach(function (x, i) {
-            x.setAttribute("aria-pressed", API.TYPES[i].id === res.type ? "true" : "false");
-          });
-
           btn.disabled = false;
           btn.innerHTML = '<i class="bi bi-lightning" aria-hidden="true"></i> Generate my plan';
           document.getElementById("aiNote").hidden = true;
+
+          if (!res.ok) {
+            SS.toast(
+              res.error === "ai_unavailable"
+                ? "The writing service is unreachable right now — pick a type instead"
+                : (res.error || "Could not draft that plan"),
+              "bi-exclamation-triangle"
+            );
+            return;
+          }
+
+          var draft = res.result;
+          state.type = draft.type;
+          state.goal = draft.goal;
+          state.plan = API.planFromDraft(draft);
+          state.selected = state.plan.pages[0].sections.map(function (s) { return s.type; });
+          state.siteName = state.plan.meta.siteName;
+
+          typeGrid.querySelectorAll(".type-card").forEach(function (x, i) {
+            x.setAttribute("aria-pressed", API.TYPES[i].id === draft.type ? "true" : "false");
+          });
+
           renderRecs();
           goStep(3);
-          SS.toast("Plan drafted — review it below", "bi-lightning");
+          SS.toast("Drafted as a " + draft.type + " site — review it below", "bi-lightning");
         });
       });
     })();

@@ -249,6 +249,41 @@ def t_ai_design_validation():
     call("POST", "/api/design", {"siteName": "No sections"}, expect=400)
 
 
+def t_ai_plan_types_a_course_site_correctly():
+    """A web programming course must not be filed as a business site.
+
+    This is a real reported bug: keyword matching found no food or shop
+    words, fell back to "business", and a business site draws from the
+    "place" image pool, which is full of restaurant interiors. The page
+    then looked like a cafe for a coding course.
+    """
+    status, data, ms = call("POST", "/api/plan",
+                            {"description": "a course website for full stack web programming"},
+                            expect=200)
+    assert data["type"] == "school", f"course site typed as {data['type']!r}, expected 'school'"
+    assert data["siteName"], data
+    assert data["headline"], data
+    written = {s["type"] for s in data.get("sections", [])}
+    assert written, data
+    assert "menu" not in written and "hours" not in written, \
+        f"restaurant sections leaked into a course site: {sorted(written)}"
+    return f"{ms:.0f}ms {data['type']}/{data['goal']} {data['siteName']!r} {sorted(written)}"
+
+
+def t_ai_plan_classifies_other_types():
+    """A restaurant brief still gets a restaurant site."""
+    status, data, ms = call("POST", "/api/plan",
+                            {"description": "a menu website for my ramen shop"}, expect=200)
+    assert data["type"] == "restaurant", f"ramen shop typed as {data['type']!r}"
+    written = {s["type"] for s in data.get("sections", [])}
+    assert "menu" in written, f"no menu section for a restaurant: {sorted(written)}"
+    return f"{ms:.0f}ms {data['type']} {sorted(written)}"
+
+
+def t_ai_plan_rejects_a_stub_description():
+    call("POST", "/api/plan", {"description": "hi"}, expect=400)
+
+
 # ------------------------------------------------------------------ pages
 def t_pages_render():
     expected = {"/": "SiteSketch", "/login.html": "Sign in", "/register.html": "Create account",
@@ -306,6 +341,9 @@ for name, fn in [
     ("projects endpoints need a token", t_projects_require_auth),
     ("no demo door: registration required", t_no_demo_door),
     ("AI design generation", t_ai_design),
+    ("AI types a course site as school, not business", t_ai_plan_types_a_course_site_correctly),
+    ("AI types a ramen shop as restaurant", t_ai_plan_classifies_other_types),
+    ("AI plan rejects a stub description", t_ai_plan_rejects_a_stub_description),
     ("AI rejects an empty brief", t_ai_design_validation),
     ("all pages render with the right title", t_pages_render),
     ("static assets served", t_static_assets),

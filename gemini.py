@@ -387,6 +387,99 @@ def _variants_for_types(types: set[str]) -> dict[str, tuple[str, ...]]:
 
 # -------------------------------------------------------------- plan generation
 
+PLAN_SYSTEM = """You are the copywriter for small-business websites built in SiteSketch.
+You write concrete, specific copy that a real owner would recognise as their own.
+
+Rules you never break:
+- No lorem ipsum, no placeholder text, no bracketed notes.
+- No em dashes anywhere.
+- No buzzwords such as elevate, seamless, unleash, cutting edge, game changing.
+- Headlines under 8 words. Subtitles under 20 words.
+- If the description is vague, invent plausible concrete detail rather than hedging.
+- Never drift away from what the site is actually for. A programming course site
+  must read like a course site, not like a cafe."""
+
+SITE_TYPES = ["business", "portfolio", "restaurant", "store", "school", "blog"]
+
+CLASSIFY_SYSTEM = """You read a short description of a website and decide what kind of site it is.
+Answer with one word from the list and nothing else. Judge by what the site is FOR,
+not by any word that happens to appear in the text."""
+
+
+def classify_site(description: str) -> tuple[str, str]:
+    """
+    Ask the model what kind of site this is.
+
+    The old approach matched keywords in the browser, which got this badly wrong:
+    "full stack web programming course" contains no food words, so it silently
+    fell back to "business" - and a business page then used restaurant
+    interiors as its photography.
+
+    Returns (type, goal). Falls back to a keyword guess, then to business.
+    """
+    description = (description or "").strip()
+    if not description:
+        return "business", "get-contact"
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "type": {"type": "string", "enum": SITE_TYPES},
+            "goal": {"type": "string"},
+            "reason": {"type": "string"},
+        },
+        "required": ["type", "goal"],
+    }
+    prompt = (
+        f'Description: "{description}"\n\n'
+        "What kind of website is this? Pick the closest type and the goal that "
+        "site should be optimised for."
+    )
+
+    try:
+        raw = generate_json(prompt, schema, system=CLASSIFY_SYSTEM)
+    except GeminiError:
+        return _guess_type(description)
+
+    kind = raw.get("type")
+    if kind not in SITE_TYPES:
+        return _guess_type(description)
+
+    goal = str(raw.get("goal") or "").strip()
+    if goal not in goals_for(kind):
+        goal = goals_for(kind)[0]
+    return kind, goal
+
+
+def goals_for(kind: str) -> list[str]:
+    """Goal ids offered for a site type, read from the seeded taxonomy."""
+    from db import query  # local import: db pulls in config
+    try:
+        rows = query("select id from goals where type_id = %s order by sort_order", (kind,))
+    except Exception:
+        return []
+    return [r["id"] for r in rows] if rows else []
+
+
+def _guess_type(description: str) -> tuple[str, str]:
+    """Keyword fallback, used only when the model cannot be reached."""
+    text = description.lower()
+    if re.search(r"\b(food|restaurant|menu|dish|cafe|kitchen|eat|cook|bakery|pizza|sushi|ramen)\b", text):
+        kind = "restaurant"
+    elif re.search(r"\b(shop|store|sell|product|price|buy|ecommerce|boutique|order)\b", text):
+        kind = "store"
+    elif re.search(r"\b(portfolio|photograph|designer|illustrat|creative|showcase)\b", text):
+        kind = "portfolio"
+    elif re.search(r"\b(school|course|class|curriculum|student|teacher|tutor|learn|training|seminar)\b", text):
+        kind = "school"
+    elif re.search(r"\b(blog|article|post|write|news|newsletter)\b", text):
+        kind = "blog"
+    else:
+        kind = "business"
+    goals = goals_for(kind)
+    return kind, (goals[0] if goals else "get-contact")
+
+
 def generate_plan(ctx: dict) -> dict:
     """
     ctx: { siteName, type, goal, description, sections: [section type ids] }
@@ -434,5 +527,18 @@ Rules:
         "required": ["headline", "tagline", "sections"],
     }
 
-    raw = generate_json(prompt, schema, system=DESIGN_SYSTEM)
-    return raw
+    raw = generate_json(prompt, schema, system=PLAN_SYSTEM)
+    return {
+        "headline": str(raw.get("headline") or "")[:120],
+        "tagline": str(raw.get("tagline") or "")[:180],
+        "sections": [
+            {
+                "type": str(row.get("type") or ""),
+                "title": str(row.get("title") or "")[:120],
+                "subtitle": str(row.get("subtitle") or "")[:220],
+                "buttonText": str(row.get("buttonText") or "")[:40],
+            }
+            for row in (raw.get("sections") or [])
+            if row.get("type")
+        ],
+    }

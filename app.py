@@ -8,6 +8,7 @@ SiteSketch Flask application.
 from __future__ import annotations
 
 import pathlib
+import re
 
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -124,6 +125,98 @@ def api_sections():
 
 
 # ------------------------------------------------------------------- API: AI
+
+@app.post("/api/plan")
+def api_plan():
+    """
+    Turn a one-sentence description into a typed, written plan.
+
+    Body: { description, siteName? }
+    Returns: { type, goal, siteName, headline, tagline, sections: [{type, title, subtitle}] }
+
+    The type is decided by the model from what the site is FOR. It used to be
+    guessed from keywords in the browser, which filed a web programming course
+    under "business" and gave it restaurant photography.
+    """
+    body = request.get_json(silent=True) or {}
+    description = (body.get("description") or "").strip()
+    if len(description) < 8:
+        return jsonify(error="Describe your site in a sentence first"), 400
+
+    try:
+        kind, goal = gemini.classify_site(description)
+    except gemini.GeminiError as exc:
+        return jsonify(error="ai_unavailable", detail=str(exc)), 502
+
+    section_types = _sections_for(kind, goal)
+    site_name = (body.get("siteName") or _name_from(description)).strip()[:60]
+
+    try:
+        written = gemini.generate_plan({
+            "siteName": site_name,
+            "type": kind,
+            "goal": goal,
+            "description": description,
+            "sections": section_types,
+        })
+    except gemini.GeminiError as exc:
+        return jsonify(error="ai_unavailable", detail=str(exc)), 502
+
+    return jsonify(
+        type=kind,
+        goal=goal,
+        siteName=site_name,
+        headline=written.get("headline", ""),
+        tagline=written.get("tagline", ""),
+        sections=written.get("sections", []),
+    )
+
+
+def _sections_for(kind: str, goal: str) -> list[str]:
+    """The section list the seeded taxonomy recommends for this type."""
+    from db import query
+    try:
+        rows = query(
+            "select section_type from section_templates "
+            "where type_id = %s order by sort_order",
+            (kind,),
+        )
+    except Exception:
+        rows = []
+    if rows:
+        return [r["section_type"] for r in rows]
+    return _FALLBACK_SECTIONS.get(kind, _FALLBACK_SECTIONS["business"])
+
+
+# mirrors TYPE_SECTIONS in static/js/api.js, used only if the seed is missing
+_FALLBACK_SECTIONS = {
+    "business":   ["hero", "about", "features", "testimonials", "cta", "contact"],
+    "portfolio":  ["hero", "about", "gallery", "testimonials", "contact"],
+    "restaurant": ["hero", "menu", "about", "hours", "gallery", "contact"],
+    "store":      ["hero", "products", "features", "testimonials", "cta", "contact"],
+    "school":     ["hero", "about", "gallery", "faq", "contact"],
+    "blog":       ["hero", "blog", "about", "newsletter", "contact"],
+}
+
+
+def _name_from(description: str) -> str:
+    """A sensible site name: a quoted phrase, else the words before 'for'."""
+    quoted = re.search(r'["“‘]([^"”’]{2,40})["”’]', description)
+    if quoted:
+        return quoted.group(1).strip()
+
+    stop = {
+        "website", "site", "page", "landing", "online", "and", "with", "my", "our",
+        "the", "for", "that", "this", "an", "a", "want", "need", "create", "make",
+        "build", "about", "using",
+    }
+    base = re.split(r"\s+for\s+", description, maxsplit=1)[0]
+    base = re.sub(r"^(i want |i need |a |an |the |create |make |build )", "", base, flags=re.I)
+    words = [w for w in re.findall(r"[A-Za-z0-9']+", base) if len(w) > 2 and w.lower() not in stop][:3]
+    if not words:
+        return "My Website"
+    return " ".join(w[:1].upper() + w[1:] for w in words)
+
 
 @app.post("/api/design")
 def api_design():
