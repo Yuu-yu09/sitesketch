@@ -22,7 +22,12 @@ import requests
 import config
 
 BASE = "https://generativelanguage.googleapis.com/v1beta"
-TIMEOUT = 25  # Vercel free-tier functions are short-lived; fail fast and degrade
+# gemini-3.8-flash is slow to first byte from serverless regions (20s+ timeouts),
+# and the 2.5 line is retired for new keys. flash-lite answers a structured JSON
+# spec in ~2s, which fits a Vercel function comfortably.
+TIMEOUT = 20          # primary attempt
+RETRY_TIMEOUT = 45    # heavier model, only if the fast one fails
+FALLBACK_MODEL = "gemini-3.8-flash"
 DESIGN_JS = pathlib.Path(__file__).parent / "static" / "js" / "design.js"
 
 
@@ -65,11 +70,7 @@ def variant_names() -> list[str]:
 
 # --------------------------------------------------------------------- plumbing
 
-def generate_json(prompt: str, schema: dict, system: str | None = None) -> dict:
-    """One-shot structured call. Returns parsed JSON or raises GeminiError."""
-    if not config.GEMINI_API_KEY:
-        raise GeminiError("GEMINI_API_KEY is not set")
-
+def _call(model: str, prompt: str, schema: dict, system: str | None, timeout: int) -> dict:
     payload: dict = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -82,13 +83,13 @@ def generate_json(prompt: str, schema: dict, system: str | None = None) -> dict:
     if system:
         payload["systemInstruction"] = {"parts": [{"text": system}]}
 
-    url = f"{BASE}/models/{config.GEMINI_MODEL}:generateContent"
+    url = f"{BASE}/models/{model}:generateContent"
     try:
         resp = requests.post(
             url,
             params={"key": config.GEMINI_API_KEY},
             json=payload,
-            timeout=TIMEOUT,
+            timeout=timeout,
         )
     except requests.RequestException as exc:
         raise GeminiError(f"network failure: {exc}") from exc
@@ -101,6 +102,27 @@ def generate_json(prompt: str, schema: dict, system: str | None = None) -> dict:
         return json.loads(parts[0]["text"])
     except (KeyError, IndexError, json.JSONDecodeError) as exc:
         raise GeminiError(f"unexpected response shape: {exc}") from exc
+
+
+def generate_json(prompt: str, schema: dict, system: str | None = None) -> dict:
+    """
+    Structured call with one retry on a lighter model.
+
+    Vercel's serverless functions occasionally lose the first Gemini request
+    (cold start plus a new region), so a single timeout should not surface as
+    a broken feature. Raises GeminiError only if both attempts fail.
+    """
+    if not config.GEMINI_API_KEY:
+        raise GeminiError("GEMINI_API_KEY is not set")
+
+    attempts = [(config.GEMINI_MODEL, TIMEOUT), (FALLBACK_MODEL, RETRY_TIMEOUT)]
+    last: Exception | None = None
+    for model, timeout in attempts:
+        try:
+            return _call(model, prompt, schema, system, timeout)
+        except GeminiError as exc:
+            last = exc
+    raise GeminiError(f"all Gemini attempts failed; last error: {last}")
 
 
 # ------------------------------------------------------------- design generation
@@ -191,8 +213,60 @@ Available layout variants: {", ".join(variant_names())}
 Design name should read like a real art direction, two or three words, no buzzwords.
 Rationale is one short sentence about who this design is for."""
 
-    raw = generate_json(prompt, design_schema(), system=DESIGN_SYSTEM)
+    try:
+        raw = generate_json(prompt, design_schema(), system=DESIGN_SYSTEM)
+    except GeminiError as exc:
+        # Never surface a broken feature: hand back a curated design instead.
+        return local_spec(ctx, reason=f"AI unavailable ({exc})")
     return normalize_design(raw, sections)
+
+
+def local_spec(ctx: dict, reason: str = "") -> dict:
+    """
+    Deterministic design built from the same curated library, with no AI call.
+
+    Used when Gemini is unreachable so the builder still opens a designed site.
+    Same shape as a Gemini result, flagged so the UI can be honest about it.
+    """
+    sections = ctx.get("sections") or []
+    modes = palette_modes()
+    by_type = _variants_for_types({s["type"] for s in sections})
+
+    seed = random.randint(1, 2_000_000_000)
+    # type affinity, mirroring DESIGN.TYPE_VIBES on the client
+    palette_pool = palette_ids()[:4]
+    if ctx.get("type") == "restaurant":
+        palette_pool = ["terracotta", "newsprint", "pine-bone", "black-tan"]
+
+    picks: dict[str, dict] = {}
+    for s in sections:
+        options = by_type.get(s["type"]) or ("split",)
+        picks[s["id"]] = {"variant": options[random.randrange(len(options))]}
+
+    spec = {
+        "v": 1,
+        "seed": seed,
+        "name": "Curated pick",
+        "mode": modes.get(random.choice(palette_pool), "light"),
+        "tokens": {
+            "palette": random.choice(palette_pool),
+            "font": random.choice(font_ids()),
+            "radius": random.choice(["0px", "4px", "10px"]),
+            "space": random.choice(["compact", "comfy", "airy"]),
+            "shadow": random.choice(["flat", "soft", "crisp"]),
+        },
+        "motion": {"reveal": random.choice([1, 2, 2, 3])},
+        "nav": random.choice(["bar", "minimal", "outline"]),
+        "footer": 1,
+        "sections": picks,
+        "source": "fallback",
+        "model": "curated-library",
+        "rationale": "Picked from the curated library because the AI call was unavailable.",
+        "unassigned": [],
+    }
+    if reason:
+        spec["warning"] = reason
+    return spec
 
 
 def normalize_design(raw: dict, sections: list[dict]) -> dict:
