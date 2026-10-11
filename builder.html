@@ -11,7 +11,14 @@
 </head>
 <body class="builder-body">
   <header class="builder-top">
-    <a class="navlink" href="dashboard.html"><i class="bi bi-chevron-left" aria-hidden="true"></i> My plans</a>
+    <div class="builder-top-left">
+      <button class="icon-btn chrome-toggle" id="railToggle" type="button"
+              aria-controls="rail" aria-expanded="true"
+              title="Hide the sidebar" aria-label="Hide the sidebar">
+        <i class="bi bi-layout-sidebar" aria-hidden="true"></i>
+      </button>
+      <a class="navlink" href="dashboard.html"><i class="bi bi-chevron-left" aria-hidden="true"></i> My plans</a>
+    </div>
 
     <div class="builder-top-mid">
       <input type="text" id="siteName" class="site-name-input" maxlength="60" aria-label="Website name">
@@ -19,6 +26,10 @@
     </div>
 
     <div class="builder-top-right">
+      <button class="btn btn-sm" id="focusBtn" type="button" aria-pressed="false"
+              title="Hide the editor chrome and see the whole site">
+        <i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> Preview
+      </button>
       <button class="btn btn-sm" id="footerBtn" type="button" aria-pressed="false">
         <i class="bi bi-layout-text-footer" aria-hidden="true"></i> Footer
       </button>
@@ -29,7 +40,7 @@
     </div>
   </header>
 
-  <div class="builder-shell">
+  <div class="builder-shell" id="shell">
     <!-- left rail: pages and the section library -->
     <aside class="builder-rail" id="rail" aria-label="Pages and sections">
       <div class="rail-pages">
@@ -52,8 +63,16 @@
     <!-- the page itself: this is the editor -->
     <main class="builder-canvas" id="canvas" tabindex="-1" aria-label="Your website, editable"></main>
 
-    <!-- styles panel (the WordPress Styles sidebar) -->
-    <aside class="builder-panel" id="stylesPanel" hidden aria-label="Design settings"></aside>
+    <!-- design settings, always on the right -->
+    <aside class="builder-panel" id="stylesPanel" aria-label="Design settings">
+      <div class="panel-bar">
+        <strong id="panelTitle">Design</strong>
+        <button class="icon-btn" id="panelClose" type="button" aria-label="Close the design panel">
+          <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div id="panelBody"></div>
+    </aside>
   </div>
 
   <script src="static/js/api.js"></script>
@@ -76,7 +95,6 @@
 
       var canvas = document.getElementById("canvas");
       var saveState = document.getElementById("saveState");
-      var stylesPanel = document.getElementById("stylesPanel");
 
       function currentPage() { return plan.pages[pageIndex]; }
 
@@ -204,12 +222,49 @@
 
       /* ---------------- styles panel ---------------- */
       document.getElementById("stylesBtn").addEventListener("click", function () {
-        if (!stylesPanel.hidden && panelMode === "styles") closePanel();
+        if (!shell.classList.contains("panel-closed") && panelMode === "styles") closePanel();
         else openPanel("styles");
       });
       document.getElementById("footerBtn").addEventListener("click", function () {
-        if (!stylesPanel.hidden && panelMode === "footer") closePanel();
+        if (!shell.classList.contains("panel-closed") && panelMode === "footer") closePanel();
         else openPanel("footer");
+      });
+      document.getElementById("panelClose").addEventListener("click", closePanel);
+
+      /* the left rail collapses too, so the page can use the whole screen */
+      var railToggle = document.getElementById("railToggle");
+      railToggle.addEventListener("click", function () {
+        var closed = shell.classList.toggle("rail-closed");
+        this.setAttribute("aria-expanded", String(!closed));
+        this.setAttribute("aria-label", closed ? "Show the sidebar" : "Hide the sidebar");
+        this.title = closed ? "Show the sidebar" : "Hide the sidebar";
+        Editor.positionToolbar();
+      });
+
+      /* preview mode: every bit of editor chrome out of the way */
+      var focusBtn = document.getElementById("focusBtn");
+      function setFocus(on) {
+        document.body.classList.toggle("is-focus", on);
+        focusBtn.setAttribute("aria-pressed", String(on));
+        focusBtn.innerHTML = on
+          ? '<i class="bi bi-pencil" aria-hidden="true"></i> Edit'
+          : '<i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> Preview';
+        if (on) {
+          var exit = document.createElement("button");
+          exit.className = "btn btn-sm focus-exit";
+          exit.type = "button";
+          exit.innerHTML = '<i class="bi bi-pencil" aria-hidden="true"></i> Back to editing';
+          exit.addEventListener("click", function () { setFocus(false); });
+          document.body.appendChild(exit);
+          window.__focusExit = exit;
+        } else if (window.__focusExit) {
+          window.__focusExit.remove();
+          window.__focusExit = null;
+        }
+        Editor.positionToolbar();
+      }
+      focusBtn.addEventListener("click", function () {
+        setFocus(!document.body.classList.contains("is-focus"));
       });
       document.getElementById("publishBtn").addEventListener("click", function () {
         location.href = "publish.html?id=" + plan.id;
@@ -264,30 +319,35 @@
       }
 
       /* ---------------- the right-hand panel ----------------
-         One sidebar with two modes: site-wide Styles, and the settings
-         for whichever block is selected (WordPress does the same). */
+         One sidebar with three modes: site-wide Design, the settings for
+         whichever block is selected, and the footer. It lives on the right
+         and starts open, and can be closed to see the whole site. */
       var panelMode = "styles";
+      var panelBody = document.getElementById("panelBody");
+      var panelTitle = document.getElementById("panelTitle");
+      var shell = document.getElementById("shell");
+      var PANEL_TITLES = { styles: "Design", block: "This section", footer: "Footer" };
 
       function openPanel(mode) {
         panelMode = mode;
-        stylesPanel.hidden = false;
+        shell.classList.remove("panel-closed");
+        panelTitle.textContent = PANEL_TITLES[mode] || "Design";
         document.getElementById("stylesBtn").setAttribute("aria-pressed", String(mode === "styles"));
         document.getElementById("footerBtn").setAttribute("aria-pressed", String(mode === "footer"));
         renderPanel();
       }
 
       function closePanel() {
-        panelMode = "styles";
-        stylesPanel.hidden = true;
+        shell.classList.add("panel-closed");
         document.getElementById("stylesBtn").setAttribute("aria-pressed", String(false));
         document.getElementById("footerBtn").setAttribute("aria-pressed", String(false));
       }
 
       function renderPanel() {
-        if (stylesPanel.hidden) return;
-        if (panelMode === "footer") EditorUI.footerPanel(stylesPanel);
-        else if (panelMode === "block") EditorUI.blockPanel(stylesPanel);
-        else EditorUI.stylesPanel(stylesPanel);
+        if (shell.classList.contains("panel-closed")) return;
+        if (panelMode === "footer") EditorUI.footerPanel(panelBody);
+        else if (panelMode === "block") EditorUI.blockPanel(panelBody);
+        else EditorUI.stylesPanel(panelBody);
       }
 
       /* ---------------- render ---------------- */
@@ -372,6 +432,9 @@
         buildPalette(document.getElementById("paletteStructure"), GROUPS.structure);
         buildPalette(document.getElementById("paletteContent"), GROUPS.content);
         render();
+        /* design controls live on the right and start open, so the page is
+           the first thing you see rather than a wall of buttons */
+        openPanel("styles");
       }
 
       if (wantedId) {
