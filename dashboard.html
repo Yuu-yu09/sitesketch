@@ -39,7 +39,10 @@
           <h1 id="greeting">My plans</h1>
           <p id="subline">Loading your projects…</p>
         </div>
-        <span class="hand" style="transform: rotate(-2deg);">everything saves automatically</span>
+        <div class="page-head-right">
+          <div class="mascot-slot" id="mascotSlot"></div>
+          <span class="hand page-note">everything saves automatically</span>
+        </div>
       </div>
 
       <div class="proj-grid" id="grid"></div>
@@ -48,6 +51,7 @@
 
   <script src="static/js/api.js"></script>
   <script src="static/js/site.js"></script>
+  <script src="static/js/mascot.js"></script>
   <script>
     (function () {
       var user = API.requireAuth();
@@ -59,6 +63,11 @@
       var h = new Date().getHours();
       var part = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
       document.getElementById("greeting").textContent = part + ", " + user.name;
+
+      /* greeter: matches the signed-in user's name */
+      if (window.Mascot) {
+        Mascot.mount(document.getElementById("mascotSlot"), { name: user.name });
+      }
 
       document.getElementById("logoutBtn").addEventListener("click", function () {
         API.logout();

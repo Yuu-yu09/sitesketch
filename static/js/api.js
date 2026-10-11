@@ -150,18 +150,6 @@
 
   function requireAuth() {
     var u = currentUser();
-    /* ?demo=1 - one-click demo sign-in (creates the demo account server side) */
-    if (!u && /[?&]demo=1/.test(location.search)) {
-      request("/api/auth/demo", { method: "POST" }).then(function (res) {
-        if (res.ok && res.data) {
-          setSession(res.data.token, res.data.user);
-          location.reload();
-        } else {
-          location.href = "login.html";
-        }
-      });
-      return null;
-    }
     if (!u) {
       location.href = "login.html?next=" + encodeURIComponent(location.pathname.split("/").pop() + location.search);
       return null;

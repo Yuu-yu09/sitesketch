@@ -98,16 +98,15 @@ def login():
 @bp.post("/demo")
 def demo():
     """
-    One-click demo sign-in for ?demo=1.
+    One-click sign-in for ?demo=1, for local screenshots and walkthroughs only.
 
-    Creates the demo account on first use and returns a real token, so the demo
-    path writes to the same Postgres rows a normal sign-up does. Set DEMO_MODE=0
-    to switch it off in production.
+    Disabled unless DEMO_MODE=1, so the public deployment has no demo door.
+    Creates the demo account on first use and returns a real token.
     """
     if not config.DEMO_MODE:
-        return jsonify(error="Demo sign-in is disabled"), 404
+        return jsonify(error="Not found"), 404
 
-    demo_email = "demo@sitesketch.app"
+    demo_email = config.DEMO_EMAIL
     row = db.query_one(
         f"select {PUBLIC_USER} from users where lower(email) = %s",
         (demo_email,),
