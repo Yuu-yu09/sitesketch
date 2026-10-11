@@ -43,7 +43,9 @@ SUPABASE_KEY = _get("SUPABASE_KEY")          # service_role - server-side only
 
 # AI
 GEMINI_API_KEY = _get("GEMINI_API_KEY")
-GEMINI_MODEL = _get("GEMINI_MODEL", "gemini-2.5-flash")
+# gemini-2.5-flash is retired for new keys; 3.8-flash is the current stable
+# flash tier and is fast enough for Vercel's short function timeout.
+GEMINI_MODEL = _get("GEMINI_MODEL", "gemini-3.8-flash")
 
 # auth
 JWT_SECRET = _get("JWT_SECRET")

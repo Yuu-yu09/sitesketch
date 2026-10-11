@@ -13,6 +13,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 import config
+import gemini
 from db import DatabaseUnavailable, query, query_one
 
 ROOT = pathlib.Path(__file__).parent
@@ -90,6 +91,45 @@ def api_sections():
             " from section_templates order by type_id, sort_order"
         )
     return jsonify([dict(r) for r in rows])
+
+
+# ------------------------------------------------------------------- API: AI
+
+@app.post("/api/design")
+def api_design():
+    """
+    Generate a full design spec for a plan.
+
+    Body: { siteName, type, goal, description, sections: [{id, type, title}] }
+    Returns the v1 spec consumed by static/js/design.js - same shape the browser
+    mock produces, so nothing downstream needs to know Gemini was involved.
+    """
+    body = request.get_json(silent=True) or {}
+    ctx = {
+        "siteName": (body.get("siteName") or "My Website")[:60],
+        "type": body.get("type") or "business",
+        "goal": body.get("goal") or "get-contact",
+        "description": (body.get("description") or "")[:400],
+        "sections": body.get("sections") or [],
+    }
+    if not ctx["sections"]:
+        return jsonify(error="sections are required", hint="send [{id, type, title}]"), 400
+    try:
+        spec = gemini.generate_design(ctx)
+    except gemini.GeminiError as exc:
+        return jsonify(error="ai_unavailable", detail=str(exc)), 502
+    return jsonify(spec)
+
+
+@app.get("/api/design/library")
+def api_design_library():
+    """The curated library the UI shows in the customizer."""
+    return jsonify(
+        palettes=gemini.palette_ids(),
+        fonts=gemini.font_ids(),
+        variants=gemini.variant_names(),
+        model=config.GEMINI_MODEL,
+    )
 
 
 # ---------------------------------------------------------------- page serving

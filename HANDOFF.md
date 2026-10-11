@@ -121,8 +121,29 @@ Last session: **Oct 11, 2026**. Read this first when resuming.
 - `.env` wired with the user's real values (gitignored, verified via `git check-ignore`);
   `.env.example` updated to the same variable names with empty values.
 
+**LIVE: real AI design generation (Oct 11).** `gemini.py` + `POST /api/design` are working
+against the real Gemini API. Verified end-to-end: a carinderia brief came back as
+"Heritage Clay" / terracotta + Newsreader / 4px radius / flat shadow, layout variants for
+the sections the model chose (8.6 s round trip). `GET /api/design/library` exposes the
+curated library for the customizer.
+
+Notes that matter next session:
+- **Model:** `gemini-2.5-flash` is **retired for new keys** (404 on generateContent).
+  `gemini-3.8-flash` is the current stable flash tier and is the default now.
+- **Gemini's schema subset only accepts string enums** - integer enums (reveal, footer)
+  are unconstrained in the request and clamped in `normalize_design()`.
+- **The model picks only from our library** (palette ids, font pairing ids, variant names
+  parsed straight out of `static/js/design.js`), so AI output stays inside the taste
+  guardrails. Invalid values are dropped and fall back to the deterministic picker.
+- **Partial coverage is normal:** the model returned variants for 3 of 6 sections;
+  `unassigned` lists the rest and the browser falls back per section. No retry (latency).
+- Latency ~8.6 s -> the UI needs a real loading state, and per-section fills should use
+  `flash-lite` rather than `flash`.
+- Gemini key is in `.env` (gitignored) but was pasted in chat; rotate when convenient.
+
 **Backend build order (next session, after Phase 1 spec is stable so `/api/design` has a fixed contract):**
 1. [x] `requirements.txt`, `config.py`, `db.py`, `app.py`, `api/index.py`, `vercel.json`
+1b. [x] `gemini.py` + `POST /api/design` + `GET /api/design/library` (live)
 2. [x] DB layer (`db.py`: psycopg 3 helpers) + `/api/health`, `/api/db/ping`, `/api/types`,
    `/api/goals`, `/api/sections` + page-serving routes. Verified serving all 7 pages and
    `/static/*` on port 3000 via Flask's test client.
