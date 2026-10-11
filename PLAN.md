@@ -172,6 +172,11 @@ create table ai_logs (                   -- useful for your defense ("AI usage")
 
 > **Auth note:** registration/login stays in Flask (hashed passwords via `werkzeug`) — Supabase is used as the *database*, which is exactly what "Supabase for database storing" means. (Optional later: swap to Supabase Auth.)
 
+> **Amendment (Oct 11, 2026):** auth now also offers **Google + GitHub sign-in**
+> (OAuth 2.0 redirect flow, provider accounts stored in an `oauth_accounts` table) on top
+> of email/password. Sessions are issued as JWTs signed with `JWT_SECRET`. Supabase
+> remains the database + Storage only (no Supabase Auth).
+
 ---
 
 ## 4. Feature design (new four)

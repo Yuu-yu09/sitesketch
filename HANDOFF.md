@@ -102,9 +102,48 @@ Last session: **Oct 11, 2026**. Read this first when resuming.
 7. Git push plan (approved, not done): push remote HEAD to `legacy-react`, then force-push
    local `main`. Git identity is `Nicole <nicolesoriae@gmail.com>`.
 
+## 5b. Backend setup done (Oct 11, after the pause)
+
+**Decisions taken by the user:**
+- Backend runtime: **Python Flask** (keeps PLAN.md / proposal accurate; consumes the
+  `DATABASE_URL` / `JWT_SECRET` / OAuth vars already in `.env`)
+- Auth: **email/password + Google + GitHub OAuth** (social sign-in is now a feature, so
+  PLAN.md's auth note and proposal need the amendment added to PLAN.md §12)
+- Supabase = database only (direct Postgres), Storage bucket `sites` for published sites
+
+**Created:**
+- `supabase/schema.sql` (run first) - users, website_types, goals, section_templates,
+  projects, ai_logs, indexes, `updated_at` trigger, public `sites` bucket. **Deviation from
+  PLAN.md:** text slug PKs (`'business'`, `'get-contact'`) instead of `uuid`, so DB keys
+  match `static/js/api.js` and the design engine with no translation layer. Commented-out
+  `oauth_accounts` table for social login.
+- `supabase/seed.sql` (run second) - 6 types, 14 goals, 35 section templates, idempotent.
+- `.env` wired with the user's real values (gitignored, verified via `git check-ignore`);
+  `.env.example` updated to the same variable names with empty values.
+
+**Backend build order (next session, after Phase 1 spec is stable so `/api/design` has a fixed contract):**
+1. `requirements.txt`, `config.py`, `app.py` (Flask blueprint `/api`), `api/index.py`
+   (Vercel WSGI entry), `vercel.json` (rewrite `/api/*` -> WSGI, keep static)
+2. DB layer: `psycopg` pool against `DATABASE_URL`, queries mirroring `api.js`
+3. Auth: register/login with `werkzeug` password hashes + `flask-jwt-extended`
+   (`JWT_SECRET`); drop `?demo=1` to a dev-only flag in production
+4. OAuth: `/api/auth/google` + `/api/auth/github` redirect flow (Authlib), upsert into
+   `oauth_accounts`; callback URLs to register with both providers
+5. AI: `/api/plan`, `/api/design` (Gemini structured output matching the `design.js`
+   v1 schema), `/api/section`; log every call into `ai_logs`
+6. Publish: compile site in memory -> upload to Storage -> serve `/site/<slug>` and
+   `/site/<slug>/about`; real `view_count` increments replace the demo figure
+7. Swap `static/js/api.js` from localStorage mock to `fetch` (same public interface)
+8. `tests/` (pytest) + README setup; then deploy per §5
+
 ## 6. Blocked on the user
-- Supabase project + keys (`.env` slots `SUPABASE_URL`, `SUPABASE_KEY` exist, empty).
-- Gemini API key (`GEMINI_API_KEY` slot, empty). **Server-side only, never committed.**
+- **Rotate exposed secrets** (pasted in chat 2026-10-11): Supabase DB password, GitHub
+  OAuth secret, Google OAuth secret, `JWT_SECRET`. Update `.env` afterwards.
+- `GEMINI_API_KEY` - the AI backbone; features stay mocked without it.
+- `SUPABASE_KEY` - Supabase **service_role** key, required to upload published sites.
+- OAuth app callback URLs (to confirm with the user):
+  `http://localhost:3000/api/auth/google/callback` and `.../github/callback`, plus the
+  production equivalents once the Vercel domain exists.
 
 ## 7. Environment notes
 - PowerShell: use `npx.cmd` / `npm.cmd`; `gh` at `$env:ProgramFiles\GitHub CLI\gh.exe`.
