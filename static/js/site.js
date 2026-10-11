@@ -471,11 +471,14 @@
     var html = block(ctx);
     if (!editable) return html;
 
-    /* the block grip (drag handle + hover affordance), inserted just inside
-       the opening tag. Only ever rendered in the editor, never on a
-       published page. */
-    var grip = '<span class="sec-grip" aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>';
-    return html.replace(/^<section\b[^>]*>/, function (tag) { return tag + grip; });
+    /* the block grip (drag handle + hover affordance), inserted as the first
+       child of the section. Only ever rendered in the editor, never on a
+       published page. It is a real button so keyboard and screen-reader
+       users can reach it, not just people who can drag a mouse. */
+    var label = "Reorder this section. Use the up and down buttons in the toolbar to move it.";
+    var grip = '<button type="button" class="sec-grip" data-grip aria-label="' + esc(label) + '">' +
+      '<i class="bi bi-grip-vertical" aria-hidden="true"></i></button>';
+    return html.replace(/^(<section\b[^>]*>)/, function (whole) { return whole + grip; });
   }
 
   /* options: { editable, live } */

@@ -215,22 +215,41 @@
         changed();
       });
 
-      /* ---------------- drag to reorder sections ---------------- */
+      /* ---------------- drag to reorder sections ----------------
+         Sortable must be attached to the element that directly contains
+         the sections (main inside the rendered site), not the canvas -
+         otherwise it measures the nav and footer as draggable slots. */
       var sortable = null;
+      function sectionList() {
+        return canvas.querySelector(".ss-site main") || canvas;
+      }
       function wireSortable() {
         if (sortable) { sortable.destroy(); sortable = null; }
         if (typeof Sortable === "undefined") return;
-        sortable = Sortable.create(canvas, {
+        var list = sectionList();
+        if (!list.querySelector(".ss-sec")) return;
+        sortable = Sortable.create(list, {
           handle: ".sec-grip",
-          filter: "[data-edit], [data-img-slot], a, button, input, textarea",
           draggable: ".ss-sec",
           ghostClass: "is-ghost",
           chosenClass: "is-chosen",
+          dragClass: "is-dragging",
           animation: 160,
+          /* mouse-event dragging rather than HTML5 drag-and-drop:
+             works with touch and pen, and behaves the same everywhere */
+          forceFallback: true,
+          fallbackTolerance: 4,
+          fallbackOnBody: true,
+          scroll: true,
+          /* clicking the grip selects the block, matching the page */
+          onStart: function () {
+            var el = this.el;
+            if (el && el.dataset.sect) Editor.select(el.dataset.sect);
+          },
           onEnd: function (event) {
             var page = currentPage();
             var from = event.oldIndex, to = event.newIndex;
-            if (from === to || from === undefined) return;
+            if (from === to || from === undefined || to === undefined) return;
             var moved = page.sections.splice(from, 1)[0];
             page.sections.splice(to, 0, moved);
             render();

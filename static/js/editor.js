@@ -340,6 +340,32 @@
       }
     });
 
+    /* the grip: click selects, keyboard arrows move the block.
+       Dragging is not the only way to reorder - that would lock out
+       anyone using a keyboard or a screen reader. */
+    Editor.root.addEventListener("click", function (event) {
+      var grip = event.target.closest("[data-grip]");
+      if (!grip) return;
+      var host = grip.closest(".ss-sec");
+      if (host) Editor.select(host.dataset.sect);
+    });
+
+    Editor.root.addEventListener("keydown", function (event) {
+      var grip = event.target.closest("[data-grip]");
+      if (!grip) return;
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        /* select first: a keyboard user tabs to the grip and presses an
+           arrow without ever clicking, so selectedId may still be stale */
+        var host = grip.closest(".ss-sec");
+        if (host) Editor.select(host.dataset.sect);
+        Editor.command(event.key === "ArrowUp" ? "up" : "down");
+        /* keep focus on the grip of the block we just moved */
+        var moved = Editor.root.querySelector('.ss-sec[data-sect="' + cssEscape(Editor.selectedId) + '"] [data-grip]');
+        if (moved) moved.focus();
+      }
+    });
+
     /* clicking away from a selected section clears the toolbar */
     document.addEventListener("click", function (event) {
       if (event.target.closest(".ss-sec") || event.target.closest(".block-toolbar")) return;
