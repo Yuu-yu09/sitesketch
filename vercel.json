@@ -1,19 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "builds": [
-    { "src": "api/index.py", "use": "@vercel/python" }
-  ],
   "functions": {
-    "api/index.py": {
-      "excludeFiles": "{.venv/**,tests/**,.impeccable/**,supabase/**,shot.html,HANDOFF.md,*.md}"
+    "app.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{.venv/**,tests/**,.impeccable/**,supabase/**,shot.html,*.md}"
     }
-  },
-  "routes": [
-    { "src": "/", "dest": "/index.html" },
-    { "handle": "filesystem" },
-    { "src": "/api/(.*)", "dest": "/api/index.py" },
-    { "src": "/site/(.*)", "dest": "/api/index.py" },
-    { "src": "/(.*)", "dest": "/api/index.py" }
-  ]
+  }
 }
