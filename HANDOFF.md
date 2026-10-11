@@ -122,9 +122,12 @@ Last session: **Oct 11, 2026**. Read this first when resuming.
   `.env.example` updated to the same variable names with empty values.
 
 **Backend build order (next session, after Phase 1 spec is stable so `/api/design` has a fixed contract):**
-1. `requirements.txt`, `config.py`, `app.py` (Flask blueprint `/api`), `api/index.py`
-   (Vercel WSGI entry), `vercel.json` (rewrite `/api/*` -> WSGI, keep static)
-2. DB layer: `psycopg` pool against `DATABASE_URL`, queries mirroring `api.js`
+1. [x] `requirements.txt`, `config.py`, `db.py`, `app.py`, `api/index.py`, `vercel.json`
+2. [x] DB layer (`db.py`: psycopg 3 helpers) + `/api/health`, `/api/db/ping`, `/api/types`,
+   `/api/goals`, `/api/sections` + page-serving routes. Verified serving all 7 pages and
+   `/static/*` on port 3000 via Flask's test client.
+3. [ ] Run `supabase/bootstrap.py` (blocked: the Supabase project ref in `.env` does not
+   exist - see §6)
 3. Auth: register/login with `werkzeug` password hashes + `flask-jwt-extended`
    (`JWT_SECRET`); drop `?demo=1` to a dev-only flag in production
 4. OAuth: `/api/auth/google` + `/api/auth/github` redirect flow (Authlib), upsert into
@@ -137,10 +140,16 @@ Last session: **Oct 11, 2026**. Read this first when resuming.
 8. `tests/` (pytest) + README setup; then deploy per §5
 
 ## 6. Blocked on the user
-- **Rotate exposed secrets** (pasted in chat 2026-10-11): Supabase DB password, GitHub
-  OAuth secret, Google OAuth secret, `JWT_SECRET`. Update `.env` afterwards.
+- **No working Supabase project yet.** The `DATABASE_URL` project ref
+  `dmqkrbbngdxzntihlmev` returns `FATAL: (ENOTFOUND) tenant/user ... not found` from the
+  pooler, i.e. that project does not exist. The whole env block looks like a starter
+  template (no `GEMINI_API_KEY`, no `SUPABASE_KEY`). Fix: create a real free project at
+  supabase.com, then paste (a) Settings -> Database -> Connection string (URI, session
+  pooler), (b) Settings -> API -> `service_role` key into `.env` and re-run
+  `supabase/bootstrap.py`. Confirm the Google/GitHub OAuth apps are actually theirs too.
+- **Rotate exposed secrets** (pasted in chat 2026-10-11): DB password, GitHub OAuth
+  secret, Google OAuth secret, `JWT_SECRET`. Update `.env` afterwards.
 - `GEMINI_API_KEY` - the AI backbone; features stay mocked without it.
-- `SUPABASE_KEY` - Supabase **service_role** key, required to upload published sites.
 - OAuth app callback URLs (to confirm with the user):
   `http://localhost:3000/api/auth/google/callback` and `.../github/callback`, plus the
   production equivalents once the Vercel domain exists.
