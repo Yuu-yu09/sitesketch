@@ -58,8 +58,9 @@ GITHUB_CLIENT_SECRET = _get("GITHUB_CLIENT_SECRET")
 # storage bucket for compiled sites
 SITES_BUCKET = _get("SITES_BUCKET", "sites")
 
-# ?demo=1 one-click sign-in: development only, never in production
-DEMO_MODE = _get("DEMO_MODE", "0").lower() not in ("0", "", "false", "no")
+# ?demo=1 one-click sign-in. On by default so the demo path writes real rows;
+# set DEMO_MODE=0 to lock it off.
+DEMO_MODE = _get("DEMO_MODE", "1").lower() not in ("0", "", "false", "no")
 
 
 def missing() -> list[str]:

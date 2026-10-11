@@ -1,16 +1,69 @@
 /* ============================================================
-   SiteSketch — client data layer (PROTOTYPE / MOCK)
-   ------------------------------------------------------------
-   Every function here mirrors a future Flask endpoint (see
-   PLAN.md §Routes). When the backend lands, the insides of
-   this file get replaced with fetch() calls — nothing else
-   in the app changes.
+   SiteSketch — client data layer
+
+   Talks to the real Flask API (/api/*) with a JWT. Accounts and
+   projects live in Supabase Postgres, so anything created on any
+   device is there on the next load.
+
+   The catalogue data below (site types, goals, section library) is
+   static and also seeded into Postgres for reference.
    ============================================================ */
 (function () {
   "use strict";
 
-  var DB_KEY = "sitesketch_db_v2";
-  var SESSION_KEY = "sitesketch_session_v1";
+  var TOKEN_KEY = "sitesketch_token_v1";
+  var USER_KEY = "sitesketch_user_v1";
+
+  /* ---------------- transport ---------------- */
+
+  function token() {
+    try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
+  }
+
+  function request(path, options) {
+    options = options || {};
+    var headers = options.headers || {};
+    if (token()) headers.Authorization = "Bearer " + token();
+    if (options.body) headers["Content-Type"] = "application/json";
+
+    return fetch(path, {
+      method: options.method || "GET",
+      headers: headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        var data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+        if (res.status === 401) {
+          clearSession();
+          return { ok: false, status: 401, error: (data && data.error) || "Please sign in again." };
+        }
+        if (!res.ok) {
+          return { ok: false, status: res.status, error: (data && data.error) || "Something went wrong." };
+        }
+        return { ok: true, status: res.status, data: data };
+      });
+    }).catch(function (err) {
+      return { ok: false, status: 0, error: "Cannot reach the server. Check your connection." };
+    });
+  }
+
+  function setSession(tokenValue, user) {
+    try {
+      localStorage.setItem(TOKEN_KEY, tokenValue);
+      /* the screens render user.name; normalise whatever the API sends */
+      localStorage.setItem(USER_KEY, JSON.stringify(Object.assign({}, user, {
+        name: user.name || user.username || user.email
+      })));
+    } catch (e) { /* private mode */ }
+  }
+
+  function clearSession() {
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    } catch (e) { /* ignore */ }
+  }
 
   /* ---------- seed data (mirrors supabase/seed.sql later) ---------- */
 
@@ -79,137 +132,35 @@
     blog:       ["hero", "blog", "about", "newsletter", "contact"]
   };
 
-  /* ---------- storage helpers ---------- */
-
-  function load() {
-    try {
-      var raw = localStorage.getItem(DB_KEY);
-      if (raw) { var stored = JSON.parse(raw); scrubLegacy(stored); return stored; }
-    } catch (e) { /* corrupt -> reseed */ }
-    var db = seed();
-    save(db);
-    return db;
-  }
-
-  /* one-time scrub of legacy demo identifiers in an already-stored db */
-  function scrubLegacy(db) {
-    var changed = false;
-    (db.users || []).forEach(function (u) {
-      if (u.id === "usr_demo" && (u.email === "alex@sitesketch.demo" || u.name === "Alex")) {
-        u.name = "Demo";
-        u.email = "demo@sitesketch.app";
-        changed = true;
-      }
-    });
-    (db.projects || []).forEach(function (p) {
-      if (p.name === "Sample Portfolio" || p.slug === "sample-portfolio") {
-        p.name = "My Portfolio";
-        p.slug = "my-portfolio";
-        changed = true;
-      }
-      if (p.plan_json && p.plan_json.meta && p.plan_json.meta.siteName === "Sample Portfolio") {
-        p.plan_json.meta.siteName = "My Portfolio";
-        changed = true;
-      }
-    });
-    if (changed) save(db);
-  }
-
-  function save(db) {
-    localStorage.setItem(DB_KEY, JSON.stringify(db));
-  }
+  /* ---------- ids ---------- */
 
   function uid(prefix) {
     return (prefix || "id") + "_" + Math.random().toString(36).slice(2, 9);
   }
 
-  /* ---------- seed: demo account + 2 demo projects ---------- */
-
-  function seed() {
-    var demoProject = {
-      id: "proj_demo_lolas",
-      name: "Lola's Kitchen",
-      type: "restaurant",
-      goal: "show-menu",
-      theme: "modern",
-      slug: "lolas-kitchen",
-      is_published: false,
-      view_count: 0,
-      created_at: Date.now() - 86400000 * 3,
-      updated_at: Date.now() - 86400000,
-      plan_json: {
-        meta: { type: "restaurant", goal: "show-menu", theme: "modern", siteName: "Lola's Kitchen" },
-        pages: [
-          { id: "home", name: "Home", sections: [
-            { id: uid("s"), type: "hero", title: "Home-cooked Filipino comfort food", subtitle: "Family recipes since 1987", fields: { buttonText: "See the menu" }, ready: 2 },
-            { id: uid("s"), type: "menu", title: "Menu highlights", subtitle: "Customer favorites", fields: {}, ready: 0 },
-            { id: uid("s"), type: "hours", title: "Hours & location", subtitle: "Open Tuesday to Sunday", fields: {}, ready: 1 }
-          ]},
-          { id: "about", name: "About", sections: [
-            { id: uid("s"), type: "about", title: "Our story", subtitle: "Three generations of home cooking", fields: {}, ready: 1 },
-            { id: uid("s"), type: "contact", title: "Get in touch", subtitle: "Reserve a table", fields: {}, ready: 0 }
-          ]}
-        ]
-      }
-    };
-
-    var portfolioProject = {
-      id: "proj_demo_portfolio",
-      name: "My Portfolio",
-      type: "portfolio",
-      goal: "get-hired",
-      theme: "modern",
-      slug: "my-portfolio",
-      is_published: true,
-      view_count: 12, /* demo figure — synthetic prototype data */
-      created_at: Date.now() - 86400000 * 10,
-      updated_at: Date.now() - 3600000 * 5,
-      plan_json: {
-        meta: { type: "portfolio", goal: "get-hired", theme: "modern", siteName: "My Portfolio" },
-        pages: [
-          { id: "home", name: "Home", sections: [
-            { id: uid("s"), type: "hero", title: "Design student & web enthusiast", subtitle: "Open to internships & collabs", fields: { buttonText: "View my work" }, ready: 3 },
-            { id: uid("s"), type: "gallery", title: "Selected work", subtitle: "School and personal projects", fields: {}, ready: 2 },
-            { id: uid("s"), type: "contact", title: "Get in touch", subtitle: "Open to internships", fields: {}, ready: 1 }
-          ]}
-        ]
-      }
-    };
-
-    return {
-      users: [
-        /* demo login shown on the login screen */
-        { id: "usr_demo", name: "Demo", email: "demo@sitesketch.app", password: "demo1234" }
-      ],
-      projects: [demoProject, portfolioProject]
-    };
-  }
-
-  /* ---------- auth (Flask session later) ---------- */
+  /* ---------- auth ---------- */
 
   function currentUser() {
     try {
-      var s = JSON.parse(localStorage.getItem(SESSION_KEY));
-      /* legacy demo session scrub (topbar identity) */
-      if (s && s.id === "usr_demo" && (s.email === "alex@sitesketch.demo" || s.name === "Alex")) {
-        s.name = "Demo";
-        s.email = "demo@sitesketch.app";
-        localStorage.setItem(SESSION_KEY, JSON.stringify(s));
-      }
-      return s && s.name ? s : null;
+      if (!token()) return null;
+      var u = JSON.parse(localStorage.getItem(USER_KEY) || "null");
+      return u && u.email ? u : null;
     } catch (e) { return null; }
   }
 
   function requireAuth() {
     var u = currentUser();
-    /* ?demo=1 — one-click demo sign-in (for demos/screenshots; no server yet) */
+    /* ?demo=1 - one-click demo sign-in (creates the demo account server side) */
     if (!u && /[?&]demo=1/.test(location.search)) {
-      var db = load();
-      var d = db.users.filter(function (x) { return x.email === "demo@sitesketch.app"; })[0];
-      if (d) {
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ id: d.id, name: d.name, email: d.email }));
-        u = JSON.parse(localStorage.getItem(SESSION_KEY));
-      }
+      request("/api/auth/demo", { method: "POST" }).then(function (res) {
+        if (res.ok && res.data) {
+          setSession(res.data.token, res.data.user);
+          location.reload();
+        } else {
+          location.href = "login.html";
+        }
+      });
+      return null;
     }
     if (!u) {
       location.href = "login.html?next=" + encodeURIComponent(location.pathname.split("/").pop() + location.search);
@@ -357,85 +308,93 @@
     currentUser: currentUser,
     requireAuth: requireAuth,
     login: function (email, password) {
-      var db = load();
-      var u = db.users.filter(function (x) { return x.email.toLowerCase() === String(email).toLowerCase(); })[0];
-      if (!u || u.password !== password) return { ok: false, error: "That email and password don't match an account." };
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ id: u.id, name: u.name, email: u.email }));
-      return { ok: true, user: u };
+      return request("/api/auth/login", {
+        method: "POST",
+        body: { email: email, password: password }
+      }).then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error };
+        setSession(res.data.token, res.data.user);
+        return { ok: true, user: res.data.user };
+      });
     },
     register: function (name, email, password) {
-      var db = load();
-      if (db.users.some(function (x) { return x.email.toLowerCase() === String(email).toLowerCase(); }))
-        return { ok: false, error: "An account with that email already exists." };
-      var u = { id: uid("usr"), name: name, email: email, password: password };
-      db.users.push(u);
-      save(db);
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ id: u.id, name: u.name, email: u.email }));
-      return { ok: true, user: u };
+      return request("/api/auth/register", {
+        method: "POST",
+        body: { username: name, email: email, password: password }
+      }).then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error };
+        setSession(res.data.token, res.data.user);
+        return { ok: true, user: res.data.user };
+      });
     },
-    logout: function () { localStorage.removeItem(SESSION_KEY); },
+    logout: function () {
+      clearSession();
+    },
 
     /* projects */
     listProjects: function () {
-      return load().projects.slice().sort(function (a, b) { return b.updated_at - a.updated_at; });
+      return request("/api/projects").then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error, projects: [] };
+        return { ok: true, projects: res.data || [] };
+      });
     },
     getProject: function (id) {
-      return load().projects.filter(function (p) { return p.id === id; })[0] || null;
+      return request("/api/projects/" + encodeURIComponent(id)).then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error, project: null };
+        return { ok: true, project: res.data };
+      });
     },
     createProject: function (name, typeId, goalId) {
-      var db = load();
-      var p = {
-        id: uid("proj"),
-        name: name,
-        type: typeId,
-        goal: goalId,
-        theme: "modern",
-        slug: null,
-        is_published: false,
-        view_count: 0,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        plan_json: makePlan(typeId, goalId, name)
-      };
-      db.projects.push(p);
-      save(db);
-      return p;
+      return request("/api/projects", {
+        method: "POST",
+        body: {
+          name: name,
+          type: typeId,
+          goal: goalId,
+          plan_json: makePlan(typeId, goalId, name)
+        }
+      }).then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error, project: null };
+        return { ok: true, project: res.data };
+      });
     },
     savePlan: function (projectId, plan) {
-      var db = load();
-      var p = db.projects.filter(function (x) { return x.id === projectId; })[0];
-      if (!p) return null;
-      p.plan_json = plan;
-      p.type = plan.meta.type;
-      p.goal = plan.meta.goal;
-      p.theme = plan.meta.theme;
-      p.name = plan.meta.siteName || p.name;
-      p.updated_at = Date.now();
-      save(db);
-      return p;
+      return request("/api/projects/" + encodeURIComponent(projectId), {
+        method: "PUT",
+        body: {
+          plan_json: plan,
+          name: (plan.meta && plan.meta.siteName) || undefined,
+          theme: plan.meta && plan.meta.theme
+        }
+      }).then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error, project: null };
+        return { ok: true, project: res.data };
+      });
     },
     deleteProject: function (projectId) {
-      var db = load();
-      db.projects = db.projects.filter(function (p) { return p.id !== projectId; });
-      save(db);
+      return request("/api/projects/" + encodeURIComponent(projectId), { method: "DELETE" });
     },
 
-    /* publish (server compiles later — this is the same UX contract) */
+    /* publish */
     setPublished: function (projectId, published, slug) {
-      var db = load();
-      var p = db.projects.filter(function (x) { return x.id === projectId; })[0];
-      if (!p) return null;
-      p.is_published = !!published;
-      if (slug !== undefined) p.slug = slug;
-      p.updated_at = Date.now();
-      save(db);
-      return p;
+      var path = "/api/projects/" + encodeURIComponent(projectId) + (published ? "/publish" : "/unpublish");
+      return request(path, { method: "POST", body: published ? { slug: slug } : {} })
+        .then(function (res) {
+          if (!res.ok) return { ok: false, error: res.error, project: null };
+          return { ok: true, project: res.data };
+        });
     },
     baseUrl: function () {
-      return "https://sitesketch.vercel.app";
+      return location.origin;
     },
 
     /* AI */
+    generateDesign: function (ctx) {
+      return request("/api/design", { method: "POST", body: ctx }).then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error };
+        return { ok: true, spec: res.data };
+      });
+    },
     generatePlan: generatePlan,
     fillSection: fillSection,
     fillPage: fillPage

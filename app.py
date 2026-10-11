@@ -16,6 +16,7 @@ from flask_jwt_extended import JWTManager
 import auth
 import config
 import gemini
+import projects
 from db import DatabaseUnavailable, query, query_one
 
 ROOT = pathlib.Path(__file__).parent
@@ -26,6 +27,7 @@ app.config["JWT_TOKEN_LOCATION"] = ["headers"]
 CORS(app)
 jwt = JWTManager(app)
 app.register_blueprint(auth.bp)
+app.register_blueprint(projects.bp)
 
 PAGES = ("", "index", "login", "register", "dashboard", "plan", "builder", "publish")
 

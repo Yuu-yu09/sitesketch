@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SiteSketch</title>
+  <title>Builder</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%23fff' stroke='%2316283C' stroke-width='2.5'/%3E%3Cpath d='M16 3.5v25M3.5 16h25' stroke='%2316283C' stroke-width='1.4' opacity='.35'/%3E%3Crect x='17.5' y='4.5' width='10' height='10' fill='%23D6452F'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="static/css/fonts.css">
   <link rel="stylesheet" href="static/icons/bootstrap-icons.css">
@@ -86,411 +86,435 @@
       var user = API.requireAuth();
       if (!user) return;
 
-      /* ---------- load project ---------- */
+      /* ---------- load project (from Postgres now) ---------- */
       var params = new URLSearchParams(location.search);
-      var proj = (params.get("id") && API.getProject(params.get("id"))) || API.listProjects()[0];
-      if (!proj) { location.href = "plan.html"; return; }
+      var wantedId = params.get("id");
 
-      var plan = JSON.parse(JSON.stringify(proj.plan_json));
-      if (!plan.pages || !plan.pages.length) plan.pages = [{ id: "home", name: "Home", sections: [] }];
-      var active = 0;
+      function start(proj) {
+          var plan = JSON.parse(JSON.stringify(proj.plan_json));
+          if (!plan.pages || !plan.pages.length) plan.pages = [{ id: "home", name: "Home", sections: [] }];
+          var active = 0;
 
-      document.title = plan.meta.siteName + " — Builder — SiteSketch";
-      document.getElementById("projTitle").textContent = plan.meta.siteName;
-      document.getElementById("siteName").value = plan.meta.siteName;
-      document.getElementById("themeSel").value = plan.meta.theme || "modern";
-      document.getElementById("publishBtn").href = "publish.html?id=" + proj.id;
+          document.getElementById("projTitle").textContent = plan.meta.siteName;
+          document.getElementById("siteName").value = plan.meta.siteName;
+          document.getElementById("themeSel").value = plan.meta.theme || "modern";
+          document.getElementById("publishBtn").href = "publish.html?id=" + proj.id;
 
-      /* ---------- saving ---------- */
-      var saveTimer = null;
-      var saveState = document.getElementById("saveState");
-      function markDirty() {
-        saveState.classList.add("dirty");
-        saveState.innerHTML = '<span class="pip"></span> Saving…';
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(function () {
-          API.savePlan(proj.id, plan);
-          saveState.classList.remove("dirty");
-          saveState.innerHTML = '<span class="pip"></span> Saved';
-        }, 600);
-      }
-
-      /* ---------- palette ---------- */
-      var GROUPS = {
-        structure: ["hero", "about", "cta", "contact", "faq", "hours", "newsletter"],
-        content: ["features", "gallery", "products", "menu", "testimonials", "team", "blog"]
-      };
-      function buildPalette(el, keys) {
-        keys.forEach(function (k) {
-          var s = API.SECTIONS[k];
-          var b = document.createElement("button");
-          b.type = "button";
-          b.className = "palette-item";
-          b.setAttribute("data-type", k);
-          b.innerHTML = '<i class="bi ' + s.icon + '" aria-hidden="true"></i> ' + SS.esc(s.name) +
-            '<i class="bi bi-grip-vertical grip" aria-hidden="true"></i>';
-          b.addEventListener("click", function () {
-            if (dragGuard) return;
-            addSection(k, plan.pages[active].sections.length);
-            SS.toast(s.name + " added", "bi-plus-lg");
-          });
-          el.appendChild(b);
-        });
-      }
-      buildPalette(document.getElementById("paletteStructure"), GROUPS.structure);
-      buildPalette(document.getElementById("paletteContent"), GROUPS.content);
-
-      var dragGuard = false;
-
-      /* ---------- render: tabs ---------- */
-      var tabsEl = document.getElementById("pageTabs");
-      var renaming = -1;       /* index of the tab whose name is being typed */
-      var pendingDelete = -1;  /* index armed for two-step delete */
-      var pendingTimer = null;
-
-      function renderTabs() {
-        tabsEl.innerHTML = "";
-        plan.pages.forEach(function (p, i) {
-          var b = document.createElement("button");
-          b.type = "button";
-          b.className = "page-tab";
-          b.setAttribute("role", "tab");
-          b.setAttribute("aria-selected", i === active ? "true" : "false");
-
-          var label = document.createElement("span");
-          label.className = "tab-label";
-          label.textContent = p.name;
-          b.appendChild(label);
-
-          if (renaming === i) {
-            b.classList.add("editing");
-            var inp = document.createElement("input");
-            inp.type = "text";
-            inp.className = "tab-rename";
-            inp.value = p.name;
-            inp.setAttribute("aria-label", "Page name");
-            label.textContent = "";
-            label.appendChild(inp);
-            setTimeout(function () { inp.focus(); inp.select(); }, 0);
-
-            var stopRenaming = function (commit) {
-              if (renaming !== i) return;
-              if (commit) {
-                var v = inp.value.trim();
-                if (v && v !== p.name) { p.name = v; markDirty(); renderPreview(); }
-              }
-              renaming = -1;
-              label.textContent = p.name;
-              b.classList.remove("editing");
-            };
-            inp.addEventListener("keydown", function (e) {
-              e.stopPropagation();
-              if (e.key === "Enter") { e.preventDefault(); stopRenaming(true); }
-              else if (e.key === "Escape") { e.preventDefault(); stopRenaming(false); }
-            });
-            inp.addEventListener("blur", function () { stopRenaming(true); });
+          /* ---------- saving (debounced, writes to Postgres) ---------- */
+          var saveTimer = null;
+          var saveState = document.getElementById("saveState");
+          function markDirty() {
+            saveState.classList.add("dirty");
+            saveState.innerHTML = '<span class="pip"></span> Saving…';
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function () {
+              API.savePlan(proj.id, plan).then(function (res) {
+                if (!res.ok) {
+                  saveState.classList.remove("dirty");
+                  saveState.innerHTML = '<span class="pip"></span> Not saved';
+                  SS.toast(res.error || "Could not save your changes", "bi-exclamation-triangle");
+                  return;
+                }
+                saveState.classList.remove("dirty");
+                saveState.innerHTML = '<span class="pip"></span> Saved';
+              });
+            }, 600);
           }
 
-          b.addEventListener("click", function () {
-            if (active === i || renaming !== -1) return;
-            active = i;
-            var kids = tabsEl.querySelectorAll(".page-tab");
-            for (var k = 0; k < kids.length; k++) {
-              kids[k].setAttribute("aria-selected", k === i ? "true" : "false");
-            }
-            renderCanvas(); renderPreview();
-          });
-          b.addEventListener("dblclick", function () { renamePage(i); });
-
-          if (plan.pages.length > 1) {
-            var del = document.createElement("span");
-            del.className = "del";
-            del.setAttribute("role", "button");
-            del.setAttribute("tabindex", "0");
-            if (pendingDelete === i) {
-              del.classList.add("confirm");
-              del.title = "Click again to delete";
-              del.setAttribute("aria-label", "Click again to confirm deleting page " + p.name);
-            } else {
-              del.title = "Delete page";
-              del.setAttribute("aria-label", "Delete page " + p.name);
-            }
-            del.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
-            del.addEventListener("click", function (e) { e.stopPropagation(); tryDelete(i); });
-            del.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); tryDelete(i); } });
-            b.appendChild(del);
-          }
-          tabsEl.appendChild(b);
-        });
-
-        var add = document.createElement("button");
-        add.type = "button";
-        add.className = "page-tab page-tab-add";
-        add.innerHTML = '<i class="bi bi-plus-lg" aria-hidden="true"></i> Add page';
-        add.addEventListener("click", addPage);
-        tabsEl.appendChild(add);
-
-        var ai = document.createElement("button");
-        ai.type = "button";
-        ai.className = "btn btn-sm page-tab-ai";
-        ai.id = "aiFillBtn";
-        ai.innerHTML = '<i class="bi bi-lightning" aria-hidden="true"></i> AI fill this page';
-        ai.addEventListener("click", fillCurrentPage);
-        tabsEl.appendChild(ai);
-      }
-
-      function fillCurrentPage() {
-        var page = plan.pages[active];
-        if (!page.sections.length) {
-          SS.toast("Add a section first — then AI will fill it", "bi-lightning");
-          return;
-        }
-        var btn = document.getElementById("aiFillBtn");
-        btn.disabled = true;
-        btn.innerHTML = '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i> Writing…';
-        API.fillPage(page, plan.meta).then(function () {
-          markDirty(); renderTabs(); renderCanvas(); renderPreview();
-          SS.toast("AI filled all " + page.sections.length + " sections on this page", "bi-lightning");
-        });
-      }
-
-      function addPage() {
-        plan.pages.push({ id: "p" + Math.random().toString(36).slice(2, 8), name: "New page", sections: [] });
-        active = plan.pages.length - 1;
-        renaming = active;
-        markDirty(); renderTabs(); renderCanvas(); renderPreview();
-      }
-      function renamePage(i) {
-        active = i;
-        renaming = i;
-        renderTabs(); renderCanvas(); renderPreview();
-      }
-      function tryDelete(i) {
-        if (pendingDelete !== i) {                 /* first press: arm */
-          pendingDelete = i;
-          clearTimeout(pendingTimer);
-          pendingTimer = setTimeout(function () { pendingDelete = -1; renderTabs(); }, 3000);
-          renderTabs();
-          return;
-        }
-        clearTimeout(pendingTimer);                /* second press: delete */
-        pendingDelete = -1;
-        deletePage(i);
-      }
-      function deletePage(i) {
-        plan.pages.splice(i, 1);
-        if (!plan.pages.length) plan.pages = [{ id: "home", name: "Home", sections: [] }];
-        active = Math.min(active, plan.pages.length - 1);
-        markDirty(); renderTabs(); renderCanvas(); renderPreview();
-        SS.toast("Page deleted", "bi-trash3");
-      }
-
-      /* ---------- render: canvas ---------- */
-      var canvas = document.getElementById("canvas");
-      var canvasEmpty = document.getElementById("canvasEmpty");
-
-      function renderCanvas() {
-        var secs = plan.pages[active].sections;
-        canvas.innerHTML = "";
-        canvasEmpty.hidden = secs.length > 0;
-        canvas.style.display = secs.length ? "" : "none";
-
-        secs.forEach(function (s) {
-          var def = API.SECTIONS[s.type] || { name: s.type, icon: "bi-square" };
-          var row = document.createElement("div");
-          row.className = "sect";
-          row.setAttribute("role", "listitem");
-          row.setAttribute("data-id", s.id);
-          row.innerHTML =
-            '<span class="grip" title="Drag to reorder" aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>' +
-            '<span class="si"><i class="bi ' + def.icon + '" aria-hidden="true"></i></span>' +
-            '<span class="sect-body">' +
-              '<span class="sect-kind">' + SS.esc(s.type) + "</span>" +
-              '<div class="sect-title" contenteditable="true" spellcheck="false" role="textbox" aria-label="Title for ' + SS.esc(def.name) + '">' +
-                SS.esc(s.title || "") +
-              "</div>" +
-            "</span>" +
-            '<span class="sect-acts">' +
-              '<button class="icon-btn" data-act="ai" title="Write this with AI" aria-label="Generate content for ' + SS.esc(def.name) + ' with AI"><i class="bi bi-lightning" aria-hidden="true"></i></button>' +
-              '<button class="icon-btn" data-act="move" title="Move to another page" aria-label="Move ' + SS.esc(def.name) + ' to another page"><i class="bi bi-arrow-left-right" aria-hidden="true"></i></button>' +
-              '<button class="icon-btn" data-act="dup" title="Duplicate" aria-label="Duplicate ' + SS.esc(def.name) + '"><i class="bi bi-copy" aria-hidden="true"></i></button>' +
-              '<button class="icon-btn danger" data-act="del" title="Remove" aria-label="Remove ' + SS.esc(def.name) + '"><i class="bi bi-trash3" aria-hidden="true"></i></button>' +
-            "</span>";
-
-          var title = row.querySelector(".sect-title");
-          title.addEventListener("input", function () {
-            s.title = title.textContent;
-            markDirty();
-            schedulePreview();
-          });
-          title.addEventListener("keydown", function (e) {
-            if (e.key === "Enter") { e.preventDefault(); title.blur(); }
-          });
-
-          row.querySelector('[data-act="ai"]').addEventListener("click", function () {
-            var b = this;
-            b.disabled = true;
-            b.innerHTML = '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i>';
-            API.fillSection(s, plan.meta).then(function () {
-              markDirty(); renderCanvas(); renderPreview();
-              SS.toast("AI wrote the " + SS.esc(def.name) + " copy — edit anything you like", "bi-lightning");
-            });
-          });
-          row.querySelector('[data-act="del"]').addEventListener("click", function () {
-            plan.pages[active].sections = plan.pages[active].sections.filter(function (x) { return x.id !== s.id; });
-            markDirty(); renderCanvas(); renderPreview();
-            SS.toast("Section removed", "bi-trash3");
-          });
-          row.querySelector('[data-act="dup"]').addEventListener("click", function () {
-            var copy = JSON.parse(JSON.stringify(s));
-            copy.id = "s_" + Math.random().toString(36).slice(2, 9);
-            var idx = plan.pages[active].sections.indexOf(s);
-            plan.pages[active].sections.splice(idx + 1, 0, copy);
-            markDirty(); renderCanvas(); renderPreview();
-            SS.toast("Section duplicated", "bi-copy");
-          });
-          row.querySelector('[data-act="move"]').addEventListener("click", function (e) {
-            openMoveMenu(e.currentTarget, s);
-          });
-
-          canvas.appendChild(row);
-        });
-      }
-
-      function addSection(type, index) {
-        var def = API.SECTIONS[type];
-        var sec = {
-          id: "s_" + Math.random().toString(36).slice(2, 9),
-          type: type,
-          title: def.name,
-          subtitle: def.blurb,
-          fields: {},
-          ready: 0
+        /* ---------- palette ---------- */
+        var GROUPS = {
+          structure: ["hero", "about", "cta", "contact", "faq", "hours", "newsletter"],
+          content: ["features", "gallery", "products", "menu", "testimonials", "team", "blog"]
         };
-        plan.pages[active].sections.splice(index, 0, sec);
-        markDirty(); renderCanvas(); renderPreview();
-      }
-
-      function reconcile(from, to) {
-        var arr = plan.pages[active].sections;
-        var moved = arr.splice(from, 1)[0];
-        arr.splice(to, 0, moved);
-        markDirty(); renderPreview();
-      }
-
-      /* move-to-page popover */
-      function openMoveMenu(anchor, sec) {
-        closeMoveMenu();
-        var menu = document.createElement("div");
-        menu.className = "move-menu";
-        menu.setAttribute("role", "menu");
-        plan.pages.forEach(function (p, i) {
-          if (i === active) return;
-          var b = document.createElement("button");
-          b.type = "button";
-          b.setAttribute("role", "menuitem");
-          b.innerHTML = '<i class="bi bi-file-earmark" aria-hidden="true"></i> Move to “' + SS.esc(p.name) + "”";
-          b.addEventListener("click", function () {
-            var arr = plan.pages[active].sections;
-            arr.splice(arr.indexOf(sec), 1);
-            p.sections.push(sec);
-            closeMoveMenu();
-            markDirty(); renderCanvas(); renderPreview();
-            SS.toast("Moved to " + p.name, "bi-arrow-left-right");
+        function buildPalette(el, keys) {
+          keys.forEach(function (k) {
+            var s = API.SECTIONS[k];
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "palette-item";
+            b.setAttribute("data-type", k);
+            b.innerHTML = '<i class="bi ' + s.icon + '" aria-hidden="true"></i> ' + SS.esc(s.name) +
+              '<i class="bi bi-grip-vertical grip" aria-hidden="true"></i>';
+            b.addEventListener("click", function () {
+              if (dragGuard) return;
+              addSection(k, plan.pages[active].sections.length);
+              SS.toast(s.name + " added", "bi-plus-lg");
+            });
+            el.appendChild(b);
           });
-          menu.appendChild(b);
-        });
-        document.body.appendChild(menu);
-        var r = anchor.getBoundingClientRect();
-        menu.style.top = (r.bottom + 6) + "px";
-        menu.style.left = Math.max(8, Math.min(r.left - 140, window.innerWidth - 240)) + "px";
-        setTimeout(function () { document.addEventListener("click", outside); }, 0);
-        function outside(e) { if (!menu.contains(e.target)) closeMoveMenu(); }
-        menu._outside = outside;
-      }
-      function closeMoveMenu() {
-        var m = document.querySelector(".move-menu");
-        if (m) { document.removeEventListener("click", m._outside); m.remove(); }
-      }
-
-      /* ---------- preview / blueprint ---------- */
-      var frame = document.getElementById("previewFrame");
-      var bpPane = document.getElementById("bpPane");
-      var previewTimer = null;
-
-      function renderPreview() {
-        frame.srcdoc = SS.renderSite(plan, plan.pages[active].id);
-        bpPane.innerHTML = SS.blueprintTree(plan);
-      }
-      function schedulePreview() {
-        clearTimeout(previewTimer);
-        previewTimer = setTimeout(renderPreview, 700);
-      }
-
-      document.getElementById("segPreview").addEventListener("click", function () {
-        this.setAttribute("aria-pressed", "true");
-        document.getElementById("segBlueprint").setAttribute("aria-pressed", "false");
-        frame.hidden = false; bpPane.hidden = true;
-      });
-      document.getElementById("segBlueprint").addEventListener("click", function () {
-        this.setAttribute("aria-pressed", "true");
-        document.getElementById("segPreview").setAttribute("aria-pressed", "false");
-        frame.hidden = true; bpPane.hidden = false;
-      });
-
-      /* ---------- site settings ---------- */
-      document.getElementById("siteName").addEventListener("input", function () {
-        plan.meta.siteName = this.value;
-        document.getElementById("projTitle").textContent = this.value || "Untitled";
-        markDirty(); schedulePreview();
-      });
-      document.getElementById("themeSel").addEventListener("change", function () {
-        plan.meta.theme = this.value;
-        markDirty(); renderPreview();
-        SS.toast("Theme set to " + this.value, "bi-palette");
-      });
-
-      /* ---------- sortables ---------- */
-      Sortable.create(document.getElementById("paletteStructure"), {
-        group: { name: "palette", pull: "clone", put: false },
-        sort: false,
-        animation: 150,
-        onStart: function () { dragGuard = true; },
-        onEnd: function () { setTimeout(function () { dragGuard = false; }, 50); }
-      });
-      Sortable.create(document.getElementById("paletteContent"), {
-        group: { name: "palette", pull: "clone", put: false },
-        sort: false,
-        animation: 150,
-        onStart: function () { dragGuard = true; },
-        onEnd: function () { setTimeout(function () { dragGuard = false; }, 50); }
-      });
-
-      Sortable.create(canvas, {
-        group: { name: "sections", pull: false, put: ["palette"] },
-        handle: ".grip",
-        animation: 150,
-        ghostClass: "sortable-ghost",
-        chosenClass: "sortable-chosen",
-        dragClass: "sortable-drag",
-        draggable: ".sect, .palette-item",
-        onAdd: function (evt) {
-          var type = evt.item.getAttribute("data-type");
-          if (type) addSection(type, evt.newIndex);
-          else evt.item.remove();
-        },
-        onEnd: function (evt) {
-          if (evt.from === evt.to && evt.oldIndex !== evt.newIndex && !evt.item.getAttribute("data-type")) {
-            reconcile(evt.oldIndex, evt.newIndex);
-          }
         }
-      });
+        buildPalette(document.getElementById("paletteStructure"), GROUPS.structure);
+        buildPalette(document.getElementById("paletteContent"), GROUPS.content);
 
-      /* ---------- boot ---------- */
-      renderTabs();
-      renderCanvas();
-      renderPreview();
-      API.savePlan(proj.id, plan); /* normalize on open */
+        var dragGuard = false;
+
+        /* ---------- render: tabs ---------- */
+        var tabsEl = document.getElementById("pageTabs");
+        var renaming = -1;       /* index of the tab whose name is being typed */
+        var pendingDelete = -1;  /* index armed for two-step delete */
+        var pendingTimer = null;
+
+        function renderTabs() {
+          tabsEl.innerHTML = "";
+          plan.pages.forEach(function (p, i) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "page-tab";
+            b.setAttribute("role", "tab");
+            b.setAttribute("aria-selected", i === active ? "true" : "false");
+
+            var label = document.createElement("span");
+            label.className = "tab-label";
+            label.textContent = p.name;
+            b.appendChild(label);
+
+            if (renaming === i) {
+              b.classList.add("editing");
+              var inp = document.createElement("input");
+              inp.type = "text";
+              inp.className = "tab-rename";
+              inp.value = p.name;
+              inp.setAttribute("aria-label", "Page name");
+              label.textContent = "";
+              label.appendChild(inp);
+              setTimeout(function () { inp.focus(); inp.select(); }, 0);
+
+              var stopRenaming = function (commit) {
+                if (renaming !== i) return;
+                if (commit) {
+                  var v = inp.value.trim();
+                  if (v && v !== p.name) { p.name = v; markDirty(); renderPreview(); }
+                }
+                renaming = -1;
+                label.textContent = p.name;
+                b.classList.remove("editing");
+              };
+              inp.addEventListener("keydown", function (e) {
+                e.stopPropagation();
+                if (e.key === "Enter") { e.preventDefault(); stopRenaming(true); }
+                else if (e.key === "Escape") { e.preventDefault(); stopRenaming(false); }
+              });
+              inp.addEventListener("blur", function () { stopRenaming(true); });
+            }
+
+            b.addEventListener("click", function () {
+              if (active === i || renaming !== -1) return;
+              active = i;
+              var kids = tabsEl.querySelectorAll(".page-tab");
+              for (var k = 0; k < kids.length; k++) {
+                kids[k].setAttribute("aria-selected", k === i ? "true" : "false");
+              }
+              renderCanvas(); renderPreview();
+            });
+            b.addEventListener("dblclick", function () { renamePage(i); });
+
+            if (plan.pages.length > 1) {
+              var del = document.createElement("span");
+              del.className = "del";
+              del.setAttribute("role", "button");
+              del.setAttribute("tabindex", "0");
+              if (pendingDelete === i) {
+                del.classList.add("confirm");
+                del.title = "Click again to delete";
+                del.setAttribute("aria-label", "Click again to confirm deleting page " + p.name);
+              } else {
+                del.title = "Delete page";
+                del.setAttribute("aria-label", "Delete page " + p.name);
+              }
+              del.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
+              del.addEventListener("click", function (e) { e.stopPropagation(); tryDelete(i); });
+              del.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); tryDelete(i); } });
+              b.appendChild(del);
+            }
+            tabsEl.appendChild(b);
+          });
+
+          var add = document.createElement("button");
+          add.type = "button";
+          add.className = "page-tab page-tab-add";
+          add.innerHTML = '<i class="bi bi-plus-lg" aria-hidden="true"></i> Add page';
+          add.addEventListener("click", addPage);
+          tabsEl.appendChild(add);
+
+          var ai = document.createElement("button");
+          ai.type = "button";
+          ai.className = "btn btn-sm page-tab-ai";
+          ai.id = "aiFillBtn";
+          ai.innerHTML = '<i class="bi bi-lightning" aria-hidden="true"></i> AI fill this page';
+          ai.addEventListener("click", fillCurrentPage);
+          tabsEl.appendChild(ai);
+        }
+
+        function fillCurrentPage() {
+          var page = plan.pages[active];
+          if (!page.sections.length) {
+            SS.toast("Add a section first — then AI will fill it", "bi-lightning");
+            return;
+          }
+          var btn = document.getElementById("aiFillBtn");
+          btn.disabled = true;
+          btn.innerHTML = '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i> Writing…';
+          API.fillPage(page, plan.meta).then(function () {
+            markDirty(); renderTabs(); renderCanvas(); renderPreview();
+            SS.toast("AI filled all " + page.sections.length + " sections on this page", "bi-lightning");
+          });
+        }
+
+        function addPage() {
+          plan.pages.push({ id: "p" + Math.random().toString(36).slice(2, 8), name: "New page", sections: [] });
+          active = plan.pages.length - 1;
+          renaming = active;
+          markDirty(); renderTabs(); renderCanvas(); renderPreview();
+        }
+        function renamePage(i) {
+          active = i;
+          renaming = i;
+          renderTabs(); renderCanvas(); renderPreview();
+        }
+        function tryDelete(i) {
+          if (pendingDelete !== i) {                 /* first press: arm */
+            pendingDelete = i;
+            clearTimeout(pendingTimer);
+            pendingTimer = setTimeout(function () { pendingDelete = -1; renderTabs(); }, 3000);
+            renderTabs();
+            return;
+          }
+          clearTimeout(pendingTimer);                /* second press: delete */
+          pendingDelete = -1;
+          deletePage(i);
+        }
+        function deletePage(i) {
+          plan.pages.splice(i, 1);
+          if (!plan.pages.length) plan.pages = [{ id: "home", name: "Home", sections: [] }];
+          active = Math.min(active, plan.pages.length - 1);
+          markDirty(); renderTabs(); renderCanvas(); renderPreview();
+          SS.toast("Page deleted", "bi-trash3");
+        }
+
+        /* ---------- render: canvas ---------- */
+        var canvas = document.getElementById("canvas");
+        var canvasEmpty = document.getElementById("canvasEmpty");
+
+        function renderCanvas() {
+          var secs = plan.pages[active].sections;
+          canvas.innerHTML = "";
+          canvasEmpty.hidden = secs.length > 0;
+          canvas.style.display = secs.length ? "" : "none";
+
+          secs.forEach(function (s) {
+            var def = API.SECTIONS[s.type] || { name: s.type, icon: "bi-square" };
+            var row = document.createElement("div");
+            row.className = "sect";
+            row.setAttribute("role", "listitem");
+            row.setAttribute("data-id", s.id);
+            row.innerHTML =
+              '<span class="grip" title="Drag to reorder" aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>' +
+              '<span class="si"><i class="bi ' + def.icon + '" aria-hidden="true"></i></span>' +
+              '<span class="sect-body">' +
+                '<span class="sect-kind">' + SS.esc(s.type) + "</span>" +
+                '<div class="sect-title" contenteditable="true" spellcheck="false" role="textbox" aria-label="Title for ' + SS.esc(def.name) + '">' +
+                  SS.esc(s.title || "") +
+                "</div>" +
+              "</span>" +
+              '<span class="sect-acts">' +
+                '<button class="icon-btn" data-act="ai" title="Write this with AI" aria-label="Generate content for ' + SS.esc(def.name) + ' with AI"><i class="bi bi-lightning" aria-hidden="true"></i></button>' +
+                '<button class="icon-btn" data-act="move" title="Move to another page" aria-label="Move ' + SS.esc(def.name) + ' to another page"><i class="bi bi-arrow-left-right" aria-hidden="true"></i></button>' +
+                '<button class="icon-btn" data-act="dup" title="Duplicate" aria-label="Duplicate ' + SS.esc(def.name) + '"><i class="bi bi-copy" aria-hidden="true"></i></button>' +
+                '<button class="icon-btn danger" data-act="del" title="Remove" aria-label="Remove ' + SS.esc(def.name) + '"><i class="bi bi-trash3" aria-hidden="true"></i></button>' +
+              "</span>";
+
+            var title = row.querySelector(".sect-title");
+            title.addEventListener("input", function () {
+              s.title = title.textContent;
+              markDirty();
+              schedulePreview();
+            });
+            title.addEventListener("keydown", function (e) {
+              if (e.key === "Enter") { e.preventDefault(); title.blur(); }
+            });
+
+            row.querySelector('[data-act="ai"]').addEventListener("click", function () {
+              var b = this;
+              b.disabled = true;
+              b.innerHTML = '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i>';
+              API.fillSection(s, plan.meta).then(function () {
+                markDirty(); renderCanvas(); renderPreview();
+                SS.toast("AI wrote the " + SS.esc(def.name) + " copy — edit anything you like", "bi-lightning");
+              });
+            });
+            row.querySelector('[data-act="del"]').addEventListener("click", function () {
+              plan.pages[active].sections = plan.pages[active].sections.filter(function (x) { return x.id !== s.id; });
+              markDirty(); renderCanvas(); renderPreview();
+              SS.toast("Section removed", "bi-trash3");
+            });
+            row.querySelector('[data-act="dup"]').addEventListener("click", function () {
+              var copy = JSON.parse(JSON.stringify(s));
+              copy.id = "s_" + Math.random().toString(36).slice(2, 9);
+              var idx = plan.pages[active].sections.indexOf(s);
+              plan.pages[active].sections.splice(idx + 1, 0, copy);
+              markDirty(); renderCanvas(); renderPreview();
+              SS.toast("Section duplicated", "bi-copy");
+            });
+            row.querySelector('[data-act="move"]').addEventListener("click", function (e) {
+              openMoveMenu(e.currentTarget, s);
+            });
+
+            canvas.appendChild(row);
+          });
+        }
+
+        function addSection(type, index) {
+          var def = API.SECTIONS[type];
+          var sec = {
+            id: "s_" + Math.random().toString(36).slice(2, 9),
+            type: type,
+            title: def.name,
+            subtitle: def.blurb,
+            fields: {},
+            ready: 0
+          };
+          plan.pages[active].sections.splice(index, 0, sec);
+          markDirty(); renderCanvas(); renderPreview();
+        }
+
+        function reconcile(from, to) {
+          var arr = plan.pages[active].sections;
+          var moved = arr.splice(from, 1)[0];
+          arr.splice(to, 0, moved);
+          markDirty(); renderPreview();
+        }
+
+        /* move-to-page popover */
+        function openMoveMenu(anchor, sec) {
+          closeMoveMenu();
+          var menu = document.createElement("div");
+          menu.className = "move-menu";
+          menu.setAttribute("role", "menu");
+          plan.pages.forEach(function (p, i) {
+            if (i === active) return;
+            var b = document.createElement("button");
+            b.type = "button";
+            b.setAttribute("role", "menuitem");
+            b.innerHTML = '<i class="bi bi-file-earmark" aria-hidden="true"></i> Move to “' + SS.esc(p.name) + "”";
+            b.addEventListener("click", function () {
+              var arr = plan.pages[active].sections;
+              arr.splice(arr.indexOf(sec), 1);
+              p.sections.push(sec);
+              closeMoveMenu();
+              markDirty(); renderCanvas(); renderPreview();
+              SS.toast("Moved to " + p.name, "bi-arrow-left-right");
+            });
+            menu.appendChild(b);
+          });
+          document.body.appendChild(menu);
+          var r = anchor.getBoundingClientRect();
+          menu.style.top = (r.bottom + 6) + "px";
+          menu.style.left = Math.max(8, Math.min(r.left - 140, window.innerWidth - 240)) + "px";
+          setTimeout(function () { document.addEventListener("click", outside); }, 0);
+          function outside(e) { if (!menu.contains(e.target)) closeMoveMenu(); }
+          menu._outside = outside;
+        }
+        function closeMoveMenu() {
+          var m = document.querySelector(".move-menu");
+          if (m) { document.removeEventListener("click", m._outside); m.remove(); }
+        }
+
+        /* ---------- preview / blueprint ---------- */
+        var frame = document.getElementById("previewFrame");
+        var bpPane = document.getElementById("bpPane");
+        var previewTimer = null;
+
+        function renderPreview() {
+          frame.srcdoc = SS.renderSite(plan, plan.pages[active].id);
+          bpPane.innerHTML = SS.blueprintTree(plan);
+        }
+        function schedulePreview() {
+          clearTimeout(previewTimer);
+          previewTimer = setTimeout(renderPreview, 700);
+        }
+
+        document.getElementById("segPreview").addEventListener("click", function () {
+          this.setAttribute("aria-pressed", "true");
+          document.getElementById("segBlueprint").setAttribute("aria-pressed", "false");
+          frame.hidden = false; bpPane.hidden = true;
+        });
+        document.getElementById("segBlueprint").addEventListener("click", function () {
+          this.setAttribute("aria-pressed", "true");
+          document.getElementById("segPreview").setAttribute("aria-pressed", "false");
+          frame.hidden = true; bpPane.hidden = false;
+        });
+
+        /* ---------- site settings ---------- */
+        document.getElementById("siteName").addEventListener("input", function () {
+          plan.meta.siteName = this.value;
+          document.getElementById("projTitle").textContent = this.value || "Untitled";
+          markDirty(); schedulePreview();
+        });
+        document.getElementById("themeSel").addEventListener("change", function () {
+          plan.meta.theme = this.value;
+          markDirty(); renderPreview();
+          SS.toast("Theme set to " + this.value, "bi-palette");
+        });
+
+        /* ---------- sortables ---------- */
+        Sortable.create(document.getElementById("paletteStructure"), {
+          group: { name: "palette", pull: "clone", put: false },
+          sort: false,
+          animation: 150,
+          onStart: function () { dragGuard = true; },
+          onEnd: function () { setTimeout(function () { dragGuard = false; }, 50); }
+        });
+        Sortable.create(document.getElementById("paletteContent"), {
+          group: { name: "palette", pull: "clone", put: false },
+          sort: false,
+          animation: 150,
+          onStart: function () { dragGuard = true; },
+          onEnd: function () { setTimeout(function () { dragGuard = false; }, 50); }
+        });
+
+        Sortable.create(canvas, {
+          group: { name: "sections", pull: false, put: ["palette"] },
+          handle: ".grip",
+          animation: 150,
+          ghostClass: "sortable-ghost",
+          chosenClass: "sortable-chosen",
+          dragClass: "sortable-drag",
+          draggable: ".sect, .palette-item",
+          onAdd: function (evt) {
+            var type = evt.item.getAttribute("data-type");
+            if (type) addSection(type, evt.newIndex);
+            else evt.item.remove();
+          },
+          onEnd: function (evt) {
+            if (evt.from === evt.to && evt.oldIndex !== evt.newIndex && !evt.item.getAttribute("data-type")) {
+              reconcile(evt.oldIndex, evt.newIndex);
+            }
+          }
+        });
+
+        /* ---------- boot ---------- */
+        renderTabs();
+        renderCanvas();
+        renderPreview();
+        API.savePlan(proj.id, plan); /* normalize on open */
+      }
+
+      function noProject() {
+        SS.toast("That plan could not be found", "bi-exclamation-triangle");
+        location.href = "dashboard.html";
+      }
+
+      if (wantedId) {
+        API.getProject(wantedId).then(function (res) {
+          if (!res.ok || !res.project) return noProject();
+          start(res.project);
+        });
+      } else {
+        API.listProjects().then(function (res) {
+          if (!res.projects || !res.projects.length) return noProject();
+          start(res.projects[0]);
+        });
+      }
     })();
   </script>
 </body>

@@ -8,11 +8,13 @@ stored, logged, or returned. OAuth sign-in lives in oauth.py.
 from __future__ import annotations
 
 import re
+import secrets
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, jwt_required
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import config
 import db
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -36,6 +38,8 @@ def _problem(username: str, email: str, password: str) -> str | None:
 def _public(row: dict) -> dict:
     return {
         "id": str(row["id"]),
+        # the screens render user.name; username stays for clarity in the API
+        "name": row["username"],
         "username": row["username"],
         "email": row["email"],
         "role": row["role"],
@@ -87,6 +91,37 @@ def login():
     token = create_access_token(
         identity=str(row["id"]),
         additional_claims={"username": row["username"]},
+    )
+    return jsonify(token=token, user=_public(row))
+
+
+@bp.post("/demo")
+def demo():
+    """
+    One-click demo sign-in for ?demo=1.
+
+    Creates the demo account on first use and returns a real token, so the demo
+    path writes to the same Postgres rows a normal sign-up does. Set DEMO_MODE=0
+    to switch it off in production.
+    """
+    if not config.DEMO_MODE:
+        return jsonify(error="Demo sign-in is disabled"), 404
+
+    demo_email = "demo@sitesketch.app"
+    row = db.query_one(
+        f"select {PUBLIC_USER} from users where lower(email) = %s",
+        (demo_email,),
+    )
+    if not row:
+        row = db.query_one(
+            f"insert into users (username, email, password_hash) values (%s, %s, %s) "
+            f"returning {PUBLIC_USER}",
+            ("demo", demo_email, generate_password_hash(secrets.token_urlsafe(24))),
+        )
+
+    token = create_access_token(
+        identity=str(row["id"]),
+        additional_claims={"username": row["username"], "provider": "demo"},
     )
     return jsonify(token=token, user=_public(row))
 
