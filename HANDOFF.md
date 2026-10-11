@@ -161,19 +161,36 @@ Notes that matter next session:
 8. `tests/` (pytest) + README setup; then deploy per §5
 
 ## 6. Blocked on the user
-- **No working Supabase project yet.** The `DATABASE_URL` project ref
-  `dmqkrbbngdxzntihlmev` returns `FATAL: (ENOTFOUND) tenant/user ... not found` from the
-  pooler, i.e. that project does not exist. The whole env block looks like a starter
-  template (no `GEMINI_API_KEY`, no `SUPABASE_KEY`). Fix: create a real free project at
-  supabase.com, then paste (a) Settings -> Database -> Connection string (URI, session
-  pooler), (b) Settings -> API -> `service_role` key into `.env` and re-run
-  `supabase/bootstrap.py`. Confirm the Google/GitHub OAuth apps are actually theirs too.
 - **Rotate exposed secrets** (pasted in chat 2026-10-11): DB password, GitHub OAuth
   secret, Google OAuth secret, `JWT_SECRET`. Update `.env` afterwards.
-- `GEMINI_API_KEY` - the AI backbone; features stay mocked without it.
+- Confirm the Google/GitHub OAuth apps are actually theirs (they arrived in a block that
+  also contained a dead Supabase ref, so they may be template credentials).
 - OAuth app callback URLs (to confirm with the user):
-  `http://localhost:3000/api/auth/google/callback` and `.../github/callback`, plus the
+  `http://127.0.0.1:3000/api/auth/google/callback` and `.../github/callback`, plus the
   production equivalents once the Vercel domain exists.
+
+## 5c. Supabase is live (Oct 11, resolved)
+
+Project **`xvlkjcazhxqaahdalhon`**, region **Tokyo (`aws-0-ap-northeast-1`)**. The earlier
+`dmqkrbbngdxzntihlmev` ref in the original env block was a template placeholder.
+
+Connection facts that cost time to find (do not repeat):
+- Pooler host must be **`aws-0-`**, not `aws-1-` (the template env used `aws-1-`, which
+  fails with `ENOTFOUND tenant/user`).
+- The real database is **`postgres`**. "SiteSketch_DB" is only a dashboard label and
+  errors with `database "SiteSketch_DB" does not exist`.
+- The DB password **starts with `@`**, so it must stay percent-encoded as `%40` in
+  `DATABASE_URL`, otherwise auth fails with `password authentication failed`.
+- The direct host `db.<ref>.supabase.co` times out (IPv6-only) - use the pooler.
+- Keys are the new format: `sb_secret_*` = server-side secret, `sb_publishable_*` =
+  browser-safe. Use the secret key server-side; never the publishable one for admin work.
+
+`supabase/bootstrap.py` applied `schema.sql` + `seed.sql`: 6 tables, 6 types, 14 goals,
+33 section templates, public `sites` bucket. `/api/health` reports `missing: []`.
+
+**Auth is live** (`auth.py`): register / login / me with werkzeug-hashed passwords and
+JWTs. Verified: register 201, `/me` with token 200, login 200, duplicate email 409, wrong
+password 401, missing token 401. Test accounts were deleted afterwards.
 
 ## 7. Environment notes
 - PowerShell: use `npx.cmd` / `npm.cmd`; `gh` at `$env:ProgramFiles\GitHub CLI\gh.exe`.

@@ -44,8 +44,8 @@ def main() -> int:
     if not dsn:
         print("DATABASE_URL is missing from .env", file=sys.stderr)
         return 1
-    if "SUPABASE_KEY" not in os.environ.get("SUPABASE_KEY", ""):
-        print("note: SUPABASE_KEY (service_role) is still empty - publishing needs it")
+    if not os.environ.get("SUPABASE_KEY", "").strip():
+        print("note: SUPABASE_KEY (sb_secret_*) is still empty - publishing needs it")
 
     try:
         with psycopg.connect(dsn, autocommit=True, connect_timeout=15) as conn:

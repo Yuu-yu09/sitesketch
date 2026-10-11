@@ -11,7 +11,9 @@ import pathlib
 
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager
 
+import auth
 import config
 import gemini
 from db import DatabaseUnavailable, query, query_one
@@ -20,7 +22,10 @@ ROOT = pathlib.Path(__file__).parent
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["JWT_SECRET_KEY"] = config.SECRET_KEY or "dev-only-insecure"
+app.config["JWT_TOKEN_LOCATION"] = ["headers"]
 CORS(app)
+jwt = JWTManager(app)
+app.register_blueprint(auth.bp)
 
 PAGES = ("", "index", "login", "register", "dashboard", "plan", "builder", "publish")
 
