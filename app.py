@@ -146,8 +146,11 @@ def page_index():
 
 @app.get("/<name>.html")
 def page_html(name: str):
-    if name in PAGES:
-        return send_from_directory(ROOT, f"{name}.html")
+    """Serve any committed .html page (Vercel serves these from the CDN first;
+    this keeps `flask run` and the function fallback behaving the same)."""
+    candidate = (ROOT / f"{name}.html").resolve()
+    if candidate.parent == ROOT.resolve() and candidate.exists():
+        return send_from_directory(ROOT, candidate.name)
     return jsonify(error="not found", path=name), 404
 
 
