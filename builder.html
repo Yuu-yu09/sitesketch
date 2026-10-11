@@ -200,12 +200,9 @@
       }
 
       /* ---------------- styles panel ---------------- */
-      var stylesOpen = false;
       document.getElementById("stylesBtn").addEventListener("click", function () {
-        stylesOpen = !stylesOpen;
-        stylesPanel.hidden = !stylesOpen;
-        this.setAttribute("aria-pressed", String(stylesOpen));
-        if (stylesOpen) EditorUI.stylesPanel(stylesPanel);
+        if (!stylesPanel.hidden) closePanel();
+        else openPanel("styles");
       });
       document.getElementById("publishBtn").addEventListener("click", function () {
         location.href = "publish.html?id=" + plan.id;
@@ -259,6 +256,31 @@
         });
       }
 
+      /* ---------------- the right-hand panel ----------------
+         One sidebar with two modes: site-wide Styles, and the settings
+         for whichever block is selected (WordPress does the same). */
+      var panelMode = "styles";
+
+      function openPanel(mode) {
+        panelMode = mode;
+        stylesPanel.hidden = false;
+        var btn = document.getElementById("stylesBtn");
+        btn.setAttribute("aria-pressed", String(true));
+        renderPanel();
+      }
+
+      function closePanel() {
+        panelMode = "styles";
+        stylesPanel.hidden = true;
+        document.getElementById("stylesBtn").setAttribute("aria-pressed", String(false));
+      }
+
+      function renderPanel() {
+        if (stylesPanel.hidden) return;
+        if (panelMode === "block") EditorUI.blockPanel(stylesPanel);
+        else EditorUI.stylesPanel(stylesPanel);
+      }
+
       /* ---------------- render ---------------- */
       function render() {
         renderTabs();
@@ -267,7 +289,7 @@
         Editor.pageId = page.id;
         Editor.render();
         wireSortable();
-        if (stylesOpen) EditorUI.stylesPanel(stylesPanel);
+        renderPanel();
       }
 
       /* ---------------- boot ----------------
@@ -330,6 +352,11 @@
           plan: plan,
           pageId: plan.pages[0].id,
           onChange: changed,
+          onSelectionChange: function () { renderPanel(); },
+          onOpenSettings: function (id) {
+            Editor.select(id);
+            openPanel("block");
+          },
           onAI: aiSection
         });
 

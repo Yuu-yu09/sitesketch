@@ -54,8 +54,12 @@
     }
 
     /* walk=plan: click through the wizard (type -> goal -> step 3) after load,
-       so captures can show step 3 instead of the landing step. */
+       so captures can show step 3 instead of the landing step.
+
+       walk=block: in the builder, select a section and open its settings,
+       so captures show the block settings panel in action. */
     function maybeWalk() {
+      if (walk === "block") return walkBuilder();
       if (walk !== "plan") return;
       var doc;
       try { doc = f.contentDocument; } catch (e) { return; }
@@ -83,6 +87,33 @@
         setTimeout(step, 40);
       })();
     }
+    /* walk=block: select a section and open the block settings panel */
+    function walkBuilder() {
+      var tries = 0;
+      (function step() {
+        if (++tries > 60) return;
+        var d;
+        try { d = f.contentDocument; } catch (e) { return; }
+        if (!d || !d.body) { setTimeout(step, 80); return; }
+        var Editor = d.defaultView && d.defaultView.Editor;
+        if (!Editor || !Editor.plan) { setTimeout(step, 80); return; }
+
+        var sections = Editor.plan.pages[0].sections;
+        var pick = sections.filter(function (s) { return s.type === "about"; })[0] || sections[1];
+        Editor.select(pick.id);
+        Editor.command("settings");
+        /* give it a colour override so the panel shows real values */
+        var bg = d.getElementById("blockBg");
+        if (bg) { bg.value = "#F3EDE2"; bg.dispatchEvent(new Event("input", { bubbles: true })); }
+        Editor.select(pick.id);
+        Editor.command("settings");
+        var pad = d.getElementById("blockPadTop");
+        if (pad) { pad.value = "96"; pad.dispatchEvent(new Event("change", { bubbles: true })); }
+        Editor.select(pick.id);
+        Editor.command("settings");
+      })();
+    }
+
     f.addEventListener("load", maybeWalk);
 
     if (signin === "1") {

@@ -490,6 +490,65 @@
       "</div></footer>";
   }
 
+  /* Black or white, whichever is readable on this colour.
+     Users pick backgrounds without thinking about contrast; this keeps
+     their text legible instead of silently producing unreadable pages. */
+  function readableOn(hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
+    if (!m) return "inherit";
+    var n = parseInt(m[1], 16);
+    var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    /* relative luminance, sRGB */
+    function lin(c) {
+      c /= 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+    var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    var onBlack = (L + 0.05) / 0.05;
+    var onWhite = 1.05 / (L + 0.05);
+    return onBlack >= onWhite ? "#000000" : "#FFFFFF";
+  }
+  SS.readableOn = readableOn;
+
+  /* Per-block overrides, the WordPress "block settings" model.
+     Everything a user can set on one section lives in section.style,
+     and is written here as CSS custom properties so the block keeps
+     using the site's own stylesheet - no inline soup to undo later. */
+  function applySectionStyle(html, section) {
+    var s = section.style || {};
+    var css = [];
+
+    if (s.bg) css.push("--sec-bg:" + s.bg);
+    if (s.textColor) css.push("--sec-text:" + s.textColor);
+    else if (s.bg) {
+      /* A background the user chose can be light or dark. Inheriting the
+         site's text colour gives unreadable contrast half the time, so
+         pick black or white by luminance unless they set one themselves. */
+      css.push("--sec-text:" + readableOn(s.bg));
+    }
+    if (s.accent) css.push("--sec-accent:" + s.accent);
+    if (s.align) css.push("--sec-align:" + s.align);
+    if (s.padTop !== undefined) css.push("--sec-pad-top:" + s.padTop);
+    if (s.padBottom !== undefined) css.push("--sec-pad-bottom:" + s.padBottom);
+    if (s.radius !== undefined) css.push("--sec-radius:" + s.radius);
+    if (s.height) css.push("--sec-min-height:" + s.height);
+
+    if (section.align === "center") css.push("--sec-align:center");
+
+    if (!css.length) return html;
+    /* merge with any style the block already set on its own tag */
+    return html.replace(/^(<section\b[^>]*?)(\s*>)/, function (whole, head, tail) {
+      var existing = /style="([^"]*)"/.exec(head);
+      var merged = css.join(";") + ";";
+      if (existing) {
+        head = head.replace(existing[0], ' style="' + merged + existing[1] + '"');
+        return head + tail;
+      }
+      return head + ' style="' + merged + '"' + tail;
+    });
+  }
+  SS.applySectionStyle = applySectionStyle;
+
   function sectionHTML(section, index, plan, spec, editable, pageId) {
     var block = BLOCKS[section.type] || BLOCKS.about;
     var variant = variantOf(plan, section, spec);
@@ -513,8 +572,8 @@
       editable: !!editable,
     };
 
-    if (section.align === "center") ctx.wrapAttrs += ' style="text-align:center"';
     var html = block(ctx);
+    html = applySectionStyle(html, section);
     if (!editable) return html;
 
     /* the block grip (drag handle + hover affordance), inserted as the first
@@ -536,14 +595,8 @@
     if (!page) return "";
 
     var body = (page.sections || []).map(function (section, i) {
-      var style = "";
-      if (section.style) {
-        style = ' style="' + Object.keys(section.style).map(function (k) {
-          return k + ":" + section.style[k];
-        }).join(";") + '"';
-      }
-      var html = sectionHTML(section, i, plan, spec, options.editable, page.id);
-      return style ? html.replace(' data-sect="', style + ' data-sect="') : html;
+      if (section.hidden) return "";
+      return sectionHTML(section, i, plan, spec, options.editable, page.id);
     }).join("\n");
 
     var cls = "ss-site" + (options.editable ? " is-editing" : "") + (options.live ? " is-live" : "");

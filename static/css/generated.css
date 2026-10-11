@@ -118,12 +118,37 @@
 .ss-navlinks a { text-decoration: none; color: var(--muted); font-size: .95rem; }
 .ss-navlinks a:hover { color: var(--text); }
 
-/* ---------- sections ---------- */
-.ss-sec { padding-block: calc(var(--pad) * .62); position: relative; }
-.ss-sec--soft { background: var(--soft); }
+/* ---------- sections ----------
+   Every block reads optional --sec-* overrides that the block settings
+   panel writes. They all fall back to the site tokens, so a section with
+   no overrides looks exactly like the rest of the design. */
+/* Section padding and per-block overrides.
+
+   Padding is opt-in: --sec-pad-top only wins when the user actually set
+   it, because variants like .v-overlay deliberately use padding: 0 and
+   let their inner wrapper do the spacing. Setting it unconditionally
+   would break those layouts. */
+.ss-site .ss-sec {
+  position: relative;
+  background: var(--sec-bg, transparent);
+  color: var(--sec-text, inherit);
+  min-height: var(--sec-min-height, 0);
+  text-align: var(--sec-align, inherit);
+}
+.ss-sec { padding-block: calc(var(--pad) * .62); }
+.ss-site .ss-sec[style*="--sec-pad-top"],
+.ss-site .ss-sec[style*="--sec-pad-bottom"] {
+  padding-block: var(--sec-pad-top, calc(var(--pad) * .62)) var(--sec-pad-bottom, calc(var(--pad) * .62));
+}
+.ss-sec[style*="--sec-bg"] { color: var(--sec-text, inherit); }
+/* accent, radius and alignment reach the bits that use their own tokens */
+.ss-sec .ss-btn { background: var(--sec-accent, var(--accent)); }
+.ss-sec img,
+.ss-sec .ss-img { border-radius: var(--sec-radius, var(--radius)); }
+.ss-sec--center p { margin-inline: auto; }
+.ss-sec--soft { background: var(--sec-bg, var(--soft)); }
 .ss-sec--line { border-top: 1px solid var(--line); }
 .ss-sec--center { text-align: center; }
-.ss-sec--center p { margin-inline: auto; }
 .ss-eyebrow {
   font-family: var(--font-display, system-ui, sans-serif);
   font-size: .74rem;

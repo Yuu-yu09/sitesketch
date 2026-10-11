@@ -80,6 +80,13 @@
     return host ? host.dataset.sect : null;
   }
 
+  /* the section the block toolbar/panel is acting on */
+  Editor.currentSection = function () {
+    var page = (Editor.plan.pages || []).filter(function (p) { return p.id === Editor.pageId; })[0];
+    if (!page || !Editor.selectedId) return null;
+    return page.sections.filter(function (s) { return s.id === Editor.selectedId; })[0] || null;
+  };
+
   Editor.readValue = readValue;
   Editor.writeValue = writeValue;
   Editor.sectionIdOf = sectionIdOf;
@@ -257,6 +264,7 @@
       '<button class="icon-btn" data-do="layout" title="Change layout" aria-label="Change layout"><i class="bi bi-layout-text-window" aria-hidden="true"></i></button>' +
       '<button class="icon-btn" data-do="image" title="Change image" aria-label="Change image"><i class="bi bi-image" aria-hidden="true"></i></button>' +
       '<button class="icon-btn" data-do="crop" title="Crop image" aria-label="Crop image"><i class="bi bi-crop" aria-hidden="true"></i></button>' +
+      '<button class="icon-btn" data-do="settings" title="Section settings" aria-label="Section settings"><i class="bi bi-sliders" aria-hidden="true"></i></button>' +
       '<button class="icon-btn" data-do="ai" title="Rewrite with AI" aria-label="Rewrite with AI"><i class="bi bi-lightning" aria-hidden="true"></i></button>' +
       '<span class="toolbar-sep" aria-hidden="true"></span>' +
       '<button class="icon-btn" data-do="dup" title="Duplicate" aria-label="Duplicate section"><i class="bi bi-copy" aria-hidden="true"></i></button>' +
@@ -335,6 +343,9 @@
         });
       }
       return;
+    } else if (what === "settings") {
+      if (Editor.onOpenSettings) Editor.onOpenSettings(section.id);
+      return;
     } else if (what === "ai") {
       if (Editor.onAI) Editor.onAI(section);
       return;
@@ -354,6 +365,7 @@
     Editor.onChange = options.onChange || null;
     Editor.onSelectionChange = options.onSelectionChange || null;
     Editor.onAI = options.onAI || null;
+    Editor.onOpenSettings = options.onOpenSettings || null;
 
     /* select a section when its padding area is clicked */
     Editor.root.addEventListener("click", function (event) {
