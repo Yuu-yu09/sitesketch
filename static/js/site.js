@@ -1,160 +1,514 @@
 /* ============================================================
-   SiteSketch — shared UI helpers + mini site compiler
-   renderSite() previews the Plan JSON exactly like the real
-   Jinja2 compiler will (same structure, same output contract).
+   site.js - compiles a Plan + design spec into a real website.
+
+   One renderer serves three places: the builder canvas, the live
+   preview and the published page, so what you edit is exactly
+   what ships.
+
+   Text nodes carry data-edit="<path>" and images carry
+   data-img-slot="<slot>", which is what makes the page editable
+   in place (the WordPress model) rather than through a form.
    ============================================================ */
 (function () {
   "use strict";
 
-  function esc(s) {
-    return String(s == null ? "" : s)
+  var SS = window.SS || (window.SS = {});
+
+  function esc(value) {
+    return String(value === undefined || value === null ? "" : value)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
+  SS.esc = esc;
 
-  /* ---------- toast ---------- */
-  var host = null;
-  function toast(msg, icon) {
-    if (!host) {
-      host = document.createElement("div");
-      host.className = "toast-host";
-      host.setAttribute("role", "status");
-      host.setAttribute("aria-live", "polite");
-      document.body.appendChild(host);
-    }
+  /* ---------- small shared UI helpers ---------- */
+
+  SS.fmtDate = function (ts) {
+    if (!ts) return "";
+    var d = new Date(ts), now = new Date();
+    var days = Math.floor((now - d) / 86400000);
+    if (days <= 0) return "today";
+    if (days === 1) return "yesterday";
+    if (days < 7) return days + " days ago";
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+
+  SS.toast = function (message, icon) {
+    var host = document.getElementById("toastHost") || (function () {
+      var h = document.createElement("div");
+      h.id = "toastHost";
+      h.className = "toast-host";
+      document.body.appendChild(h);
+      return h;
+    })();
     var t = document.createElement("div");
     t.className = "toast";
-    t.innerHTML = '<i class="bi ' + esc(icon || "bi-check2") + '" aria-hidden="true"></i><span>' + esc(msg) + "</span>";
+    t.innerHTML = '<i class="bi ' + (icon || "bi-check2") + '" aria-hidden="true"></i><span>' + esc(message) + "</span>";
     host.appendChild(t);
-    setTimeout(function () {
-      t.style.transition = "opacity .3s";
-      t.style.opacity = "0";
-      setTimeout(function () { t.remove(); }, 320);
-    }, 3200);
-  }
-
-  function fmtDate(ts) {
-    var d = new Date(ts), now = new Date();
-    var diff = (now - d) / 1000;
-    if (diff < 60) return "just now";
-    if (diff < 3600) return Math.floor(diff / 60) + " min ago";
-    if (diff < 86400) return Math.floor(diff / 3600) + " hr ago";
-    if (diff < 86400 * 7) return Math.floor(diff / 86400) + " day" + (Math.floor(diff / 86400) > 1 ? "s" : "") + " ago";
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined });
-  }
-
-  /* ---------- mini compiler: plan JSON -> static site HTML ---------- */
-
-  var THEMES = {
-    modern: {
-      bg: "#ffffff", fg: "#1a2233", muted: "#5b667a", accent: "#2f6fed",
-      font: "system-ui, -apple-system, 'Segoe UI', sans-serif",
-      radius: "10px"
-    },
-    classic: {
-      bg: "#fdfaf4", fg: "#2b2620", muted: "#6d6355", accent: "#8a5a2b",
-      font: "Georgia, 'Times New Roman', serif",
-      radius: "2px"
-    }
+    setTimeout(function () { t.classList.add("out"); }, 2400);
+    setTimeout(function () { t.remove(); }, 2900);
   };
 
-  function sectionHTML(s, theme) {
-    var t = esc(s.title || ""), sub = esc(s.subtitle || "");
-    switch (s.type) {
-      case "hero":
-        return '<section class="ss-hero"><h1>' + t + '</h1><p>' + sub + '</p>' +
-          '<a class="ss-btn" href="#">' + esc((s.fields && s.fields.buttonText) || "Learn more") + "</a></section>";
-      case "features":
-      case "products":
-      case "menu":
-      case "gallery":
-      case "team":
-      case "blog":
-        var items = ["First", "Second", "Third"].map(function (w) {
-          return '<div class="ss-card"><div class="ss-card-img"></div><strong>' + w + '</strong><span>' +
-            (s.type === "menu" ? "Signature favorite" : "Short description goes here") + "</span></div>";
-        }).join("");
-        return '<section class="ss-band"><h2>' + t + '</h2><p>' + sub + '</p><div class="ss-grid">' + items + "</div></section>";
-      case "testimonials":
-        return '<section class="ss-band ss-soft"><h2>' + t + '</h2><blockquote>"Exactly what we needed — simple and clear."<cite>— Happy customer</cite></blockquote></section>';
-      case "contact":
-        return '<section class="ss-band"><h2>' + t + '</h2><p>' + sub + '</p>' +
-          '<form class="ss-form" onsubmit="return false"><input placeholder="Your name" aria-label="Your name"><input placeholder="Your email" aria-label="Your email"><textarea placeholder="Your message" aria-label="Your message"></textarea><button class="ss-btn" type="submit">Send message</button></form></section>';
-      case "hours":
-        return '<section class="ss-band ss-soft"><h2>' + t + '</h2><p>' + sub + '</p><dl class="ss-hours"><dt>Mon – Fri</dt><dd>9:00 AM – 9:00 PM</dd><dt>Sat – Sun</dt><dd>10:00 AM – 10:00 PM</dd></dl></section>';
-      case "faq":
-        return '<section class="ss-band"><h2>' + t + '</h2><details><summary>Do you offer delivery?</summary><p>Yes — within the local area.</p></details><details><summary>How do I get started?</summary><p>Reach out using the contact form.</p></details></section>';
-      case "cta":
-        return '<section class="ss-cta"><h2>' + t + '</h2><p>' + sub + '</p><a class="ss-btn ss-btn-light" href="#">Get started</a></section>';
-      case "newsletter":
-        return '<section class="ss-band"><h2>' + t + '</h2><p>' + sub + '</p><form class="ss-form ss-form-row" onsubmit="return false"><input placeholder="you@example.com" aria-label="Email address"><button class="ss-btn" type="submit">Subscribe</button></form></section>';
-      case "about":
-      default:
-        return '<section class="ss-band"><h2>' + t + '</h2><p>' + sub + '</p><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua — replace this with your own story.</p></section>';
-    }
+  /* section outline, used by the builder's page/structure panels */
+  SS.blueprintTree = function (plan) {
+    return (plan.pages || []).map(function (page) {
+      var sections = (page.sections || []).map(function (s) {
+        return "<li>" + esc(s.title || s.type) + "</li>";
+      }).join("");
+      return '<div class="bp-page">' + esc(page.name) + '</div><ul class="bp-sections">' + sections + "</ul>";
+    }).join("");
+  };
+
+  /* ---------- fonts ---------- */
+  var loadedFonts = {};
+  function ensureFonts(spec) {
+    if (!window.DESIGN) return;
+    var href = DESIGN.fontLink(spec);
+    if (loadedFonts[href]) return;
+    loadedFonts[href] = true;
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.appendChild(link);
   }
 
-  function pageHTML(plan, page) {
-    var theme = THEMES[plan.meta.theme] || THEMES.modern;
-    var nav = plan.pages.map(function (p) {
-      return '<a href="#' + esc(p.id) + '"' + (p.id === page.id ? ' class="on"' : "") + ">" + esc(p.name) + "</a>";
+  /* ---------- helpers ---------- */
+
+  /* the design spec for a plan: use the saved one, or make a stable default */
+  SS.specFor = function (plan, seedKey) {
+    if (plan && plan.design) return plan.design;
+    var seed = window.DESIGN ? DESIGN.hash((seedKey || "site") + (plan && plan.meta ? plan.meta.siteName : "")) : 1;
+    var spec = window.DESIGN
+      ? DESIGN.generateSpec({ type: plan && plan.meta ? plan.meta.type : "business" }, seed)
+      : { tokens: {}, sections: {} };
+    if (plan) plan.design = spec;
+    return spec;
+  };
+
+  function specFor(plan, section, spec) {
+    return spec || SS.specFor(plan);
+  }
+
+  function variantOf(plan, section, spec) {
+    var chosen = spec.sections && spec.sections[section.id] && spec.sections[section.id].variant;
+    if (chosen) return chosen;
+    if (window.DESIGN) return DESIGN.variantFor(spec, section);
+    return "grid";
+  }
+
+  function imgOf(plan, section, spec, slot) {
+    var chosen = spec.sections && spec.sections[section.id] && spec.sections[section.id][slot || "img"];
+    if (chosen) return chosen;
+    return window.DESIGN ? DESIGN.imageFor(spec, section, { imgPools: DESIGN.TYPE_IMAGES[plan.meta.type] || DESIGN.TYPE_IMAGES.business }) : "";
+  }
+
+  function items(section) {
+    return section.items && section.items.length ? section.items : [];
+  }
+
+  /* data-edit tells the editor which part of the plan this text belongs to */
+  function ed(path) { return ' data-edit="' + path + '"'; }
+
+  function text(value, path, tag, cls) {
+    return "<" + (tag || "p") + (cls ? ' class="' + cls + '"' : "") + ed(path) + ">" + esc(value) + "</" + (tag || "p") + ">";
+  }
+
+  function picture(src, slot, alt, cls) {
+    if (!src) {
+      return '<div class="ss-img ss-img--empty" data-img-slot="' + esc(slot) + '"' +
+        ' role="button" tabindex="0" aria-label="Add an image"></div>';
+    }
+    return '<img src="' + esc(src) + '" alt="' + esc(alt || "") + '" loading="lazy"' +
+      ' data-img-slot="' + esc(slot) + '"' + (cls ? ' class="' + cls + '"' : "") + ">";
+  }
+
+  /* ---------- blocks: one builder per section type ---------- */
+
+  var BLOCKS = {};
+
+  BLOCKS.hero = function (ctx) {
+    var s = ctx.section, v = ctx.variant;
+    var cta = (s.fields && s.fields.buttonText) || "Get started";
+    var body = text(s.subtitle, "subtitle");
+
+    if (v === "overlay") {
+      return picture(ctx.image, "img", s.title, "ss-bg") &&
+        '<section class="ss-sec g-hero v-overlay" ' + ctx.wrapAttrs + '>' +
+          '<div class="ss-wrap">' + ctx.imageTag +
+            '<p class="ss-eyebrow"' + ed("subtitle") + ">" + esc(s.subtitle || "") + "</p>" +
+            "<h1" + ed("title") + ">" + esc(s.title || "") + "</h1>" +
+            '<a class="ss-btn"' + ed("fields:buttonText") + ' href="#">' + esc(cta) + "</a>" +
+          "</div></section>";
+    }
+    if (v === "type") {
+      return '<section class="ss-sec g-hero v-type" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap">' +
+          "<h1" + ed("title") + ">" + esc(s.title || "") + "</h1>" +
+          '<div class="ss-rule" aria-hidden="true"></div>' +
+          body +
+          '<a class="ss-btn"' + ed("fields:buttonText") + ' href="#">' + esc(cta) + "</a>" +
+        "</div></section>";
+    }
+    var flip = (v === "split" && ctx.index % 2 === 1) ? " v-flip" : "";
+    return '<section class="ss-sec g-hero v-split' + flip + '" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap">' +
+        "<div><h1" + ed("title") + ">" + esc(s.title || "") + "</h1>" + body +
+        '<p style="margin-top:1.6rem"><a class="ss-btn"' + ed("fields:buttonText") + ' href="#">' + esc(cta) + "</a></p></div>" +
+        "<div>" + ctx.imageTag + "</div>" +
+      "</div></section>";
+  };
+
+  BLOCKS.about = function (ctx) {
+    var s = ctx.section;
+    if (ctx.variant === "quote") {
+      return '<section class="ss-sec g-about v-quote" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap"><blockquote class="ss-quote" style="max-width:none">' +
+        esc(s.title || "") + "</blockquote>" + text(s.subtitle, "subtitle") +
+        '<p' + ed("body") + ">" + esc(s.body || "Replace this with your own story.") + "</p>" +
+        "</div></section>";
+    }
+    var flip = ctx.index % 2 === 1 ? " v-flip" : "";
+    return '<section class="ss-sec g-about v-split' + flip + '" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><div><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") +
+      '<p' + ed("body") + ">" + esc(s.body || "Tell the short version: what you do and who for.") + "</p></div>" +
+      "<div>" + ctx.imageTag + "</div></div></section>";
+  };
+
+  function cardsOf(section, path, limit) {
+    var list = items(section).slice(0, limit || 6);
+    if (!list.length) return "";
+    return list.map(function (item, i) {
+      return '<article class="ss-card">' +
+        (item.img ? picture(item.img, "item:" + i + ":img", item.title) : "") +
+        "<h3" + ed(path + ":" + i + ":title") + ">" + esc(item.title || "Title") + "</h3>" +
+        text(item.text || "A line about this.", path + ":" + i + ":text", "p") +
+        "</article>";
     }).join("");
-    var body = page.sections.map(function (s) { return sectionHTML(s, theme); }).join("\n");
-    return {
-      nav: nav,
-      body: body,
-      theme: theme
+  }
+
+  BLOCKS.features = function (ctx) {
+    var s = ctx.section;
+    if (ctx.variant === "rows") {
+      return '<section class="ss-sec g-features v-rows" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+        text(s.subtitle, "subtitle") +
+        '<div class="ss-rows">' + items(s).map(function (item, i) {
+          return '<div class="ss-row"><div><h3' + ed("items:" + i + ":title") + ">" + esc(item.title) + "</h3>" +
+            text(item.text || "", "items:" + i + ":text", "p") + "</div></div>";
+        }).join("") + "</div></div></section>";
+    }
+    return '<section class="ss-sec g-features v-grid" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") +
+      '<div class="ss-grid">' + cardsOf(s, "items") + "</div></div></section>";
+  };
+
+  BLOCKS.products = function (ctx) {
+    var s = ctx.section;
+    var cards = items(s).slice(0, 8).map(function (item, i) {
+      return '<article class="ss-card">' +
+        (item.img ? picture(item.img, "items:" + i + ":img", item.title) : picture(ctx.poolImage, "items:" + i + ":img", item.title)) +
+        "<h3" + ed("items:" + i + ":title") + ">" + esc(item.title) + "</h3>" +
+        text(item.text || "", "items:" + i + ":text", "p") +
+        (item.price ? '<p class="ss-row-price" style="margin:.6rem 0 0">' + esc(item.price) + "</p>" : "") +
+        "</article>";
+    }).join("");
+    return '<section class="ss-sec g-products v-' + (ctx.variant === "shelf" ? "shelf" : "grid") + '" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") +
+      '<div class="ss-grid">' + cards + "</div></div></section>";
+  };
+
+  BLOCKS.menu = function (ctx) {
+    var s = ctx.section;
+    var rows = items(s).map(function (item, i) {
+      return "<li><b" + ed("items:" + i + ":title") + ">" + esc(item.title) + "</b>" +
+        (item.text ? "<span" + ed("items:" + i + ":text") + ">" + esc(item.text) + "</span>" : "") +
+        (item.price ? '<span class="ss-row-price">' + esc(item.price) + "</span>" : "") + "</li>";
+    }).join("");
+    if (ctx.variant === "cards") {
+      return '<section class="ss-sec g-menu v-grid" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+        text(s.subtitle, "subtitle") +
+        '<div class="ss-grid">' + cardsOf(s, "items") + "</div></div></section>";
+    }
+    return '<section class="ss-sec g-menu v-list" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") +
+      '<ul class="ss-menu">' + rows + "</ul></div></section>";
+  };
+
+  BLOCKS.gallery = function (ctx) {
+    var s = ctx.section;
+    var cards = items(s).slice(0, 9).map(function (item, i) {
+      return '<figure class="ss-card" style="padding:.6rem">' +
+        picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title || s.title) +
+        (item.text ? '<figcaption style="margin-top:.5rem;font-size:.86rem;color:var(--muted)">' +
+          '<span' + ed("items:" + i + ":text") + ">" + esc(item.text) + "</span></figcaption>" : "") +
+        "</figure>";
+    }).join("");
+    return '<section class="ss-sec g-gallery v-' + ctx.variant + '" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") +
+      '<div class="ss-grid">' + cards + "</div></div></section>";
+  };
+
+  BLOCKS.team = function (ctx) {
+    var s = ctx.section;
+    if (ctx.variant === "rows") {
+      return '<section class="ss-sec g-team v-rows" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+        '<div class="ss-rows">' + items(s).map(function (item, i) {
+          return '<div class="ss-row"><div style="display:flex;gap:1rem;align-items:center">' +
+            picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title, "ss-avatar") +
+            "<div><h3" + ed("items:" + i + ":title") + ">" + esc(item.title) + "</h3>" +
+            text(item.text || "", "items:" + i + ":text", "p") + "</div></div></div>";
+        }).join("") + "</div></div></section>";
+    }
+    return '<section class="ss-sec g-team v-grid" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") +
+      '<div class="ss-grid">' + cardsOf(s, "items") + "</div></div></section>";
+  };
+
+  BLOCKS.blog = function (ctx) {
+    var s = ctx.section;
+    var posts = items(s).slice(0, 6);
+    if (ctx.variant === "featured") {
+      return '<section class="ss-sec g-blog v-featured" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap">' + posts.map(function (item, i) {
+          return '<article class="ss-post"' + (i ? ' style="border-top:1px solid var(--line);padding-top:1.6rem"' : "") + ">" +
+            '<p class="ss-post-meta"' + ed("items:" + i + ":text") + ">" + esc(item.text || "") + "</p>" +
+            "<h3" + ed("items:" + i + ":title") + '><a href="#">' + esc(item.title) + "</a></h3></article>";
+        }).join("") + "</div></section>";
+    }
+    return '<section class="ss-sec g-blog v-grid" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      '<div class="ss-grid">' + posts.map(function (item, i) {
+        return '<article class="ss-card ss-post">' +
+          (item.img ? picture(item.img, "items:" + i + ":img", item.title) : picture(ctx.poolImage, "items:" + i + ":img", item.title)) +
+          '<p class="ss-post-meta"' + ed("items:" + i + ":text") + ">" + esc(item.text || "") + "</p>" +
+          "<h3" + ed("items:" + i + ":title") + '><a href="#">' + esc(item.title) + "</a></h3></article>";
+      }).join("") + "</div></div></section>";
+  };
+
+  BLOCKS.testimonials = function (ctx) {
+    var s = ctx.section;
+    var list = items(s).slice(0, 3);
+    if (ctx.variant === "big" && list.length) {
+      var first = list[0];
+      return '<section class="ss-sec g-testimonials v-big ss-sec--center" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+        '<blockquote class="ss-quote"\n          <span' + ed("items:0:title") + ">" + esc(first.title) + "</span></blockquote>" +
+        '<cite class="ss-cite"><span' + ed("items:0:text") + ">" + esc(first.text) + "</span></cite>" +
+        "</div></section>";
+    }
+    return '<section class="ss-sec g-testimonials v-grid" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      '<div class="ss-grid">' + list.map(function (item, i) {
+        return '<article class="ss-card"><blockquote><span' + ed("items:" + i + ":title") + ">" +
+          esc(item.title) + "</span></blockquote>" +
+          '<cite class="ss-cite"><span' + ed("items:" + i + ":text") + ">" + esc(item.text) + "</span></cite></article>";
+      }).join("") + "</div></div></section>";
+  };
+
+  BLOCKS.contact = function (ctx) {
+    var s = ctx.section;
+    var form =
+      '<form class="ss-form" onsubmit="return false">' +
+        '<div><label for="cf-n">Your name</label><input id="cf-n" placeholder="Your name"></div>' +
+        '<div><label for="cf-e">Email</label><input id="cf-e" type="email" placeholder="you@example.com"></div>' +
+        '<div><label for="cf-m">Message</label><textarea id="cf-m" rows="4" placeholder="How can we help?"></textarea></div>' +
+        '<div><button class="ss-btn" type="submit">Send message</button></div>' +
+      "</form>";
+    if (ctx.variant === "center") {
+      return '<section class="ss-sec g-contact v-center ss-sec--center" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+        text(s.subtitle, "subtitle") + form + "</div></section>";
+    }
+    return '<section class="ss-sec g-contact v-split' + (ctx.index % 2 ? " v-flip" : "") + '" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><div><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") + form + "</div>" +
+      "<div>" + ctx.imageTag + "</div></div></section>";
+  };
+
+  BLOCKS.hours = function (ctx) {
+    var s = ctx.section;
+    var dl = items(s).map(function (item, i) {
+      return "<dt" + ed("items:" + i + ":title") + ">" + esc(item.title) + "</dt>" +
+        '<dd' + ed("items:" + i + ":text") + ">" + esc(item.text || "") + "</dd>";
+    }).join("");
+    if (ctx.variant === "split") {
+      return '<section class="ss-sec g-hours v-split' + (ctx.index % 2 ? " v-flip" : "") + '" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap"><div><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+        '<dl class="ss-hours">' + dl + "</dl></div><div>" + ctx.imageTag + "</div></div></section>";
+    }
+    return '<section class="ss-sec g-hours v-table ss-sec--soft" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") +
+      '<dl class="ss-hours">' + dl + "</dl></div></section>";
+  };
+
+  BLOCKS.faq = function (ctx) {
+    var s = ctx.section;
+    var list = items(s);
+    if (ctx.variant === "columns") {
+      return '<section class="ss-sec g-faq v-columns" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+        '<div class="ss-faq">' + list.map(function (item, i) {
+          return "<details><summary><h3" + ed("items:" + i + ":title") + ">" + esc(item.title) + "</h3></summary>" +
+            text(item.text || "", "items:" + i + ":text", "p") + "</details>";
+        }).join("") + "</div></div></section>";
+    }
+    return '<section class="ss-sec g-faq v-accordion" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") +
+      '<div class="ss-faq">' + list.map(function (item, i) {
+        return "<details><summary" + ed("items:" + i + ":title") + ">" + esc(item.title) + "</summary>" +
+          text(item.text || "", "items:" + i + ":text", "p") + "</details>";
+      }).join("") + "</div></div></section>";
+  };
+
+  BLOCKS.cta = function (ctx) {
+    var s = ctx.section;
+    var btn = '<a class="ss-btn' + (ctx.variant === "band" ? " ss-btn--onaccent" : "") + '"' +
+      ed("fields:buttonText") + ' href="#">' + esc((s.fields && s.fields.buttonText) || "Get started") + "</a>";
+    if (ctx.variant === "box") {
+      return '<section class="ss-sec g-cta v-box" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap"><div class="ss-box"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+        text(s.subtitle, "subtitle", "p") + btn + "</div></div></section>";
+    }
+    return '<section class="ss-sec g-cta v-band" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><div><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle", "p") + "</div>" + btn + "</div></section>";
+  };
+
+  BLOCKS.newsletter = function (ctx) {
+    var s = ctx.section;
+    var form =
+      '<form class="ss-form-row" onsubmit="return false">' +
+        '<div class="ss-field"><label for="nl-e">Email</label>' +
+        '<input id="nl-e" type="email" placeholder="you@example.com"></div>' +
+        '<button class="ss-btn" type="submit">Subscribe</button></form>';
+    if (ctx.variant === "stack") {
+      return '<section class="ss-sec g-newsletter v-stack ss-sec--center" ' + ctx.wrapAttrs + '>' +
+        '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+        text(s.subtitle, "subtitle") + form + "</div></section>";
+    }
+    return '<section class="ss-sec g-newsletter v-row ss-sec--soft" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap"><div><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") + "</div>" + form + "</div></section>";
+  };
+
+  SS.BLOCKS = BLOCKS;
+
+  /* ---------- page ---------- */
+
+  function navHTML(plan, pageId, spec) {
+    var name = plan.meta.siteName || "SiteSketch";
+    var links = plan.pages.map(function (p) {
+      return '<a href="#' + esc(p.id) + '"' + (p.id === pageId ? ' aria-current="page" style="color:var(--text)"' : "") + ">" +
+        esc(p.name) + "</a>";
+    }).join("");
+    var style = spec.nav || "bar";
+    var cls = style === "outline" ? "ss-nav ss-nav--outline" : style === "minimal" ? "ss-nav ss-nav--minimal" : "ss-nav ss-nav--bar";
+    return '<nav class="' + cls + '"><div class="ss-wrap ss-navrow">' +
+      '<a class="ss-brand" href="#">' + esc(name) + "</a>" +
+      '<div class="ss-navlinks">' + links + "</div></div></nav>";
+  }
+
+  function footerHTML(plan, spec) {
+    var name = plan.meta.siteName || "SiteSketch";
+    var links = plan.pages.map(function (p) { return '<a href="#' + esc(p.id) + '">' + esc(p.name) + "</a>"; }).join("");
+    if (!spec.footer) {
+      return '<footer class="ss-footer"><div class="ss-wrap" style="display:flex;justify-content:space-between;gap:1.5rem;flex-wrap:wrap">' +
+        '<span class="ss-foot-note">' + esc(name) + "</span>" +
+        '<span class="ss-foot-note">' + esc(name) + " · " + new Date().getFullYear() + "</span></div></footer>";
+    }
+    return '<footer class="ss-footer ss-footer--rich"><div class="ss-wrap">' +
+      '<div class="ss-foot-col"><a class="ss-brand" href="#">' + esc(name) + "</a>" +
+        '<p class="ss-foot-note" style="margin-top:.6rem">Made with SiteSketch.</p></div>' +
+      '<div class="ss-foot-col"><h3>Pages</h3><div class="ss-foot-links">' + links + "</div></div>" +
+      '<div class="ss-foot-col"><h3>Contact</h3><div class="ss-foot-links">' +
+        '<a href="#">Email us</a><a href="#">Instagram</a><a href="#">Facebook</a></div></div>' +
+      "</div></footer>";
+  }
+
+  function sectionHTML(section, index, plan, spec) {
+    var block = BLOCKS[section.type] || BLOCKS.about;
+    var variant = variantOf(plan, section, spec);
+    var image = imgOf(plan, section, spec, "img");
+    var pools = window.DESIGN ? DESIGN.TYPE_IMAGES[plan.meta.type] || DESIGN.TYPE_IMAGES.business : [];
+    var poolKey = pools[index % pools.length];
+    var poolImage = window.DESIGN ? (DESIGN.IMAGES[poolKey] || [])[index % 3] : "";
+
+    var ctx = {
+      section: section,
+      index: index,
+      variant: variant,
+      image: image,
+      imageTag: picture(image, "img", section.title),
+      poolImage: poolImage,
+      wrapAttrs: ' data-sect="' + esc(section.id) + '" data-sect-label="' + esc(section.type) + '"',
     };
+
+    if (section.align === "center") ctx.wrapAttrs += ' style="text-align:center"';
+    return block(ctx);
   }
 
-  /* Full document for the preview iframe (and later, export). */
-  function renderSite(plan, pageId) {
-    if (!plan || !plan.pages || !plan.pages.length) return "";
-    var page = plan.pages.filter(function (p) { return p.id === pageId; })[0] || plan.pages[0];
-    var parts = pageHTML(plan, page);
-    var theme = parts.theme;
-    var name = esc(plan.meta.siteName || "My Site");
-    return '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
-      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-      "<title>" + name + "</title><style>" +
-      ":root{--bg:" + theme.bg + ";--fg:" + theme.fg + ";--muted:" + theme.muted + ";--accent:" + theme.accent + ";--r:" + theme.radius + "}" +
-      "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:" + theme.font + ";line-height:1.55}" +
-      "header{display:flex;align-items:center;gap:1.2rem;padding:.9rem 4%;border-bottom:1px solid rgba(0,0,0,.09);position:sticky;top:0;background:var(--bg);z-index:5}" +
-      "header b{font-size:1.05rem;margin-right:auto}header a{color:var(--muted);text-decoration:none;font-size:.92rem}header a.on{color:var(--fg);font-weight:600}" +
-      "section{padding:2.4rem 4%}h1{font-size:clamp(1.8rem,4vw,2.8rem);margin:0 0 .4rem;line-height:1.12}h2{margin:0 0 .4rem;font-size:1.5rem}p{margin:0 0 1rem;color:var(--muted);max-width:60ch}" +
-      ".ss-hero{padding-top:3.4rem;padding-bottom:3rem}.ss-btn{display:inline-block;background:var(--accent);color:#fff;border:none;border-radius:var(--r);padding:.65em 1.3em;font:inherit;font-weight:600;text-decoration:none;cursor:pointer}" +
-      ".ss-band h2{font-size:1.5rem}.ss-soft{background:rgba(0,0,0,.03)}" +
-      ".ss-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-top:1.2rem}" +
-      ".ss-card{border:1px solid rgba(0,0,0,.1);border-radius:var(--r);padding:1rem;display:grid;gap:.3rem}.ss-card-img{height:70px;border-radius:6px;background:linear-gradient(135deg,rgba(0,0,0,.06),rgba(0,0,0,.12))}" +
-      ".ss-card span{color:var(--muted);font-size:.88rem}.ss-price b{font-size:1.5rem}" +
-      ".ss-form{display:grid;gap:.6rem;max-width:420px}.ss-form-row{grid-template-columns:1fr auto;max-width:520px}" +
-      ".ss-form input,.ss-form textarea{font:inherit;padding:.6em .8em;border:1px solid rgba(0,0,0,.2);border-radius:var(--r)}" +
-      ".ss-cta{background:var(--accent);color:#fff;text-align:center}.ss-cta h2,.ss-cta p{color:#fff;margin-inline:auto}.ss-btn-light{background:#fff;color:var(--accent)}" +
-      "blockquote{margin:1rem 0 0;font-size:1.2rem;max-width:52ch}cite{display:block;color:var(--muted);font-size:.9rem;margin-top:.5rem}" +
-      ".ss-hours{display:grid;grid-template-columns:auto 1fr;gap:.4rem 1.4rem;max-width:340px}.ss-hours dt{font-weight:600}.ss-hours dd{margin:0;color:var(--muted)}" +
-      "details{border-bottom:1px solid rgba(0,0,0,.1);padding:.7rem 0;max-width:640px}summary{cursor:pointer;font-weight:600}" +
-      "footer{padding:1.4rem 4%;border-top:1px solid rgba(0,0,0,.09);color:var(--muted);font-size:.85rem}" +
-      "</style></head><body><header><b>" + name + "</b>" + parts.nav + "</header>" +
-      parts.body +
-      "<footer>&copy; " + new Date().getFullYear() + " " + name + " · Made with SiteSketch</footer>" +
-      "</body></html>";
-  }
+  /* options: { editable, live } */
+  SS.renderPage = function (plan, pageId, options) {
+    options = options || {};
+    var spec = SS.specFor(plan);
+    ensureFonts(spec);
+    var page = (plan.pages || []).filter(function (p) { return p.id === pageId; })[0] || plan.pages[0];
+    if (!page) return "";
 
-  /* blueprint tree markup (used in landing showcase + builder pane) */
-  function blueprintTree(plan) {
-    return plan.pages.map(function (p) {
-      var secs = p.sections.map(function (s) { return "<li>" + esc(s.title || s.type) + "</li>"; }).join("");
-      return '<div class="bp-page"><i class="bi bi-file-earmark-richtext" aria-hidden="true"></i>' + esc(p.name) +
-        '</div><ul class="bp-sections">' + (secs || "<li>No sections yet</li>") + "</ul>";
-    }).join("");
-  }
+    var body = (page.sections || []).map(function (section, i) {
+      var style = "";
+      if (section.style) {
+        style = ' style="' + Object.keys(section.style).map(function (k) {
+          return k + ":" + section.style[k];
+        }).join(";") + '"';
+      }
+      var html = sectionHTML(section, i, plan, spec);
+      return style ? html.replace(' data-sect="', style + ' data-sect="') : html;
+    }).join("\n");
 
-  window.SS = {
-    esc: esc,
-    toast: toast,
-    fmtDate: fmtDate,
-    renderSite: renderSite,
-    blueprintTree: blueprintTree,
-    THEMES: THEMES
+    var cls = "ss-site" + (options.editable ? " is-editing" : "") + (options.live ? " is-live" : "");
+    var cssVars = window.DESIGN ? DESIGN.cssVars(spec) : "";
+
+    return '<div class="' + cls + '" style="' + cssVars + '">' +
+      navHTML(plan, page.id, spec) +
+      '<main data-reveal>' + body + "</main>" +
+      footerHTML(plan, spec) +
+      "</div>";
   };
+
+  /* scroll reveal, IntersectionObserver only (never a scroll listener) */
+  SS.observeMotion = function (root) {
+    if (!window.DESIGN) return;
+    var scope = root || document;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var nodes = scope.querySelectorAll("[data-reveal], .ss-sec, .ss-grid > *");
+    if (!("IntersectionObserver" in window)) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-in");
+        io.unobserve(entry.target);
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
+    Array.prototype.forEach.call(nodes, function (node, i) {
+      if (!node.hasAttribute("data-reveal") && !node.classList.contains("is-in")) node.setAttribute("data-reveal", "");
+      node.style.setProperty("--reveal-i", Math.min(i % 4, 3));
+      io.observe(node);
+    });
+  };
+
+  /* kept for older call sites */
+  SS.renderSite = function (plan, pageId, options) { return SS.renderPage(plan, pageId, options); };
+
+  window.SS = SS;
 })();
