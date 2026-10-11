@@ -147,12 +147,19 @@ editorial (asymmetric columns), quote, centered, band (solid accent block), fram
 
 def design_schema() -> dict:
     """Response schema: the model picks from the curated library, nothing is free-form."""
+    # Palettes are interleaved light/dark so the model does not always reach for
+    # the first light entry in the list.
+    palettes: list[str] = []
+    modes = palette_modes()
+    for want in ("light", "dark"):
+        palettes.extend(p for p in palette_ids() if modes.get(p) == want)
+
     return {
         "type": "object",
         "properties": {
             "design_name": {"type": "string"},
             "rationale": {"type": "string"},
-            "palette": {"type": "string", "enum": palette_ids()},
+            "palette": {"type": "string", "enum": palettes},
             "font": {"type": "string", "enum": font_ids()},
             "radius": {"type": "string", "enum": ["0px", "4px", "10px", "999px"]},
             "space": {"type": "string", "enum": ["compact", "comfy", "airy"]},
@@ -210,6 +217,9 @@ Available palettes: {", ".join(palette_ids())}
 Available font pairings: {", ".join(font_ids())}
 Available layout variants: {", ".join(variant_names())}
 
+Dark palettes suit evening hours, premium or tech brands. Light suits warmth and
+local trust. Pick whichever actually fits the brief.
+
 Design name should read like a real art direction, two or three words, no buzzwords.
 Rationale is one short sentence about who this design is for."""
 
@@ -218,7 +228,60 @@ Rationale is one short sentence about who this design is for."""
     except GeminiError as exc:
         # Never surface a broken feature: hand back a curated design instead.
         return local_spec(ctx, reason=f"AI unavailable ({exc})")
-    return normalize_design(raw, sections)
+
+    spec = normalize_design(raw, sections)
+    _complete_variants(spec, sections)
+    spec["unassigned"] = [s["id"] for s in sections if s["id"] not in spec["sections"]]
+    return spec
+
+
+def _variant_registry() -> dict[str, list[tuple[str, str]]]:
+    """type -> [(variant name, layout family)] straight out of design.js."""
+    src = _design_js()
+    registry: dict[str, list[tuple[str, str]]] = {}
+    for block_type, body in re.findall(r"^\s{4}([a-z]+):\s*\[(.*?)\]", src, re.S | re.M):
+        pairs = re.findall(r'\{\s*n:\s*"([a-z]+)",\s*f:\s*"([a-z-]+)"', body)
+        if pairs:
+            registry[block_type] = pairs
+    return registry
+
+
+def _complete_variants(spec: dict, sections: list[dict]) -> None:
+    """
+    Fill any section the model left out, so every section has a layout.
+
+    The model is good at art direction and usually names a few layouts, but it
+    answers for only part of the list. The rest are chosen here: stable for a
+    given design seed, and never two sections of the same layout family in a row
+    (the anti-repetition rule from the design system).
+    """
+    registry = _variant_registry()
+    rng = random.Random(spec.get("seed") or 0)
+
+    last_family = ""
+    last_variant = ""
+    for section in sections:
+        chosen = (spec["sections"].get(section["id"]) or {}).get("variant")
+        options = registry.get(section["type"])
+
+        if not chosen and options:
+            alternatives = [
+                (name, fam)
+                for name, fam in options
+                if fam != last_family and name != last_variant
+            ] or options
+            chosen, family = alternatives[rng.randrange(len(alternatives))]
+            last_family = family
+            last_variant = chosen
+        elif options:
+            for name, fam in options:
+                if name == chosen:
+                    last_family = fam
+                    last_variant = name
+                    break
+
+        if chosen:
+            spec["sections"].setdefault(section["id"], {})["variant"] = chosen
 
 
 def local_spec(ctx: dict, reason: str = "") -> dict:
