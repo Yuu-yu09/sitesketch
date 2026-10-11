@@ -188,8 +188,9 @@ def t_plan_survives_new_session():
 
 
 def t_other_user_cannot_read():
+    intruder = f"intruder_{uuid.uuid4().hex[:6]}"
     status, other, _ = call("POST", "/api/auth/register",
-                            {"username": "intruder", "email": f"intruder_{uuid.uuid4().hex[:6]}@example.com",
+                            {"username": intruder, "email": f"{intruder}@example.com",
                              "password": PASSWORD}, expect=201)
     call("GET", f"/api/projects/{project_id}", token=other["token"], expect=404)
     call("PUT", f"/api/projects/{project_id}", {"name": "hijacked"}, token=other["token"], expect=404)
