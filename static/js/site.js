@@ -96,10 +96,16 @@
     return "grid";
   }
 
+  /* images live in two places, and the plan always wins:
+     a user's own choice (section.img / items[i].img) beats the
+     AI/default pick stored in the design spec. */
   function imgOf(plan, section, spec, slot) {
+    if (section[slot || "img"]) return section[slot || "img"];
     var chosen = spec.sections && spec.sections[section.id] && spec.sections[section.id][slot || "img"];
     if (chosen) return chosen;
-    return window.DESIGN ? DESIGN.imageFor(spec, section, { imgPools: DESIGN.TYPE_IMAGES[plan.meta.type] || DESIGN.TYPE_IMAGES.business }) : "";
+    return window.DESIGN
+      ? DESIGN.imageFor(spec, section, { imgPools: DESIGN.TYPE_IMAGES[plan.meta.type] || DESIGN.TYPE_IMAGES.business })
+      : "";
   }
 
   function items(section) {
@@ -163,7 +169,7 @@
     if (ctx.variant === "quote") {
       return '<section class="ss-sec g-about v-quote" ' + ctx.wrapAttrs + '>' +
         '<div class="ss-wrap"><blockquote class="ss-quote" style="max-width:none">' +
-        esc(s.title || "") + "</blockquote>" + text(s.subtitle, "subtitle") +
+        '<span' + ed("title") + ">" + esc(s.title || "") + "</span></blockquote>" + text(s.subtitle, "subtitle") +
         '<p' + ed("body") + ">" + esc(s.body || "Replace this with your own story.") + "</p>" +
         "</div></section>";
     }
@@ -175,12 +181,14 @@
       "<div>" + ctx.imageTag + "</div></div></section>";
   };
 
-  function cardsOf(section, path, limit) {
+  function cardsOf(section, path, limit, fallbackImage) {
     var list = items(section).slice(0, limit || 6);
     if (!list.length) return "";
     return list.map(function (item, i) {
       return '<article class="ss-card">' +
-        (item.img ? picture(item.img, "item:" + i + ":img", item.title) : "") +
+        /* always render the slot, so every card is clickable for a
+           picture even before the user chooses one */
+        picture(item.img || fallbackImage, path + ":" + i + ":img", item.title) +
         "<h3" + ed(path + ":" + i + ":title") + ">" + esc(item.title || "Title") + "</h3>" +
         text(item.text || "A line about this.", path + ":" + i + ":text", "p") +
         "</article>";
@@ -201,7 +209,7 @@
     return '<section class="ss-sec g-features v-grid" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       text(s.subtitle, "subtitle") +
-      '<div class="ss-grid">' + cardsOf(s, "items") + "</div></div></section>";
+      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage) + "</div></div></section>";
   };
 
   BLOCKS.products = function (ctx) {
@@ -231,7 +239,7 @@
       return '<section class="ss-sec g-menu v-grid" ' + ctx.wrapAttrs + '>' +
         '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
         text(s.subtitle, "subtitle") +
-        '<div class="ss-grid">' + cardsOf(s, "items") + "</div></div></section>";
+        '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage) + "</div></div></section>";
     }
     return '<section class="ss-sec g-menu v-list" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
@@ -269,7 +277,7 @@
     return '<section class="ss-sec g-team v-grid" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       text(s.subtitle, "subtitle") +
-      '<div class="ss-grid">' + cardsOf(s, "items") + "</div></div></section>";
+      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage) + "</div></div></section>";
   };
 
   BLOCKS.blog = function (ctx) {
@@ -277,7 +285,10 @@
     var posts = items(s).slice(0, 6);
     if (ctx.variant === "featured") {
       return '<section class="ss-sec g-blog v-featured" ' + ctx.wrapAttrs + '>' +
-        '<div class="ss-wrap">' + posts.map(function (item, i) {
+        '<div class="ss-wrap">' +
+        '<h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+        text(s.subtitle, "subtitle") +
+        posts.map(function (item, i) {
           return '<article class="ss-post"' + (i ? ' style="border-top:1px solid var(--line);padding-top:1.6rem"' : "") + ">" +
             '<p class="ss-post-meta"' + ed("items:" + i + ":text") + ">" + esc(item.text || "") + "</p>" +
             "<h3" + ed("items:" + i + ":title") + '><a href="#">' + esc(item.title) + "</a></h3></article>";
@@ -406,8 +417,9 @@
   /* ---------- page ---------- */
 
   function navHTML(plan, pageId, spec) {
-    var name = plan.meta.siteName || "SiteSketch";
-    var links = plan.pages.map(function (p) {
+    var meta = plan.meta || {};
+    var name = meta.siteName || "SiteSketch";
+    var links = (plan.pages || []).map(function (p) {
       return '<a href="#' + esc(p.id) + '"' + (p.id === pageId ? ' aria-current="page" style="color:var(--text)"' : "") + ">" +
         esc(p.name) + "</a>";
     }).join("");
@@ -419,8 +431,9 @@
   }
 
   function footerHTML(plan, spec) {
-    var name = plan.meta.siteName || "SiteSketch";
-    var links = plan.pages.map(function (p) { return '<a href="#' + esc(p.id) + '">' + esc(p.name) + "</a>"; }).join("");
+    var meta = plan.meta || {};
+    var name = meta.siteName || "SiteSketch";
+    var links = (plan.pages || []).map(function (p) { return '<a href="#' + esc(p.id) + '">' + esc(p.name) + "</a>"; }).join("");
     if (!spec.footer) {
       return '<footer class="ss-footer"><div class="ss-wrap" style="display:flex;justify-content:space-between;gap:1.5rem;flex-wrap:wrap">' +
         '<span class="ss-foot-note">' + esc(name) + "</span>" +
@@ -435,13 +448,13 @@
       "</div></footer>";
   }
 
-  function sectionHTML(section, index, plan, spec) {
+  function sectionHTML(section, index, plan, spec, editable) {
     var block = BLOCKS[section.type] || BLOCKS.about;
     var variant = variantOf(plan, section, spec);
     var image = imgOf(plan, section, spec, "img");
-    var pools = window.DESIGN ? DESIGN.TYPE_IMAGES[plan.meta.type] || DESIGN.TYPE_IMAGES.business : [];
-    var poolKey = pools[index % pools.length];
-    var poolImage = window.DESIGN ? (DESIGN.IMAGES[poolKey] || [])[index % 3] : "";
+    var pools = window.DESIGN ? DESIGN.TYPE_IMAGES[(plan.meta || {}).type] || DESIGN.TYPE_IMAGES.business : [];
+    var poolKey = pools.length ? pools[index % pools.length] : null;
+    var poolImage = window.DESIGN ? ((DESIGN.IMAGES[poolKey] || [])[index % 3] || "") : "";
 
     var ctx = {
       section: section,
@@ -451,10 +464,18 @@
       imageTag: picture(image, "img", section.title),
       poolImage: poolImage,
       wrapAttrs: ' data-sect="' + esc(section.id) + '" data-sect-label="' + esc(section.type) + '"',
+      editable: !!editable,
     };
 
     if (section.align === "center") ctx.wrapAttrs += ' style="text-align:center"';
-    return block(ctx);
+    var html = block(ctx);
+    if (!editable) return html;
+
+    /* the block grip (drag handle + hover affordance), inserted just inside
+       the opening tag. Only ever rendered in the editor, never on a
+       published page. */
+    var grip = '<span class="sec-grip" aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>';
+    return html.replace(/^<section\b[^>]*>/, function (tag) { return tag + grip; });
   }
 
   /* options: { editable, live } */
@@ -472,7 +493,7 @@
           return k + ":" + section.style[k];
         }).join(";") + '"';
       }
-      var html = sectionHTML(section, i, plan, spec);
+      var html = sectionHTML(section, i, plan, spec, options.editable);
       return style ? html.replace(' data-sect="', style + ' data-sect="') : html;
     }).join("\n");
 

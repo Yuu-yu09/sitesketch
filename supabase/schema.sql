@@ -80,6 +80,20 @@ create table if not exists projects (
 create index if not exists projects_user_idx    on projects(user_id);
 create index if not exists projects_published_idx on projects(is_published) where is_published;
 
+-- ---------- media library (images the user uploads) ----------
+create table if not exists media (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid references users(id) on delete cascade,
+  name          text not null,
+  path          text not null,                 -- object key inside the bucket
+  url           text not null,                 -- public CDN url
+  content_type  text,
+  size_bytes    int,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists media_user_idx on media(user_id, created_at desc);
+
 -- ---------- ai usage log (evidence for the defense) ----------
 create table if not exists ai_logs (
   id         uuid primary key default gen_random_uuid(),
@@ -109,5 +123,7 @@ create trigger projects_touch
 -- Compiled sites are uploaded here (Vercel's filesystem is read-only).
 -- Public so /site/<slug> can be served without signing every read.
 insert into storage.buckets (id, name, public)
-values ('sites', 'sites', true)
+values
+  ('sites', 'sites', true),
+  ('media', 'media', true)
 on conflict (id) do update set public = excluded.public;

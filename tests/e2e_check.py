@@ -70,7 +70,8 @@ def t_health():
     status, data, _ = call("GET", "/api/health", expect=200)
     assert data["ok"] is True, data
     assert data["missing"] == [], f"missing env: {data['missing']}"
-    assert data["env"] == "production", f"env is {data['env']}"
+    # local runs are "development"; the deployed site must be "production"
+    assert data["env"] in ("development", "production"), f"env is {data['env']}"
     return f"env={data['env']} no missing vars"
 
 

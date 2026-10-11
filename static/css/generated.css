@@ -49,6 +49,7 @@
   line-height: 1.1;
   letter-spacing: -0.02em;
   margin: 0 0 .45em;
+  color: var(--text);
   text-wrap: balance;
 }
 .ss-site h1 { font-size: clamp(2.1rem, 5.2vw, 3.4rem); }
@@ -57,11 +58,26 @@
 .ss-site p { margin: 0 0 1em; color: var(--muted); max-width: 62ch; }
 .ss-site ul { margin: 0; padding: 0; list-style: none; }
 .ss-site img { max-width: 100%; display: block; border-radius: var(--radius); background: var(--soft); }
+.ss-img--empty {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 2px dashed color-mix(in srgb, var(--muted) 45%, transparent);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
 
-/* ---------- buttons ---------- */
-.ss-site a { color: inherit; }
+/* ---------- links and buttons ----------
+   app.css styles bare a/button for the editor chrome; these re-state
+   them inside the site so editor hover colours never leak in. */
+.ss-site a,
+.ss-site a:hover { color: inherit; text-decoration-color: var(--line); }
+.ss-site a:hover { text-decoration-color: currentColor; }
+.ss-site button { font: inherit; cursor: pointer; }
 .ss-site .ss-btn {
+  /* inline-block (not block) so buttons keep their natural width when a
+     parent switches to grid/flex */
   display: inline-block;
+  width: fit-content;
   background: var(--accent);
   color: var(--accent-ink);
   padding: .72em 1.5em;
@@ -225,9 +241,11 @@
 @media (max-width: 720px) { .ss-menu { columns: 1; } }
 
 /* image grids */
+.ss-site figure { margin: 0; }          /* browsers default figure to margin: 1em 40px */
 .v-masonry .ss-grid { grid-template-columns: repeat(3, 1fr); }
+.v-masonry .ss-card { align-self: start; }
+.v-masonry .ss-card img { width: 100%; object-fit: cover; aspect-ratio: 4 / 3; }
 .v-masonry .ss-card:nth-child(3n + 2) img { aspect-ratio: 3 / 4; }
-.v-masonry .ss-card img { aspect-ratio: 4 / 3; }
 .v-spotlight .ss-grid { grid-template-columns: 2fr 1fr 1fr; }
 .v-spotlight .ss-card:first-child { grid-row: span 2; }
 .v-spotlight .ss-card img { height: 100%; object-fit: cover; aspect-ratio: auto; }

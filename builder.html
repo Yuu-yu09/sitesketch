@@ -4,515 +4,329 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Builder</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%23fff' stroke='%2316283C' stroke-width='2.5'/%3E%3Cpath d='M16 3.5v25M3.5 16h25' stroke='%2316283C' stroke-width='1.4' opacity='.35'/%3E%3Crect x='17.5' y='4.5' width='10' height='10' fill='%23D6452F'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="static/css/fonts.css">
   <link rel="stylesheet" href="static/icons/bootstrap-icons.css">
   <link rel="stylesheet" href="static/css/app.css">
+  <link rel="stylesheet" href="static/css/generated.css">
 </head>
-<body>
+<body class="builder-body">
+  <header class="builder-top">
+    <a class="navlink" href="dashboard.html"><i class="bi bi-chevron-left" aria-hidden="true"></i> My plans</a>
 
-  <header class="topbar">
-    <div class="topbar-inner">
-      <a class="brand" href="dashboard.html" aria-label="SiteSketch dashboard">
-        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-          <rect x="2" y="2" width="28" height="28" rx="6" fill="#fff" stroke="#16283C" stroke-width="2.5"/>
-          <path d="M16 3.5v25M3.5 16h25" stroke="#16283C" stroke-width="1.4" opacity=".35"/>
-          <rect x="17.5" y="4.5" width="10" height="10" fill="#D6452F"/>
-        </svg>
-        SiteSketch
-      </a>
-      <a class="navlink" href="dashboard.html" style="text-decoration:none;"><i class="bi bi-chevron-left" aria-hidden="true"></i> My plans</a>
-      <strong class="builder-title" id="projTitle">…</strong>
+    <div class="builder-top-mid">
+      <input type="text" id="siteName" class="site-name-input" maxlength="60" aria-label="Website name">
       <span class="save-state" id="saveState"><span class="pip"></span> Saved</span>
-      <nav class="topbar-nav" aria-label="Main">
-        <a class="btn btn-primary btn-sm" id="publishBtn" href="#">Publish <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
-      </nav>
+    </div>
+
+    <div class="builder-top-right">
+      <button class="btn btn-sm" id="stylesBtn" type="button" aria-pressed="false">
+        <i class="bi bi-palette" aria-hidden="true"></i> Design
+      </button>
+      <button class="btn btn-sm btn-primary" id="publishBtn" type="button">Publish</button>
     </div>
   </header>
 
   <div class="builder-shell">
+    <!-- left rail: pages and the section library -->
+    <aside class="builder-rail" id="rail" aria-label="Pages and sections">
+      <div class="rail-pages">
+        <h2 class="rail-title">Pages</h2>
+        <div class="tab-row" id="pageTabs" role="tablist" aria-label="Pages"></div>
+        <button class="rail-add" id="addPage" type="button">
+          <i class="bi bi-plus-lg" aria-hidden="true"></i> Add page
+        </button>
+      </div>
 
-    <!-- ============ palette ============ -->
-    <aside class="builder-col palette" aria-label="Section palette">
-      <h2>Add sections</h2>
-      <p class="palette-hint">drag one in — or just click</p>
-      <p class="palette-group">Structure</p>
-      <div class="palette-list" id="paletteStructure"></div>
-      <p class="palette-group">Content</p>
-      <div class="palette-list" id="paletteContent"></div>
+      <div class="rail-library">
+        <h2 class="rail-title">Add a section</h2>
+        <p class="palette-group">Structure</p>
+        <div class="palette-list" id="paletteStructure"></div>
+        <p class="palette-group">Content</p>
+        <div class="palette-list" id="paletteContent"></div>
+      </div>
     </aside>
 
-    <!-- ============ canvas ============ -->
-    <section class="builder-col canvas-col" aria-label="Page sections">
-      <div class="page-tabs" id="pageTabs" role="tablist" aria-label="Pages"></div>
-      <div class="canvas" id="canvas" role="list" aria-label="Sections on this page"></div>
-      <div class="canvas-empty" id="canvasEmpty" hidden>
-        <strong>This page is empty</strong>
-        <span class="hand">drag a section in from the left</span>
-      </div>
-    </section>
+    <!-- the page itself: this is the editor -->
+    <main class="builder-canvas" id="canvas" tabindex="-1" aria-label="Your website, editable"></main>
 
-    <!-- ============ inspector ============ -->
-    <aside class="builder-col inspector" aria-label="Site settings and preview">
-      <h2>Site</h2>
-      <div class="field" style="margin-bottom:.7rem;">
-        <label for="siteName">Site name</label>
-        <input type="text" id="siteName" maxlength="60" placeholder="My Website">
-      </div>
-      <div class="field" style="margin-bottom:.4rem;">
-        <label for="themeSel">Theme</label>
-        <select id="themeSel">
-          <option value="modern">Modern</option>
-          <option value="classic">Classic</option>
-        </select>
-      </div>
-
-      <h2 style="margin-top:.8rem;">Preview</h2>
-      <div class="seg" role="group" aria-label="Preview mode">
-        <button type="button" id="segPreview" aria-pressed="true">Preview</button>
-        <button type="button" id="segBlueprint" aria-pressed="false">Blueprint</button>
-      </div>
-      <iframe class="preview-frame" id="previewFrame" title="Live preview of your site" hidden></iframe>
-      <div class="blueprint-pane" id="bpPane" hidden aria-label="Blueprint outline"></div>
-    </aside>
-
+    <!-- styles panel (the WordPress Styles sidebar) -->
+    <aside class="builder-panel" id="stylesPanel" hidden aria-label="Design settings"></aside>
   </div>
 
   <script src="static/js/api.js"></script>
   <script src="static/js/site.js"></script>
+  <script src="static/js/design.js"></script>
+  <script src="static/js/editor.js"></script>
+  <script src="static/js/editorui.js"></script>
   <script src="static/js/vendor/Sortable.min.js"></script>
   <script>
     (function () {
       var user = API.requireAuth();
       if (!user) return;
 
-      /* ---------- load project (from Postgres now) ---------- */
       var params = new URLSearchParams(location.search);
       var wantedId = params.get("id");
+      var plan = null;
+      var pageIndex = 0;
+      var saveTimer = null;
 
-      function start(proj) {
-          var plan = JSON.parse(JSON.stringify(proj.plan_json));
-          if (!plan.pages || !plan.pages.length) plan.pages = [{ id: "home", name: "Home", sections: [] }];
-          var active = 0;
+      var canvas = document.getElementById("canvas");
+      var saveState = document.getElementById("saveState");
+      var stylesPanel = document.getElementById("stylesPanel");
 
-          document.getElementById("projTitle").textContent = plan.meta.siteName;
-          document.getElementById("siteName").value = plan.meta.siteName;
-          document.getElementById("themeSel").value = plan.meta.theme || "modern";
-          document.getElementById("publishBtn").href = "publish.html?id=" + proj.id;
+      function currentPage() { return plan.pages[pageIndex]; }
 
-          /* ---------- saving (debounced, writes to Postgres) ---------- */
-          var saveTimer = null;
-          var saveState = document.getElementById("saveState");
-          function markDirty() {
-            saveState.classList.add("dirty");
-            saveState.innerHTML = '<span class="pip"></span> Saving…';
-            clearTimeout(saveTimer);
-            saveTimer = setTimeout(function () {
-              API.savePlan(proj.id, plan).then(function (res) {
-                if (!res.ok) {
-                  saveState.classList.remove("dirty");
-                  saveState.innerHTML = '<span class="pip"></span> Not saved';
-                  SS.toast(res.error || "Could not save your changes", "bi-exclamation-triangle");
-                  return;
-                }
-                saveState.classList.remove("dirty");
-                saveState.innerHTML = '<span class="pip"></span> Saved';
-              });
-            }, 600);
-          }
-
-        /* ---------- palette ---------- */
-        var GROUPS = {
-          structure: ["hero", "about", "cta", "contact", "faq", "hours", "newsletter"],
-          content: ["features", "gallery", "products", "menu", "testimonials", "team", "blog"]
-        };
-        function buildPalette(el, keys) {
-          keys.forEach(function (k) {
-            var s = API.SECTIONS[k];
-            var b = document.createElement("button");
-            b.type = "button";
-            b.className = "palette-item";
-            b.setAttribute("data-type", k);
-            b.innerHTML = '<i class="bi ' + s.icon + '" aria-hidden="true"></i> ' + SS.esc(s.name) +
-              '<i class="bi bi-grip-vertical grip" aria-hidden="true"></i>';
-            b.addEventListener("click", function () {
-              if (dragGuard) return;
-              addSection(k, plan.pages[active].sections.length);
-              SS.toast(s.name + " added", "bi-plus-lg");
-            });
-            el.appendChild(b);
-          });
-        }
-        buildPalette(document.getElementById("paletteStructure"), GROUPS.structure);
-        buildPalette(document.getElementById("paletteContent"), GROUPS.content);
-
-        var dragGuard = false;
-
-        /* ---------- render: tabs ---------- */
-        var tabsEl = document.getElementById("pageTabs");
-        var renaming = -1;       /* index of the tab whose name is being typed */
-        var pendingDelete = -1;  /* index armed for two-step delete */
-        var pendingTimer = null;
-
-        function renderTabs() {
-          tabsEl.innerHTML = "";
-          plan.pages.forEach(function (p, i) {
-            var b = document.createElement("button");
-            b.type = "button";
-            b.className = "page-tab";
-            b.setAttribute("role", "tab");
-            b.setAttribute("aria-selected", i === active ? "true" : "false");
-
-            var label = document.createElement("span");
-            label.className = "tab-label";
-            label.textContent = p.name;
-            b.appendChild(label);
-
-            if (renaming === i) {
-              b.classList.add("editing");
-              var inp = document.createElement("input");
-              inp.type = "text";
-              inp.className = "tab-rename";
-              inp.value = p.name;
-              inp.setAttribute("aria-label", "Page name");
-              label.textContent = "";
-              label.appendChild(inp);
-              setTimeout(function () { inp.focus(); inp.select(); }, 0);
-
-              var stopRenaming = function (commit) {
-                if (renaming !== i) return;
-                if (commit) {
-                  var v = inp.value.trim();
-                  if (v && v !== p.name) { p.name = v; markDirty(); renderPreview(); }
-                }
-                renaming = -1;
-                label.textContent = p.name;
-                b.classList.remove("editing");
-              };
-              inp.addEventListener("keydown", function (e) {
-                e.stopPropagation();
-                if (e.key === "Enter") { e.preventDefault(); stopRenaming(true); }
-                else if (e.key === "Escape") { e.preventDefault(); stopRenaming(false); }
-              });
-              inp.addEventListener("blur", function () { stopRenaming(true); });
+      /* ---------------- saving ---------------- */
+      function markDirty() {
+        saveState.classList.add("dirty");
+        saveState.innerHTML = '<span class="pip"></span> Saving…';
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          API.savePlan(plan.id, plan).then(function (res) {
+            saveState.classList.remove("dirty");
+            if (!res.ok) {
+              saveState.innerHTML = '<span class="pip"></span> Not saved';
+              SS.toast(res.error || "Could not save", "bi-exclamation-triangle");
+              return;
             }
-
-            b.addEventListener("click", function () {
-              if (active === i || renaming !== -1) return;
-              active = i;
-              var kids = tabsEl.querySelectorAll(".page-tab");
-              for (var k = 0; k < kids.length; k++) {
-                kids[k].setAttribute("aria-selected", k === i ? "true" : "false");
-              }
-              renderCanvas(); renderPreview();
-            });
-            b.addEventListener("dblclick", function () { renamePage(i); });
-
-            if (plan.pages.length > 1) {
-              var del = document.createElement("span");
-              del.className = "del";
-              del.setAttribute("role", "button");
-              del.setAttribute("tabindex", "0");
-              if (pendingDelete === i) {
-                del.classList.add("confirm");
-                del.title = "Click again to delete";
-                del.setAttribute("aria-label", "Click again to confirm deleting page " + p.name);
-              } else {
-                del.title = "Delete page";
-                del.setAttribute("aria-label", "Delete page " + p.name);
-              }
-              del.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
-              del.addEventListener("click", function (e) { e.stopPropagation(); tryDelete(i); });
-              del.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); tryDelete(i); } });
-              b.appendChild(del);
-            }
-            tabsEl.appendChild(b);
+            saveState.innerHTML = '<span class="pip"></span> Saved';
           });
-
-          var add = document.createElement("button");
-          add.type = "button";
-          add.className = "page-tab page-tab-add";
-          add.innerHTML = '<i class="bi bi-plus-lg" aria-hidden="true"></i> Add page';
-          add.addEventListener("click", addPage);
-          tabsEl.appendChild(add);
-
-          var ai = document.createElement("button");
-          ai.type = "button";
-          ai.className = "btn btn-sm page-tab-ai";
-          ai.id = "aiFillBtn";
-          ai.innerHTML = '<i class="bi bi-lightning" aria-hidden="true"></i> AI fill this page';
-          ai.addEventListener("click", fillCurrentPage);
-          tabsEl.appendChild(ai);
-        }
-
-        function fillCurrentPage() {
-          var page = plan.pages[active];
-          if (!page.sections.length) {
-            SS.toast("Add a section first — then AI will fill it", "bi-lightning");
-            return;
-          }
-          var btn = document.getElementById("aiFillBtn");
-          btn.disabled = true;
-          btn.innerHTML = '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i> Writing…';
-          API.fillPage(page, plan.meta).then(function () {
-            markDirty(); renderTabs(); renderCanvas(); renderPreview();
-            SS.toast("AI filled all " + page.sections.length + " sections on this page", "bi-lightning");
-          });
-        }
-
-        function addPage() {
-          plan.pages.push({ id: "p" + Math.random().toString(36).slice(2, 8), name: "New page", sections: [] });
-          active = plan.pages.length - 1;
-          renaming = active;
-          markDirty(); renderTabs(); renderCanvas(); renderPreview();
-        }
-        function renamePage(i) {
-          active = i;
-          renaming = i;
-          renderTabs(); renderCanvas(); renderPreview();
-        }
-        function tryDelete(i) {
-          if (pendingDelete !== i) {                 /* first press: arm */
-            pendingDelete = i;
-            clearTimeout(pendingTimer);
-            pendingTimer = setTimeout(function () { pendingDelete = -1; renderTabs(); }, 3000);
-            renderTabs();
-            return;
-          }
-          clearTimeout(pendingTimer);                /* second press: delete */
-          pendingDelete = -1;
-          deletePage(i);
-        }
-        function deletePage(i) {
-          plan.pages.splice(i, 1);
-          if (!plan.pages.length) plan.pages = [{ id: "home", name: "Home", sections: [] }];
-          active = Math.min(active, plan.pages.length - 1);
-          markDirty(); renderTabs(); renderCanvas(); renderPreview();
-          SS.toast("Page deleted", "bi-trash3");
-        }
-
-        /* ---------- render: canvas ---------- */
-        var canvas = document.getElementById("canvas");
-        var canvasEmpty = document.getElementById("canvasEmpty");
-
-        function renderCanvas() {
-          var secs = plan.pages[active].sections;
-          canvas.innerHTML = "";
-          canvasEmpty.hidden = secs.length > 0;
-          canvas.style.display = secs.length ? "" : "none";
-
-          secs.forEach(function (s) {
-            var def = API.SECTIONS[s.type] || { name: s.type, icon: "bi-square" };
-            var row = document.createElement("div");
-            row.className = "sect";
-            row.setAttribute("role", "listitem");
-            row.setAttribute("data-id", s.id);
-            row.innerHTML =
-              '<span class="grip" title="Drag to reorder" aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>' +
-              '<span class="si"><i class="bi ' + def.icon + '" aria-hidden="true"></i></span>' +
-              '<span class="sect-body">' +
-                '<span class="sect-kind">' + SS.esc(s.type) + "</span>" +
-                '<div class="sect-title" contenteditable="true" spellcheck="false" role="textbox" aria-label="Title for ' + SS.esc(def.name) + '">' +
-                  SS.esc(s.title || "") +
-                "</div>" +
-              "</span>" +
-              '<span class="sect-acts">' +
-                '<button class="icon-btn" data-act="ai" title="Write this with AI" aria-label="Generate content for ' + SS.esc(def.name) + ' with AI"><i class="bi bi-lightning" aria-hidden="true"></i></button>' +
-                '<button class="icon-btn" data-act="move" title="Move to another page" aria-label="Move ' + SS.esc(def.name) + ' to another page"><i class="bi bi-arrow-left-right" aria-hidden="true"></i></button>' +
-                '<button class="icon-btn" data-act="dup" title="Duplicate" aria-label="Duplicate ' + SS.esc(def.name) + '"><i class="bi bi-copy" aria-hidden="true"></i></button>' +
-                '<button class="icon-btn danger" data-act="del" title="Remove" aria-label="Remove ' + SS.esc(def.name) + '"><i class="bi bi-trash3" aria-hidden="true"></i></button>' +
-              "</span>";
-
-            var title = row.querySelector(".sect-title");
-            title.addEventListener("input", function () {
-              s.title = title.textContent;
-              markDirty();
-              schedulePreview();
-            });
-            title.addEventListener("keydown", function (e) {
-              if (e.key === "Enter") { e.preventDefault(); title.blur(); }
-            });
-
-            row.querySelector('[data-act="ai"]').addEventListener("click", function () {
-              var b = this;
-              b.disabled = true;
-              b.innerHTML = '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i>';
-              API.fillSection(s, plan.meta).then(function () {
-                markDirty(); renderCanvas(); renderPreview();
-                SS.toast("AI wrote the " + SS.esc(def.name) + " copy — edit anything you like", "bi-lightning");
-              });
-            });
-            row.querySelector('[data-act="del"]').addEventListener("click", function () {
-              plan.pages[active].sections = plan.pages[active].sections.filter(function (x) { return x.id !== s.id; });
-              markDirty(); renderCanvas(); renderPreview();
-              SS.toast("Section removed", "bi-trash3");
-            });
-            row.querySelector('[data-act="dup"]').addEventListener("click", function () {
-              var copy = JSON.parse(JSON.stringify(s));
-              copy.id = "s_" + Math.random().toString(36).slice(2, 9);
-              var idx = plan.pages[active].sections.indexOf(s);
-              plan.pages[active].sections.splice(idx + 1, 0, copy);
-              markDirty(); renderCanvas(); renderPreview();
-              SS.toast("Section duplicated", "bi-copy");
-            });
-            row.querySelector('[data-act="move"]').addEventListener("click", function (e) {
-              openMoveMenu(e.currentTarget, s);
-            });
-
-            canvas.appendChild(row);
-          });
-        }
-
-        function addSection(type, index) {
-          var def = API.SECTIONS[type];
-          var sec = {
-            id: "s_" + Math.random().toString(36).slice(2, 9),
-            type: type,
-            title: def.name,
-            subtitle: def.blurb,
-            fields: {},
-            ready: 0
-          };
-          plan.pages[active].sections.splice(index, 0, sec);
-          markDirty(); renderCanvas(); renderPreview();
-        }
-
-        function reconcile(from, to) {
-          var arr = plan.pages[active].sections;
-          var moved = arr.splice(from, 1)[0];
-          arr.splice(to, 0, moved);
-          markDirty(); renderPreview();
-        }
-
-        /* move-to-page popover */
-        function openMoveMenu(anchor, sec) {
-          closeMoveMenu();
-          var menu = document.createElement("div");
-          menu.className = "move-menu";
-          menu.setAttribute("role", "menu");
-          plan.pages.forEach(function (p, i) {
-            if (i === active) return;
-            var b = document.createElement("button");
-            b.type = "button";
-            b.setAttribute("role", "menuitem");
-            b.innerHTML = '<i class="bi bi-file-earmark" aria-hidden="true"></i> Move to “' + SS.esc(p.name) + "”";
-            b.addEventListener("click", function () {
-              var arr = plan.pages[active].sections;
-              arr.splice(arr.indexOf(sec), 1);
-              p.sections.push(sec);
-              closeMoveMenu();
-              markDirty(); renderCanvas(); renderPreview();
-              SS.toast("Moved to " + p.name, "bi-arrow-left-right");
-            });
-            menu.appendChild(b);
-          });
-          document.body.appendChild(menu);
-          var r = anchor.getBoundingClientRect();
-          menu.style.top = (r.bottom + 6) + "px";
-          menu.style.left = Math.max(8, Math.min(r.left - 140, window.innerWidth - 240)) + "px";
-          setTimeout(function () { document.addEventListener("click", outside); }, 0);
-          function outside(e) { if (!menu.contains(e.target)) closeMoveMenu(); }
-          menu._outside = outside;
-        }
-        function closeMoveMenu() {
-          var m = document.querySelector(".move-menu");
-          if (m) { document.removeEventListener("click", m._outside); m.remove(); }
-        }
-
-        /* ---------- preview / blueprint ---------- */
-        var frame = document.getElementById("previewFrame");
-        var bpPane = document.getElementById("bpPane");
-        var previewTimer = null;
-
-        function renderPreview() {
-          frame.srcdoc = SS.renderSite(plan, plan.pages[active].id);
-          bpPane.innerHTML = SS.blueprintTree(plan);
-        }
-        function schedulePreview() {
-          clearTimeout(previewTimer);
-          previewTimer = setTimeout(renderPreview, 700);
-        }
-
-        document.getElementById("segPreview").addEventListener("click", function () {
-          this.setAttribute("aria-pressed", "true");
-          document.getElementById("segBlueprint").setAttribute("aria-pressed", "false");
-          frame.hidden = false; bpPane.hidden = true;
-        });
-        document.getElementById("segBlueprint").addEventListener("click", function () {
-          this.setAttribute("aria-pressed", "true");
-          document.getElementById("segPreview").setAttribute("aria-pressed", "false");
-          frame.hidden = true; bpPane.hidden = false;
-        });
-
-        /* ---------- site settings ---------- */
-        document.getElementById("siteName").addEventListener("input", function () {
-          plan.meta.siteName = this.value;
-          document.getElementById("projTitle").textContent = this.value || "Untitled";
-          markDirty(); schedulePreview();
-        });
-        document.getElementById("themeSel").addEventListener("change", function () {
-          plan.meta.theme = this.value;
-          markDirty(); renderPreview();
-          SS.toast("Theme set to " + this.value, "bi-palette");
-        });
-
-        /* ---------- sortables ---------- */
-        Sortable.create(document.getElementById("paletteStructure"), {
-          group: { name: "palette", pull: "clone", put: false },
-          sort: false,
-          animation: 150,
-          onStart: function () { dragGuard = true; },
-          onEnd: function () { setTimeout(function () { dragGuard = false; }, 50); }
-        });
-        Sortable.create(document.getElementById("paletteContent"), {
-          group: { name: "palette", pull: "clone", put: false },
-          sort: false,
-          animation: 150,
-          onStart: function () { dragGuard = true; },
-          onEnd: function () { setTimeout(function () { dragGuard = false; }, 50); }
-        });
-
-        Sortable.create(canvas, {
-          group: { name: "sections", pull: false, put: ["palette"] },
-          handle: ".grip",
-          animation: 150,
-          ghostClass: "sortable-ghost",
-          chosenClass: "sortable-chosen",
-          dragClass: "sortable-drag",
-          draggable: ".sect, .palette-item",
-          onAdd: function (evt) {
-            var type = evt.item.getAttribute("data-type");
-            if (type) addSection(type, evt.newIndex);
-            else evt.item.remove();
-          },
-          onEnd: function (evt) {
-            if (evt.from === evt.to && evt.oldIndex !== evt.newIndex && !evt.item.getAttribute("data-type")) {
-              reconcile(evt.oldIndex, evt.newIndex);
-            }
-          }
-        });
-
-        /* ---------- boot ---------- */
-        renderTabs();
-        renderCanvas();
-        renderPreview();
-        API.savePlan(proj.id, plan); /* normalize on open */
+        }, 700);
       }
 
-      function noProject() {
-        SS.toast("That plan could not be found", "bi-exclamation-triangle");
-        location.href = "dashboard.html";
+      function changed() {
+        markDirty();
+      }
+
+      /* ---------------- pages ---------------- */
+      function renderTabs() {
+        var host = document.getElementById("pageTabs");
+        host.innerHTML = "";
+        plan.pages.forEach(function (page, i) {
+          var tab = document.createElement("button");
+          tab.type = "button";
+          tab.className = "tab" + (i === pageIndex ? " is-on" : "");
+          tab.setAttribute("role", "tab");
+          tab.setAttribute("aria-selected", String(i === pageIndex));
+          tab.innerHTML = SS.esc(page.name) +
+            (plan.pages.length > 1 ? '<i class="bi bi-x-lg tab-del" data-del="' + i + '" aria-label="Delete page"></i>' : "");
+          tab.addEventListener("click", function (event) {
+            if (event.target.closest("[data-del]")) return;
+            pageIndex = i;
+            render();
+          });
+          tab.addEventListener("dblclick", function () { renameTab(tab, i); });
+          host.appendChild(tab);
+        });
+        host.querySelectorAll("[data-del]").forEach(function (icon) {
+          icon.addEventListener("click", function (event) {
+            event.stopPropagation();
+            var i = parseInt(icon.getAttribute("data-del"), 10);
+            deletePage(i);
+          });
+        });
+      }
+
+      function renameTab(tab, i) {
+        var page = plan.pages[i];
+        var input = document.createElement("input");
+        input.className = "tab-rename";
+        input.value = page.name;
+        tab.replaceWith(input);
+        input.focus();
+        input.select();
+        var done = false;
+        function commit(save) {
+          if (done) return;
+          done = true;
+          if (save && input.value.trim()) page.name = input.value.trim().slice(0, 40);
+          render();
+          changed();
+        }
+        input.addEventListener("keydown", function (event) {
+          if (event.key === "Enter") commit(true);
+          if (event.key === "Escape") commit(false);
+        });
+        input.addEventListener("blur", function () { commit(true); });
+      }
+
+      function deletePage(i) {
+        if (plan.pages.length === 1) { SS.toast("A site needs at least one page", "bi-info-circle"); return; }
+        plan.pages.splice(i, 1);
+        pageIndex = Math.max(0, pageIndex - 1);
+        render();
+        changed();
+        SS.toast("Page deleted", "bi-trash3");
+      }
+
+      document.getElementById("addPage").addEventListener("click", function () {
+        plan.pages.push({ id: "p_" + Math.random().toString(36).slice(2, 7), name: "Page " + (plan.pages.length + 1), sections: [] });
+        pageIndex = plan.pages.length - 1;
+        render();
+        changed();
+      });
+
+      /* ---------------- section library ---------------- */
+      var GROUPS = {
+        structure: ["hero", "about", "cta", "contact", "faq", "hours", "newsletter"],
+        content: ["features", "gallery", "products", "menu", "testimonials", "team", "blog"]
+      };
+
+      function buildPalette(host, keys) {
+        host.innerHTML = "";
+        keys.forEach(function (key) {
+          var def = API.SECTIONS[key];
+          if (!def) return;
+          var button = document.createElement("button");
+          button.type = "button";
+          button.className = "rec-item palette-item";
+          button.innerHTML = '<span class="ri"><i class="bi ' + def.icon + '" aria-hidden="true"></i></span>' +
+            "<span><strong>" + SS.esc(def.name) + "</strong><small>" + SS.esc(def.blurb) + "</small></span>";
+          button.addEventListener("click", function () { EditorUI.addSection(key); render(); });
+          host.appendChild(button);
+        });
+      }
+
+      /* ---------------- AI ---------------- */
+      function aiSection(section) {
+        section.title = "";
+        section.subtitle = "";
+        API.fillSection(section, plan.meta).then(function () {
+          render();
+          changed();
+          SS.toast("Written with AI", "bi-lightning");
+        });
+      }
+
+      /* ---------------- styles panel ---------------- */
+      var stylesOpen = false;
+      document.getElementById("stylesBtn").addEventListener("click", function () {
+        stylesOpen = !stylesOpen;
+        stylesPanel.hidden = !stylesOpen;
+        this.setAttribute("aria-pressed", String(stylesOpen));
+        if (stylesOpen) EditorUI.stylesPanel(stylesPanel);
+      });
+      document.getElementById("publishBtn").addEventListener("click", function () {
+        location.href = "publish.html?id=" + plan.id;
+      });
+
+      document.getElementById("siteName").addEventListener("input", function () {
+        plan.meta.siteName = this.value;
+        changed();
+      });
+
+      /* ---------------- drag to reorder sections ---------------- */
+      var sortable = null;
+      function wireSortable() {
+        if (sortable) { sortable.destroy(); sortable = null; }
+        if (typeof Sortable === "undefined") return;
+        sortable = Sortable.create(canvas, {
+          handle: ".sec-grip",
+          filter: "[data-edit], [data-img-slot], a, button, input, textarea",
+          draggable: ".ss-sec",
+          ghostClass: "is-ghost",
+          chosenClass: "is-chosen",
+          animation: 160,
+          onEnd: function (event) {
+            var page = currentPage();
+            var from = event.oldIndex, to = event.newIndex;
+            if (from === to || from === undefined) return;
+            var moved = page.sections.splice(from, 1)[0];
+            page.sections.splice(to, 0, moved);
+            render();
+            changed();
+          }
+        });
+      }
+
+      /* ---------------- render ---------------- */
+      function render() {
+        renderTabs();
+        document.getElementById("siteName").value = plan.meta.siteName;
+        var page = currentPage();
+        Editor.pageId = page.id;
+        Editor.render();
+        wireSortable();
+        if (stylesOpen) EditorUI.stylesPanel(stylesPanel);
+      }
+
+      /* ---------------- boot ----------------
+         The builder is reachable from the plan flow, but also directly by
+         url, so it must survive a project whose plan_json is empty or
+         half-written. Anything missing is rebuilt from the project row. */
+
+      function sectionFrom(key, i) {
+        var def = API.SECTIONS[key] || {};
+        return {
+          id: "s_" + Math.random().toString(36).slice(2, 9),
+          type: key,
+          title: def.name || "Section",
+          subtitle: def.blurb || "",
+          fields: {},
+          items: window.EditorUI ? EditorUI.startersFor(key) : [],
+          ready: 0
+        };
+      }
+
+      function normalise(project) {
+        var p = (project.plan_json && typeof project.plan_json === "object") ? project.plan_json : {};
+        p.id = project.id;
+        p.meta = p.meta || {};
+        p.meta.type = p.meta.type || project.type || "business";
+        p.meta.goal = p.meta.goal || project.goal || "";
+        p.meta.theme = p.meta.theme || project.theme || "modern";
+        p.meta.siteName = p.meta.siteName || project.name || "My Website";
+        p.pages = Array.isArray(p.pages) ? p.pages.filter(function (page) { return page && page.id; }) : [];
+
+        if (!p.pages.length) {
+          var keys = API.recommendedFor(p.meta.type);
+          p.pages = [{
+            id: "home",
+            name: "Home",
+            sections: keys.map(sectionFrom)
+          }];
+        }
+        p.pages.forEach(function (page) {
+          page.name = page.name || "Page";
+          page.sections = Array.isArray(page.sections) ? page.sections : [];
+          page.sections.forEach(function (s) {
+            if (!s || !s.type) return;
+            s.fields = s.fields || {};
+            s.id = s.id || "s_" + Math.random().toString(36).slice(2, 9);
+            /* list blocks are unusable when empty */
+            if (!Array.isArray(s.items) || !s.items.length) {
+              s.items = window.EditorUI ? EditorUI.startersFor(s.type) : [];
+            }
+          });
+        });
+        return p;
+      }
+
+      function start(project) {
+        plan = normalise(project);
+
+        Editor.mount({
+          root: canvas,
+          plan: plan,
+          pageId: plan.pages[0].id,
+          onChange: changed,
+          onAI: aiSection
+        });
+
+        buildPalette(document.getElementById("paletteStructure"), GROUPS.structure);
+        buildPalette(document.getElementById("paletteContent"), GROUPS.content);
+        render();
       }
 
       if (wantedId) {
         API.getProject(wantedId).then(function (res) {
-          if (!res.ok || !res.project) return noProject();
-          start(res.project);
+          if (res.ok && res.project) start(res.project);
+          else location.href = "dashboard.html";
         });
       } else {
         API.listProjects().then(function (res) {
-          if (!res.projects || !res.projects.length) return noProject();
-          start(res.projects[0]);
+          if (res.ok && res.projects.length) start(res.projects[0]);
+          else location.href = "plan.html";
         });
       }
     })();

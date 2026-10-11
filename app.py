@@ -16,6 +16,7 @@ from flask_jwt_extended import JWTManager
 import auth
 import config
 import gemini
+import media
 import projects
 from db import DatabaseUnavailable, query, query_one
 
@@ -28,6 +29,7 @@ CORS(app)
 jwt = JWTManager(app)
 app.register_blueprint(auth.bp)
 app.register_blueprint(projects.bp)
+app.register_blueprint(media.bp)
 
 
 # Every rejected token answers 401 with the same shape, so the client has one

@@ -21,7 +21,7 @@
     { id: "cobalt-cream",  name: "Cobalt & Chalk",   mode: "light", v: ["business", "portfolio", "school", "blog", "store"],
       c: { bg: "#F6F6F4", surface: "#FFFFFF", text: "#16181D", muted: "#5A5F6B", accent: "#1D4ED8", accentInk: "#FFFFFF", line: "#E2E3E0", soft: "#ECF0FE" } },
     { id: "terracotta",    name: "Terracotta Slate", mode: "light", v: ["restaurant", "store", "business"],
-      c: { bg: "#F4F5F6", surface: "#FFFFFF", text: "#1C1E22", muted: "#5F6670", accent: "#C4552E", accentInk: "#FFFFFF", line: "#E0E2E5", soft: "#F7EAE4" } },
+      c: { bg: "#F4F5F6", surface: "#FFFFFF", text: "#1C1E22", muted: "#5F6670", accent: "#B04A26", accentInk: "#FFFFFF", line: "#E0E2E5", soft: "#F7EAE4" } },
     { id: "mono-rose",     name: "Monochrome & Rose", mode: "light", v: ["portfolio", "store", "blog"],
       c: { bg: "#FFFFFF", surface: "#F5F5F5", text: "#111113", muted: "#5E5E66", accent: "#E11D5B", accentInk: "#FFFFFF", line: "#E5E5E7", soft: "#FDE8EE" } },
     { id: "olive-brick",   name: "Olive & Brick",    mode: "light", v: ["business", "school", "blog"],
