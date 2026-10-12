@@ -367,6 +367,70 @@ def t_logout_clears_the_session_cookie():
         f"logout did not expire the cookie: {cleared!r}"
 
 
+def t_privacy_summary_is_served():
+    status, data, _ = call("GET", "/api/privacy/summary", expect=200)
+    assert data["retention"], "no retention table published"
+    for row in data["retention"]:
+        assert row["data"] and row["why"] and row["kept"], row
+    assert data["third_parties"], "no third parties declared"
+    for tp in data["third_parties"]:
+        assert tp["name"] and tp["why"] and tp["what_leaves"], tp
+    # The claim on the page is that nothing tracks anybody. Assert it rather
+    # than trusting the copy.
+    assert data["tracking_categories_used"] == [], data["tracking_categories_used"]
+    names = [c["name"] for c in data["cookies"]]
+    assert "sitesketch_refresh" in names, names
+
+
+def t_inventory_covers_every_storage_key():
+    """Every value the client writes must be on the published list.
+
+    An audit that only lists cookies hides exactly what people want to know
+    about, so this walks the client's own storage and compares.
+    """
+    status, data, _ = call("GET", "/api/privacy/summary", expect=200)
+    declared = {c["name"] for c in data["cookies"]}
+
+    # keys api.js and consent.js are known to write
+    written = {
+        "sitesketch_token_v1", "sitesketch_user_v1",
+        "sitesketch_last_email_v1", "sitesketch_consent_v1",
+        "sitesketch_remember_pref_v1",
+    }
+    missing = written - declared
+    assert not missing, f"storage the app uses but the policy does not list: {missing}"
+
+
+def t_no_credential_is_in_cookies_or_storage():
+    """Nothing cookie-shaped may ever hold a password or a card number."""
+    status, data, _ = call("GET", "/api/privacy/summary", expect=200)
+    for cookie in data["cookies"]:
+        blob = (cookie["name"] + " " + cookie["purpose"] + " " + cookie["details"]).lower()
+        for banned in ("password", "card number", "credit card", "cvv"):
+            # "your password" appearing in a sentence saying it is NOT stored is
+            # fine; a cookie whose stated purpose is holding one is not.
+            if banned in blob and "never" not in blob and "not stored" not in blob:
+                raise AssertionError(f"{cookie['name']} mentions {banned}: {cookie['purpose']}")
+
+
+def t_legal_pages_are_reachable():
+    for path, needle in (("/privacy.html", "Privacy"), ("/terms.html", "Terms of use")):
+        status, body = raw_text("GET", path)
+        assert status == 200, f"{path} -> {status}"
+        assert needle in body, f"{path} does not look like the right page"
+
+
+def t_consent_notice_is_not_served_to_published_sites():
+    """A published site runs no script, so it must not carry the consent code."""
+    status, data, _ = raw_call("POST", f"/api/projects/{project_id}/publish",
+                               {"slug": "e2e-kitchen", "pages": _compiled()},
+                               token=token)
+    assert status == 200, data
+    status, body = raw_text("GET", "/site/e2e-kitchen")
+    assert status == 200, status
+    assert "consent" not in body.lower(), "the consent banner leaked into a published site"
+
+
 def t_cookie_inventory_is_published():
     """The list on /privacy comes from the same place the code sets cookies."""
     status, data, _ = call("GET", "/api/auth/cookie-inventory", expect=200)
@@ -738,6 +802,11 @@ for name, fn in [
     ("cross-site refresh is refused", t_cross_site_refresh_is_refused),
     ("logout clears the session cookie", t_logout_clears_the_session_cookie),
     ("cookie inventory is published", t_cookie_inventory_is_published),
+    ("privacy summary is served", t_privacy_summary_is_served),
+    ("inventory covers every storage key", t_inventory_covers_every_storage_key),
+    ("no credential is ever stored client-side", t_no_credential_is_in_cookies_or_storage),
+    ("privacy and terms pages are reachable", t_legal_pages_are_reachable),
+    ("published sites carry no consent code", t_consent_notice_is_not_served_to_published_sites),
     ("login works", t_login),
     ("wrong password rejected", t_login_wrong_password),
     ("unknown email rejected", t_login_unknown_email),

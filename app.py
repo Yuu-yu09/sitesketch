@@ -132,7 +132,8 @@ def _expired_token(jwt_header, jwt_payload):
 def _revoked_token(jwt_header, jwt_payload):
     return jsonify(error="That session is no longer valid."), 401
 
-PAGES = ("", "index", "login", "register", "dashboard", "plan", "builder", "publish")
+PAGES = ("", "index", "login", "register", "dashboard", "plan", "builder", "publish",
+         "privacy", "terms")
 
 
 # ---------------------------------------------------------------- API: health
