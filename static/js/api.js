@@ -13,6 +13,7 @@
 
   var TOKEN_KEY = "sitesketch_token_v1";
   var USER_KEY = "sitesketch_user_v1";
+  var REFRESH_KEY = "sitesketch_refresh_v1";
 
   /* ---------------- transport ---------------- */
 
@@ -20,22 +21,90 @@
     try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
   }
 
-  function request(path, options) {
+  function refreshToken() {
+    try { return localStorage.getItem(REFRESH_KEY) || ""; } catch (e) { return ""; }
+  }
+
+  /* One refresh at a time. Several requests can come back 401 together, and
+     without this they would each try to refresh, racing each other and
+     occasionally wiping the session they were trying to rescue. */
+  /* A request that never answers leaves a button stuck on its spinner with no
+     way out, which reads as a broken app rather than a slow one. Bound it
+     and say what happened. */
+  var REQUEST_TIMEOUT = 25000;
+
+  function fetchWithTimeout(url, options, ms) {
+    if (typeof AbortController === "undefined" || !ms) {
+      return fetch(url, options);
+    }
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, ms);
+    return fetch(url, Object.assign({}, options, { signal: controller.signal }))
+      .then(function (res) { clearTimeout(timer); return res; },
+            function (err) {
+              clearTimeout(timer);
+              if (err && err.name === "AbortError") {
+                var slow = new Error("timeout");
+                slow.isTimeout = true;
+                throw slow;
+              }
+              throw err;
+            });
+  }
+
+  var refreshing = null;
+
+  function renew() {
+    if (refreshing) return refreshing;
+    var rt = refreshToken();
+    if (!rt) return Promise.resolve(false);
+
+    refreshing = fetch("/api/auth/refresh", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + rt }
+    }).then(function (res) {
+      if (!res.ok) return false;
+      return res.json().then(function (data) {
+        if (!data || !data.token) return false;
+        try { localStorage.setItem(TOKEN_KEY, data.token); } catch (e) { /* private mode */ }
+        return true;
+      });
+    }).catch(function () {
+      return false;
+    }).then(function (ok) {
+      refreshing = null;
+      if (!ok) clearSession();
+      return ok;
+    });
+
+    return refreshing;
+  }
+
+  function send(path, options, attempt) {
     options = options || {};
     var headers = options.headers || {};
     if (token()) headers.Authorization = "Bearer " + token();
     if (options.body) headers["Content-Type"] = "application/json";
 
-    return fetch(path, {
+    return fetchWithTimeout(path, {
       method: options.method || "GET",
       headers: headers,
       body: options.body ? JSON.stringify(options.body) : undefined
-    }).then(function (res) {
+    }, options.timeout || REQUEST_TIMEOUT).then(function (res) {
       return res.text().then(function (text) {
         var data = null;
         try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+
         if (res.status === 401) {
-          clearSession();
+          /* An expired access token is not a failed session: refresh it and
+             replay the request once before bothering the user. */
+          if (attempt < 1 && refreshToken()) {
+            return renew().then(function (ok) {
+              if (ok) return send(path, options, attempt + 1);
+              return { ok: false, status: 401, error: (data && data.error) || "Please sign in again." };
+            });
+          }
+          if (attempt === 0) clearSession();
           return { ok: false, status: 401, error: (data && data.error) || "Please sign in again." };
         }
         if (!res.ok) {
@@ -44,13 +113,22 @@
         return { ok: true, status: res.status, data: data };
       });
     }).catch(function (err) {
+      if (err && err.isTimeout) {
+        return { ok: false, status: 0, timeout: true,
+                 error: "The server is taking too long to answer. Try again in a moment." };
+      }
       return { ok: false, status: 0, error: "Cannot reach the server. Check your connection." };
     });
   }
 
-  function setSession(tokenValue, user) {
+  function request(path, options) {
+    return send(path, options, 0);
+  }
+
+  function setSession(tokenValue, user, refresh) {
     try {
       localStorage.setItem(TOKEN_KEY, tokenValue);
+      if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
       /* the screens render user.name; normalise whatever the API sends */
       localStorage.setItem(USER_KEY, JSON.stringify(Object.assign({}, user, {
         name: user.name || user.username || user.email
@@ -62,6 +140,7 @@
     try {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
+      localStorage.removeItem(REFRESH_KEY);
     } catch (e) { /* ignore */ }
   }
 
@@ -300,7 +379,7 @@
         body: { email: email, password: password }
       }).then(function (res) {
         if (!res.ok) return { ok: false, error: res.error };
-        setSession(res.data.token, res.data.user);
+        setSession(res.data.token, res.data.user, res.data.refresh);
         return { ok: true, user: res.data.user };
       });
     },
@@ -310,7 +389,7 @@
         body: { username: name, email: email, password: password }
       }).then(function (res) {
         if (!res.ok) return { ok: false, error: res.error };
-        setSession(res.data.token, res.data.user);
+        setSession(res.data.token, res.data.user, res.data.refresh);
         return { ok: true, user: res.data.user };
       });
     },

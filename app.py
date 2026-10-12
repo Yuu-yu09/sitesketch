@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+from datetime import timedelta
 
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -26,6 +27,11 @@ ROOT = pathlib.Path(__file__).parent
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["JWT_SECRET_KEY"] = config.SECRET_KEY or "dev-only-insecure"
 app.config["JWT_TOKEN_LOCATION"] = ["headers"]
+# Short-lived access token, long-lived refresh token. The access token used
+# to fall back to flask-jwt-extended's 15 minute default with nothing to
+# renew it, so people were logged out mid-edit for no visible reason.
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=30)
+app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=30)
 CORS(app)
 jwt = JWTManager(app)
 app.register_blueprint(auth.bp)

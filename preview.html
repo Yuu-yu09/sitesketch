@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Preview</title>
+  <link rel="stylesheet" href="/static/css/fonts.css">
+  <link rel="stylesheet" href="/static/css/generated.css">
+  <style>
+    html, body { margin: 0; padding: 0; background: #fff; }
+    body { min-height: 100vh; }
+    /* the preview must look like the published page, with no editor chrome */
+    .ss-site { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="/static/js/api.js?v=1"></script>
+  <script src="/static/js/site.js?v=1"></script>
+  <script src="/static/js/design.js?v=1"></script>
+  <script>
+    /* Renders a plan handed over by the builder.
+       This has to live in its own document so the page's own media queries
+       respond to the frame width - squeezing a div inside the builder would
+       never trigger them, so "mobile preview" would just be a narrow desktop. */
+    (function () {
+      var host = document.getElementById("host");
+      var pageId = "home";
+
+      function render(plan, id) {
+        if (!plan || !plan.pages || !plan.pages.length) {
+          host.innerHTML = '<p style="padding:2rem;font-family:system-ui">Nothing to preview yet.</p>';
+          return;
+        }
+        var page = id || pageId;
+        var found = plan.pages.filter(function (p) { return p.id === page; })[0];
+        pageId = found ? page.id : plan.pages[0].id;
+
+        host.innerHTML = SS.renderPage(plan, pageId, { editable: false });
+        SS.observeMotion(host);
+      }
+
+      window.addEventListener("message", function (event) {
+        var data = event.data || {};
+        if (data.type === "render") render(data.plan, data.pageId);
+      });
+
+      /* let the parent know we are ready for the first paint */
+      parent.postMessage({ type: "preview-ready" }, "*");
+
+      /* a page opened on its own can render a sample plan */
+      if (location.search.indexOf("sample") !== -1 && window.SS && window.SS.renderPage) {
+        render({
+          meta: { type: "business", goal: "get-contact", theme: "modern", siteName: "Preview" },
+          pages: [{ id: "home", name: "Home", sections: [] }]
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

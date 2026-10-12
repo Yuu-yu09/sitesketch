@@ -30,6 +30,20 @@
               title="Hide the editor chrome and see the whole site">
         <i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> Preview
       </button>
+      <div class="device-switch" role="group" aria-label="Preview size">
+        <button type="button" class="device-btn" data-device="mobile"
+                aria-pressed="false" title="Phone (390 px)">
+          <i class="bi bi-phone" aria-hidden="true"></i><span class="sr-only">Phone</span>
+        </button>
+        <button type="button" class="device-btn" data-device="tablet"
+                aria-pressed="false" title="Tablet (820 px)">
+          <i class="bi bi-tablet" aria-hidden="true"></i><span class="sr-only">Tablet</span>
+        </button>
+        <button type="button" class="device-btn is-on" data-device="desktop"
+                aria-pressed="true" title="Desktop (full width)">
+          <i class="bi bi-laptop" aria-hidden="true"></i><span class="sr-only">Desktop</span>
+        </button>
+      </div>
       <button class="btn btn-sm" id="footerBtn" type="button" aria-pressed="false">
         <i class="bi bi-layout-text-footer" aria-hidden="true"></i> Footer
       </button>
@@ -61,7 +75,16 @@
     </aside>
 
     <!-- the page itself: this is the editor -->
-    <main class="builder-canvas" id="canvas" tabindex="-1" aria-label="Your website, editable"></main>
+    <div class="device-stage" id="deviceStage">
+      <main class="builder-canvas" id="canvas" tabindex="-1" aria-label="Your website, editable"></main>
+      <!-- device preview lives in a real frame so the page's own media
+           queries fire; squeezing a div would not show a true phone layout -->
+      <div class="device-frame" id="deviceFrame" hidden>
+        <div class="device-chrome" id="deviceChrome"></div>
+        <iframe id="previewFrame" title="Preview of your website"
+                src="preview.html" loading="lazy"></iframe>
+      </div>
+    </div>
 
     <!-- design settings, always on the right -->
     <aside class="builder-panel" id="stylesPanel" aria-label="Design settings">
@@ -118,6 +141,7 @@
 
       function changed() {
         markDirty();
+        pushPreview();
       }
 
       /* ---------------- pages ---------------- */
@@ -363,7 +387,68 @@
         Editor.render();
         wireSortable();
         renderPanel();
+        pushPreview();
       }
+
+      /* ---------------- device preview ----------------
+         A phone-sized column has to be a real iframe, not a narrow div:
+         the generated site collapses itself with media queries, and those
+         only fire against the document width. */
+      var DEVICES = {
+        mobile: { w: 390, h: 780, label: "iPhone 390 px" },
+        tablet: { w: 820, h: 1000, label: "Tablet 820 px" },
+        desktop: { w: 0, h: 0, label: "Desktop" }
+      };
+      var device = "desktop";
+
+      var deviceFrame = document.getElementById("deviceFrame");
+      var deviceChrome = document.getElementById("deviceChrome");
+      var previewFrame = document.getElementById("previewFrame");
+
+      function setDevice(next) {
+        device = DEVICES[next] ? next : "desktop";
+        var info = DEVICES[device];
+
+        document.querySelectorAll(".device-btn").forEach(function (b) {
+          var on = b.dataset.device === device;
+          b.classList.toggle("is-on", on);
+          b.setAttribute("aria-pressed", String(on));
+        });
+
+        var isDesktop = device === "desktop";
+        deviceFrame.hidden = isDesktop;
+        canvas.hidden = !isDesktop;
+
+        if (!isDesktop) {
+          deviceFrame.style.setProperty("--device-w", info.w + "px");
+          deviceFrame.style.setProperty("--device-h", info.h + "px");
+          deviceChrome.textContent = info.w + " \u00d7 " + info.h;
+          pushPreview();
+        }
+        Editor.positionToolbar();
+      }
+
+      function pushPreview() {
+        if (!plan || deviceFrame.hidden) return;
+        var frame = previewFrame.contentWindow;
+        if (!frame) return;
+        try {
+          frame.postMessage(
+            { type: "render", plan: plan, pageId: Editor.pageId },
+            location.origin
+          );
+        } catch (e) { /* the frame may still be loading */ }
+      }
+
+      document.querySelectorAll(".device-btn").forEach(function (button) {
+        button.addEventListener("click", function () { setDevice(button.dataset.device); });
+      });
+
+      window.addEventListener("message", function (event) {
+        if (event.data && event.data.type === "preview-ready") pushPreview();
+      });
+
+      previewFrame.addEventListener("load", pushPreview);
 
       /* ---------------- first-run hints ----------------
          Drag handles, inline editing and preview are all invisible until

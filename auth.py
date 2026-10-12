@@ -10,7 +10,13 @@ from __future__ import annotations
 import re
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, jwt_required
+from flask_jwt_extended import (
+    create_access_token,
+    create_refresh_token,
+    get_jwt,
+    get_jwt_identity,
+    jwt_required,
+)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import db
@@ -31,6 +37,33 @@ def _problem(username: str, email: str, password: str) -> str | None:
     if not password or len(password) < MIN_PASSWORD:
         return f"Password needs at least {MIN_PASSWORD} characters."
     return None
+
+
+def _session(user: dict, status: int = 200):
+    """A login response: a short access token plus a long refresh token.
+
+    The access token expires in minutes on purpose. Without a refresh token
+    that meant people were silently signed out every fifteen minutes while
+    they were working, which read as "it logged me out for no reason".
+    """
+    identity = str(user["id"])
+    claims = {"username": user["username"]}
+    return jsonify(
+        token=create_access_token(identity=identity, additional_claims=claims),
+        refresh=create_refresh_token(identity=identity, additional_claims=claims),
+        expires_in=_access_seconds(),
+        user=_public(user),
+    ), status
+
+
+def _access_seconds() -> int:
+    from flask import current_app
+
+    raw = current_app.config.get("JWT_ACCESS_TOKEN_EXPIRES")
+    try:
+        return int(raw.total_seconds())
+    except AttributeError:
+        return 900
 
 
 def _public(row: dict) -> dict:
@@ -69,7 +102,8 @@ def register():
         identity=str(user["id"]),
         additional_claims={"username": user["username"]},
     )
-    return jsonify(token=token, user=_public(user)), 201
+    del token  # replaced by _session, which also issues a refresh token
+    return _session(user, 201)
 
 
 @bp.post("/login")
@@ -90,7 +124,31 @@ def login():
         identity=str(row["id"]),
         additional_claims={"username": row["username"]},
     )
-    return jsonify(token=token, user=_public(row))
+    del token  # replaced by _session, which also issues a refresh token
+    return _session(row)
+
+
+@bp.post("/refresh")
+@jwt_required(refresh=True)
+def refresh():
+    """Trade a still-valid refresh token for a fresh access token.
+
+    The client calls this silently whenever an access token has run out, so
+    someone halfway through editing their site is never bounced to the login
+    screen for it.
+    """
+    identity = get_jwt_identity()
+    claims = {"username": get_jwt().get("username")}
+    if not claims.get("username"):
+        row = db.query_one("select username from users where id = %s", (identity,))
+        if not row:
+            return jsonify(error="Account no longer exists"), 401
+        claims["username"] = row["username"]
+
+    return jsonify(
+        token=create_access_token(identity=identity, additional_claims=claims),
+        expires_in=_access_seconds(),
+    )
 
 
 @bp.get("/me")

@@ -11,6 +11,12 @@ from psycopg.rows import dict_row
 
 import config
 
+# Every query is bounded. Without this a stalled connection parks the request
+# indefinitely: the network to Supabase has been observed stalling for 45s at a
+# time, which turned one slow query into a cascade of hung ones.
+CONNECT_TIMEOUT = 10
+STATEMENT_TIMEOUT_MS = 10_000
+
 
 class DatabaseUnavailable(RuntimeError):
     """Raised when DATABASE_URL is unset or the database cannot be reached."""
@@ -23,7 +29,8 @@ def connection():
     try:
         with psycopg.connect(
             config.DATABASE_URL,
-            connect_timeout=15,
+            connect_timeout=CONNECT_TIMEOUT,
+            options=f"-c statement_timeout={STATEMENT_TIMEOUT_MS}",
             row_factory=dict_row,
         ) as conn:
             yield conn
