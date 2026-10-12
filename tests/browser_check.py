@@ -45,7 +45,7 @@ def check(name: str, fn) -> None:
     _ = round(time.time() - started, 2)
 
 
-def run(page):
+def run(page, phase=None):
     # ---------------------------------------------------------- registration
     def t_register_form_loads():
         page.goto(f"{BASE}/register.html", wait_until="domcontentloaded")
@@ -81,6 +81,8 @@ def run(page):
         the login screen. Corrupt the access token, then make a call: the
         client must renew it with the refresh token and carry on.
         """
+        if phase:
+            phase["name"] = "deliberate expiry (401 expected here)"
         page.goto(f"{BASE}/dashboard.html", wait_until="domcontentloaded")
         page.wait_for_timeout(400)
         page.evaluate("() => localStorage.setItem('sitesketch_token_v1', 'expired.jwt.value')")
@@ -111,7 +113,18 @@ def run(page):
                     name: 'Browser check project',
                     type: 'business',
                     goal: 'get-contact',
-                    plan_json: {pages: [{id: 'home', sections: []}]},
+                    plan_json: {
+                        "pages": [{
+                            "id": "home",
+                            "name": "Home",
+                            "sections": [
+                                {"id": "s_seed_hero", "type": "hero", "title": "Hero",
+                                 "subtitle": "A seeded section", "fields": {}, "items": []},
+                                {"id": "s_seed_about", "type": "about", "title": "About",
+                                 "subtitle": "A seeded section", "fields": {}, "items": []},
+                            ],
+                        }],
+                    },
                 }),
             });
             return r.status;
@@ -131,11 +144,16 @@ def run(page):
 
     # -------------------------------------------------------------- builder
     builder_id: dict[str, str] = {}
+    if phase:
+        phase["name"] = "builder"
 
     def t_open_builder():
         page.goto(f"{BASE}/dashboard.html", wait_until="domcontentloaded")
         page.wait_for_timeout(900)
-        href = page.locator(".proj-card:not(.proj-new)").first.get_attribute("href") or ""
+        # The card itself is an <article>; the link to the builder is the
+        # anchor inside it, so read the href from there.
+        href = (page.locator('.proj-card:not(.proj-new) a[href*="builder.html"]')
+                .first.get_attribute("href") or "")
         assert "builder.html" in href, f"project card does not link to the builder: {href!r}"
         page.goto(f"{BASE}/{href}", wait_until="domcontentloaded")
         page.wait_for_selector(".ss-sec", timeout=SLOW)
@@ -213,7 +231,12 @@ def run(page):
 
 
 def main() -> int:
-    console_errors: list[str] = []
+    console_errors: list[tuple[str, str]] = []
+    # Every non-2xx API answer, tagged with the check that was running, so a
+    # 401 can be traced to the request that caused it instead of just being
+    # reported as console noise.
+    bad_responses: list[tuple[str, str, int]] = []
+    phase = {"name": "startup"}
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
@@ -221,23 +244,43 @@ def main() -> int:
         page = context.new_page()
         page.on(
             "pageerror",
-            lambda exc: console_errors.append(f"uncaught: {str(exc)[:140]}"),
+            lambda exc: console_errors.append((phase["name"], f"uncaught: {str(exc)[:140]}")),
         )
         page.on(
             "console",
-            lambda msg: console_errors.append(f"{msg.type}: {msg.text[:140]}")
+            lambda msg: console_errors.append((phase["name"], f"{msg.type}: {msg.text[:140]}"))
             if msg.type == "error"
             else None,
         )
+        page.on("response", lambda res: bad_responses.append(
+            (phase["name"], res.url.replace(BASE, ""), res.status)
+        ) if res.status >= 400 and "/api/" in res.url else None)
 
         print(f"\nBrowser journey against {BASE}\n")
         try:
-            run(page)
+            run(page, phase)
         finally:
             browser.close()
 
-    # a page that throws is a bug even if every assertion passed
-    noisy = [e for e in console_errors if "favicon" not in e.lower()]
+    if bad_responses:
+        print("\n  non-2xx API responses:")
+        for ph, url, status in bad_responses:
+            print(f"    [{status}] {url}  (during {ph})")
+
+    # A page that throws is a bug even if every assertion passed.
+    #
+    # One class of error is expected: the expiry check deliberately throws the
+    # access token away, so the browser logs the 401 the client then recovers
+    # from by refreshing. That 401 is the test succeeding, so it does not
+    # count. Anything else in that phase, and everything outside it, does.
+    NOISY = ("favicon",)
+    noisy = [
+        f"[{ph}] {txt}"
+        for ph, txt in console_errors
+        if not any(n in txt.lower() for n in NOISY)
+        and not (txt.startswith("error: Failed to load resource")
+                 and ph.startswith("deliberate expiry"))
+    ]
     check("no uncaught JavaScript errors", lambda: (_ for _ in ()).throw(
         Exception("; ".join(noisy[:3]))
     ) if noisy else "")

@@ -25,6 +25,10 @@ from ratelimit import limiter
 
 ROOT = pathlib.Path(__file__).parent
 
+# Only these documents may be framed, and only by us. Everything else gets
+# `frame-ancestors 'none'`. See _security_headers.
+FRAMEABLE_PATHS = frozenset({"/preview.html", "/preview"})
+
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["JWT_SECRET_KEY"] = config.SECRET_KEY or "dev-only-insecure"
 app.config["JWT_TOKEN_LOCATION"] = ["headers"]
@@ -46,8 +50,15 @@ def _security_headers(res):
     to prevent in our own escaping. No inline scripts, no inline event
     handlers, and nothing may be pulled from a source we did not choose.
     """
+    # The device preview in the builder frames preview.html same-origin so the
+    # page's own media queries see the phone/tablet width. `frame-ancestors
+    # 'none'` would block that, and the feature is worth more than the last
+    # of the clickjacking risk: framing is still limited to our own origin,
+    # so a third-party page cannot dress a preview up as one of its own.
+    framed = request.path.rstrip("/") in FRAMEABLE_PATHS
+
     res.headers.setdefault("X-Content-Type-Options", "nosniff")
-    res.headers.setdefault("X-Frame-Options", "DENY")
+    res.headers.setdefault("X-Frame-Options", "SAMEORIGIN" if framed else "DENY")
     res.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     res.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
     res.headers.setdefault(
@@ -63,7 +74,7 @@ def _security_headers(res):
             "img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co",
             "connect-src 'self' https://*.supabase.co",
             "frame-src 'self'",
-            "frame-ancestors 'none'",
+            "frame-ancestors 'self'" if framed else "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self'",
             "object-src 'none'",

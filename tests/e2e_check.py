@@ -179,6 +179,27 @@ def t_security_headers_present():
         assert needle in value, f"{header} missing {needle!r} (got {value!r})"
 
 
+def t_only_preview_may_be_framed():
+    """The device preview frames preview.html; nothing else may be framed.
+
+    `frame-ancestors 'none'` everywhere breaks the builder's phone/tablet
+    preview, and `frame-ancestors *` everywhere reopens clickjacking on the
+    app itself. So exactly one document is exempt, and only to us.
+    """
+    status, _, _ = raw_call("GET", "/preview.html")
+    assert status == 200, status
+    assert "frame-ancestors 'self'" in HEADERS.get("content-security-policy", ""), \
+        "preview.html may not be framed, so the device preview is broken"
+    assert HEADERS.get("x-frame-options") == "SAMEORIGIN", HEADERS.get("x-frame-options")
+
+    for path in ("/", "/dashboard.html", "/builder.html"):
+        status, _, _ = raw_call("GET", path)
+        assert status == 200, (path, status)
+        csp = HEADERS.get("content-security-policy", "")
+        assert "frame-ancestors 'none'" in csp, f"{path} is framable: {csp}"
+        assert HEADERS.get("x-frame-options") == "DENY", (path, HEADERS.get("x-frame-options"))
+
+
 def t_login_is_rate_limited():
     """Guessing a password has to get expensive."""
     # Every check in this file runs from one address, so clear the counter
@@ -466,6 +487,7 @@ for name, fn in [
     ("single-class password rejected", t_rejects_single_character_class_password),
     ("bad username characters rejected", t_rejects_bad_username_characters),
     ("security headers on every response", t_security_headers_present),
+    ("only the preview may be framed", t_only_preview_may_be_framed),
     ("login attempts are rate limited", t_login_is_rate_limited),
     ("spoofed forwarded header cannot dodge the limit", t_spoofed_forwarded_header_does_not_buy_a_new_bucket),
     ("refresh token renews an expired session", t_refresh_token_renews_the_session),
