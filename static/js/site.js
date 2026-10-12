@@ -902,8 +902,14 @@
       });
       if (!body) return;
 
-      var title = page.name === pages[0].id ? siteName : page.name + " · " + siteName;
-      var desc = (page.name && page.name) || siteName;
+      /* The first page is the site; the rest are sections of it. Comparing
+         page.name to pages[0].id to spot that looks tempting but is wrong -
+         the display name is "Home" and the id is "home". Use the index. */
+      var title = i === 0 ? siteName : page.name + " · " + siteName;
+      /* A description of "Home" helps nobody, least of all a preview card. */
+      var first = (page.sections || [])[0] || {};
+      var blurb = (first.subtitle || "").trim();
+      var desc = i === 0 ? (blurb || siteName) : ((page.name || "") + " · " + (blurb || siteName));
 
       out[page.id] = "<!doctype html>\n" +
         '<html lang="en">\n<head>\n' +

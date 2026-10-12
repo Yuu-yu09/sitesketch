@@ -283,9 +283,37 @@ def run(page, phase=None):
         ran = page.evaluate("() => typeof window.pwned")
         assert ran == "undefined", "unexpected script on the published page"
 
+    def t_published_page_metadata():
+        """The homepage is titled and described as the site, not as "Home"."""
+        title = page.title()
+        assert "·" not in title, f"homepage title looks like a sub-page: {title!r}"
+        assert title.strip(), "empty title"
+        desc = page.evaluate(
+            "() => (document.querySelector('meta[name=description]')||{}).content"
+        )
+        assert desc and desc.lower() != "home", f"useless description: {desc!r}"
+        og = page.evaluate(
+            "() => (document.querySelector('meta[property=\"og:title\"]')||{}).content"
+        )
+        assert og == title, f"og:title disagrees with the title: {og!r} vs {title!r}"
+
+    def t_published_nav_points_at_real_pages():
+        """Nav links have to work on a published site, not just in the editor."""
+        hrefs = page.eval_on_selector_all(
+            ".ss-navlinks a", "els => els.map(e => e.getAttribute('href'))"
+        )
+        assert hrefs, "published page has no nav links"
+        for href in hrefs:
+            assert href.startswith("/site/"), f"nav link is not a real URL: {href!r}"
+            assert "#" not in href, f"nav link is still an in-page anchor: {href!r}"
+        brand = page.get_attribute(".ss-brand", "href")
+        assert brand and brand.startswith("/site/"), brand
+
     check("publish compiles a live site", t_publish_compiles_a_live_site)
     check("published page really renders", t_published_page_really_renders)
     check("published page runs no script", t_published_page_runs_no_script)
+    check("published page metadata is sane", t_published_page_metadata)
+    check("published nav points at real pages", t_published_nav_points_at_real_pages)
 
 
 def main() -> int:
