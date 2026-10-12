@@ -270,22 +270,120 @@ def t_spoofed_forwarded_header_does_not_buy_a_new_bucket():
     assert status == 429, f"spoofing X-Forwarded-For bypassed the limit: {status}"
 
 
-def t_refresh_token_renews_the_session():
+def cookie_from_headers():
+    """The session cookie the last response set, ready to send back."""
+    raw = HEADERS.get("set-cookie", "")
+    return raw.split(";")[0].strip() if raw else ""
+
+
+def t_refresh_cookie_renews_the_session():
     """The bug that logged people out: a 30 minute token with nothing to renew it."""
     status, data, _ = raw_call("POST", "/api/auth/register",
                                {"username": f"ref{uuid.uuid4().hex[:6]}",
                                 "email": f"ref_{uuid.uuid4().hex[:6]}@example.com",
-                                "password": PASSWORD})
-    assert status == 201 and data.get("refresh"), data
+                                "password": PASSWORD, "remember": True})
+    assert status == 201, data
     assert data.get("expires_in", 0) >= 900, f"access token expires in {data.get('expires_in')}s"
 
-    status, renewed, _ = raw_call("POST", "/api/auth/refresh",
-                                  token=data["refresh"])
+    jar = cookie_from_headers()
+    assert jar.startswith("sitesketch_refresh="), f"no session cookie was set: {jar!r}"
+
+    status, renewed, _ = raw_call("POST", "/api/auth/refresh", headers={"Cookie": jar})
     assert status == 200 and renewed.get("token"), renewed
 
     # the access token must not work as a refresh token
     status, _, _ = raw_call("POST", "/api/auth/refresh", token=data["token"])
     assert status in (401, 422), f"access token accepted as refresh: {status}"
+
+
+def t_refresh_token_is_never_in_the_response_body():
+    """The whole point of the cookie: no long-lived credential in JSON.
+
+    It used to be returned as `refresh` and kept in localStorage, where any
+    script on the page could read it for the next thirty days.
+    """
+    status, data, _ = raw_call("POST", "/api/auth/login",
+                               {"email": EMAIL, "password": PASSWORD})
+    assert status == 200, data
+    assert "refresh" not in data, f"a refresh token is still handed out in JSON: {list(data)}"
+    assert cookie_from_headers(), "no session cookie set on login"
+
+
+def t_session_cookie_is_locked_down():
+    """HttpOnly, SameSite, and not sent to the rest of the site."""
+    reset_limits()
+    raw_call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD, "remember": True})
+    raw = HEADERS.get("set-cookie", "")
+    assert "httponly" in raw.lower(), f"cookie is readable by script: {raw!r}"
+    assert "samesite=strict" in raw.lower(), f"cookie will ride along cross-site: {raw!r}"
+    assert "path=/api/auth" in raw.lower(), f"cookie is sent to the whole site: {raw!r}"
+    assert "max-age=" in raw.lower(), "'keep me signed in' did not extend the cookie"
+
+
+def t_session_cookie_without_remember_is_short_lived():
+    """Not ticking the box has to mean a cookie that dies with the browser."""
+    reset_limits()
+    raw_call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD})
+    raw = HEADERS.get("set-cookie", "").lower()
+    assert "max-age" not in raw, f"a persistent cookie was set without being asked for: {raw!r}"
+    assert "sitesketch_refresh=" in raw
+
+
+def t_refresh_token_rotates():
+    """Each refresh hands back a different token, so the old one is spent."""
+    status, _, _ = raw_call("POST", "/api/auth/login",
+                            {"email": EMAIL, "password": PASSWORD, "remember": True})
+    first = cookie_from_headers()
+
+    raw_call("POST", "/api/auth/refresh", headers={"Cookie": first})
+    second = cookie_from_headers()
+
+    assert second.startswith("sitesketch_refresh="), "rotation did not re-set the cookie"
+    assert second != first, "the refresh token was reused instead of rotated"
+
+
+def t_cross_site_refresh_is_refused():
+    """A cookie travels automatically, so the server checks who asked."""
+    raw_call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD})
+    jar = cookie_from_headers()
+
+    status, data, _ = raw_call("POST", "/api/auth/refresh",
+                               headers={"Cookie": jar, "Origin": "https://evil.example"})
+    assert status == 403, f"a cross-site refresh was allowed: {status} {data}"
+
+    # the same cookie from our own pages is fine
+    status, _, _ = raw_call("POST", "/api/auth/refresh",
+                            headers={"Cookie": jar, "Origin": BASE})
+    assert status == 200, f"same-origin refresh was refused: {status}"
+
+
+def t_logout_clears_the_session_cookie():
+    raw_call("POST", "/api/auth/login", {"email": EMAIL, "password": PASSWORD})
+    assert cookie_from_headers(), "no cookie to clear"
+    status, _, _ = raw_call("POST", "/api/auth/logout")
+    assert status == 200, status
+    cleared = HEADERS.get("set-cookie", "").lower()
+    assert "sitesketch_refresh=" in cleared and "max-age=0" in cleared, \
+        f"logout did not expire the cookie: {cleared!r}"
+
+
+def t_cookie_inventory_is_published():
+    """The list on /privacy comes from the same place the code sets cookies."""
+    status, data, _ = call("GET", "/api/auth/cookie-inventory", expect=200)
+    declared = {c["name"] for c in data["declared"]}
+    assert "sitesketch_refresh" in declared, declared
+    for cookie in data["declared"]:
+        assert cookie["category"] in {"Essential", "Functional", "Analytics", "Advertising"}, cookie
+        assert cookie["purpose"], cookie
+        assert cookie["lifespan"], cookie
+        # Nothing here may be readable by script except the consent record.
+        if cookie["name"] != "sitesketch_refresh":
+            assert cookie["script_readable"] is True, cookie["name"]
+
+    # And nothing claims to be tracking people.
+    tracking = [c["name"] for c in data["declared"]
+                if c["category"] in {"Analytics", "Advertising"}]
+    assert not tracking, f"tracking cookies declared but not implemented: {tracking}"
 
 
 def t_login():
@@ -632,7 +730,14 @@ for name, fn in [
     ("only the preview may be framed", t_only_preview_may_be_framed),
     ("login attempts are rate limited", t_login_is_rate_limited),
     ("spoofed forwarded header cannot dodge the limit", t_spoofed_forwarded_header_does_not_buy_a_new_bucket),
-    ("refresh token renews an expired session", t_refresh_token_renews_the_session),
+    ("refresh token renews an expired session", t_refresh_cookie_renews_the_session),
+    ("no refresh token in the response body", t_refresh_token_is_never_in_the_response_body),
+    ("session cookie is httpOnly, strict and scoped", t_session_cookie_is_locked_down),
+    ("session cookie is short lived unless asked", t_session_cookie_without_remember_is_short_lived),
+    ("refresh token rotates on every use", t_refresh_token_rotates),
+    ("cross-site refresh is refused", t_cross_site_refresh_is_refused),
+    ("logout clears the session cookie", t_logout_clears_the_session_cookie),
+    ("cookie inventory is published", t_cookie_inventory_is_published),
     ("login works", t_login),
     ("wrong password rejected", t_login_wrong_password),
     ("unknown email rejected", t_login_unknown_email),

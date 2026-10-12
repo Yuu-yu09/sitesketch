@@ -2,12 +2,19 @@
 Auth: email + password with hashed credentials, issued as JWTs.
 
 Passwords are hashed with werkzeug (scrypt). The plaintext password is never
-stored, logged, or returned. OAuth sign-in lives in oauth.py.
+stored, logged, or returned.
+
+The refresh token is handed out as an HttpOnly cookie rather than in the
+response body, so no script on the page can read it. That moves the threat
+from "XSS steals a 30-day token" to "another site tries to make the browser
+send the cookie", which is what _same_origin_exists_for_cookie_auth below
+and the cookie's SameSite=Strict setting between them close off.
 """
 
 from __future__ import annotations
 
 import re
+from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import (
@@ -19,6 +26,8 @@ from flask_jwt_extended import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import config
+import cookies
 import db
 from ratelimit import client_key, limiter
 
@@ -93,21 +102,35 @@ def _problem(username: str, email: str, password: str) -> str | None:
     return _password_problem(password)
 
 
-def _session(user: dict, status: int = 200):
-    """A login response: a short access token plus a long refresh token.
+def _session(user: dict, status: int = 200, remember: bool = False):
+    """A login response: a short access token plus a refresh cookie.
 
     The access token expires in minutes on purpose. Without a refresh token
     that meant people were silently signed out every fifteen minutes while
     they were working, which read as "it logged me out for no reason".
+
+    The refresh token is no longer handed back in the body for the client to
+    store. It goes into an HttpOnly cookie, so a script that manages to run on
+    the page cannot read it - it used to sit in localStorage for thirty days,
+    which meant one XSS was thirty days of access to the account.
     """
     identity = str(user["id"])
     claims = {"username": user["username"]}
-    return jsonify(
+    # The lifespan the person chose rides along inside the refresh token. The
+    # browser will not tell the server whether a cookie is persistent or a
+    # session cookie, so the only way to honour "Keep me signed in" across a
+    # rotation is to have recorded it somewhere the server can read.
+    refresh = create_refresh_token(
+        identity=identity,
+        additional_claims=dict(claims, remember=bool(remember)),
+    )
+    response = jsonify(
         token=create_access_token(identity=identity, additional_claims=claims),
-        refresh=create_refresh_token(identity=identity, additional_claims=claims),
         expires_in=_access_seconds(),
         user=_public(user),
-    ), status
+    )
+    response.status_code = status
+    return cookies.set_refresh_cookie(response, refresh, remember)
 
 
 def _access_seconds() -> int:
@@ -156,12 +179,7 @@ def register():
         f"returning {PUBLIC_USER}",
         (username, email, generate_password_hash(password)),
     )
-    token = create_access_token(
-        identity=str(user["id"]),
-        additional_claims={"username": user["username"]},
-    )
-    del token  # replaced by _session, which also issues a refresh token
-    return _session(user, 201)
+    return _session(user, 201, remember=_remember(body))
 
 
 @bp.post("/login")
@@ -192,8 +210,52 @@ def login():
         identity=str(row["id"]),
         additional_claims={"username": row["username"]},
     )
-    del token  # replaced by _session, which also issues a refresh token
-    return _session(row)
+    del token  # replaced by _session, which also issues the refresh cookie
+    return _session(row, remember=_remember(body))
+
+
+def _remember(body: dict) -> bool:
+    """Did the person ask to stay signed in?
+
+    Default is False: staying signed in for thirty days has to be something
+    you choose, not something you get by ignoring a checkbox.
+    """
+    return bool((body or {}).get("remember"))
+
+
+def _same_origin(req) -> bool:
+    """True when the browser says this request came from our own pages.
+
+    Needed because the refresh token is a cookie: the browser attaches it to
+    any request, including one another site tried to make it send. Two
+    independent things stop that, and this is the half that works even if the
+    browser is old enough to ignore SameSite:
+
+      - the cookie is SameSite=Strict, so a cross-site request never carries
+        it in the first place;
+      - this check refuses anything whose Origin or Referer is not us.
+
+    Origin is the header to look at. It cannot be forged by a page in a
+    browser (only by a non-browser client, which could just skip the cookie
+    anyway). Referer is the fallback for the rare browser that omits Origin on
+    a same-origin POST.
+
+    Requests with neither header are allowed. A non-browser client is not
+    carrying a cookie it did not receive deliberately, and rejecting them
+    would break the test suite and curl for no security gain.
+    """
+    for header in ("Origin", "Referer"):
+        raw = req.headers.get(header)
+        if not raw:
+            continue
+        if raw == "null":
+            # some privacy tools strip Origin down to the literal "null"
+            return False
+        host = urlparse(raw).netloc or raw.split("//")[-1].split("/")[0]
+        if host and host == req.host:
+            return True
+        return False
+    return True
 
 
 @bp.post("/refresh")
@@ -204,7 +266,17 @@ def refresh():
     The client calls this silently whenever an access token has run out, so
     someone halfway through editing their site is never bounced to the login
     screen for it.
+
+    The refresh token is replaced every time. That is the rotation the
+    checklist asks for: the value that was just used stops being useful, so
+    a cookie captured at any one moment is worth much less than the full
+    thirty days. A stolen cookie still works until its own expiry, so this is
+    defence in depth rather than complete replay protection - see SECURITY.md
+    for what detecting reuse would need.
     """
+    if not _same_origin(request):
+        return jsonify(error="Cross-site request refused"), 403
+
     identity = get_jwt_identity()
     claims = {"username": get_jwt().get("username")}
     if not claims.get("username"):
@@ -213,10 +285,37 @@ def refresh():
             return jsonify(error="Account no longer exists"), 401
         claims["username"] = row["username"]
 
-    return jsonify(
+    remember = bool(get_jwt().get("remember"))
+    response = jsonify(
         token=create_access_token(identity=identity, additional_claims=claims),
         expires_in=_access_seconds(),
     )
+    # issue the successor and overwrite the cookie in the same response
+    return cookies.set_refresh_cookie(
+        response,
+        create_refresh_token(
+            identity=identity,
+            additional_claims=dict(claims, remember=remember),
+        ),
+        remember,
+    )
+
+
+@bp.post("/logout")
+def logout():
+    """Drop the session cookie.
+
+    Stateless tokens cannot be revoked server-side, so this clears the
+    browser's copy of the refresh token. The access token in memory stays
+    valid until it expires on its own, which is why it is short lived.
+    """
+    return cookies.clear_refresh_cookie(jsonify(ok=True))
+
+
+@bp.get("/cookie-inventory")
+def cookie_inventory():
+    """The declared cookie list, for /privacy and for the audit test."""
+    return jsonify(cookies.inventory_for_api())
 
 
 @bp.get("/me")

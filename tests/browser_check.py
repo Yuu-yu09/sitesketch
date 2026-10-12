@@ -73,8 +73,28 @@ def run(page, phase=None):
         assert "login" not in page.url, f"bounced to {page.url} on reload"
 
     def t_refresh_token_is_stored():
-        stored = page.evaluate("() => localStorage.getItem('sitesketch_refresh_v1')")
-        assert stored, "no refresh token stored, so the session cannot be renewed"
+        """The long-lived credential must be a cookie script cannot read.
+
+        This used to assert the opposite: that a refresh token sat in
+        localStorage, where any script on the page could read it for thirty
+        days. It is now an HttpOnly cookie, so the check is that the token is
+        nowhere in web storage and the browser is holding it instead.
+        """
+        in_storage = page.evaluate("""() => {
+            const keys = [];
+            for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
+            for (let i = 0; i < sessionStorage.length; i++) keys.push(sessionStorage.key(i));
+            return keys.filter(k => /refresh/i.test(k || ''));
+        }""")
+        assert not in_storage, f"a refresh token is still readable in storage: {in_storage}"
+
+        cookies = page.context.cookies()
+        ours = [c for c in cookies if c["name"] == "sitesketch_refresh"]
+        assert ours, f"no session cookie was set: {[c['name'] for c in cookies]}"
+        assert ours[0]["httpOnly"] is True, "the session cookie is readable by script"
+        assert ours[0]["sameSite"] == "Strict", ours[0]["sameSite"]
+        assert ours[0]["path"] == "/api/auth", ours[0]["path"]
+        return f"httpOnly cookie on {ours[0]['domain']}"
 
     def t_expired_access_token_recovers_silently():
         """The bug this suite exists for.
@@ -140,7 +160,7 @@ def run(page, phase=None):
         assert cards.count() >= 1, "no project cards rendered"
 
     check("session survives a page reload", t_session_survives_reload)
-    check("a refresh token is stored", t_refresh_token_is_stored)
+    check("refresh token is an httpOnly cookie, not storage", t_refresh_token_is_stored)
     check("expired access token recovers without a login prompt", t_expired_access_token_recovers_silently)
     check("the dashboard lists the account's projects", t_project_created_and_listed)
 

@@ -17,6 +17,7 @@ from flask_jwt_extended import JWTManager
 
 import auth
 import config
+import cookies
 import gemini
 import media
 import projects
@@ -31,12 +32,27 @@ FRAMEABLE_PATHS = frozenset({"/preview.html", "/preview"})
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["JWT_SECRET_KEY"] = config.SECRET_KEY or "dev-only-insecure"
-app.config["JWT_TOKEN_LOCATION"] = ["headers"]
 # Short-lived access token, long-lived refresh token. The access token used
 # to fall back to flask-jwt-extended's 15 minute default with nothing to
 # renew it, so people were logged out mid-edit for no visible reason.
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=30)
 app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=30)
+# Access tokens travel in the Authorization header; refresh tokens live in an
+# HttpOnly cookie (see cookies.py). flask-jwt-extended reads both locations for
+# either kind and separates them by token type, so the header comes first and
+# the cookie is the fallback. "headers" staying listed is also what lets a
+# non-browser client - the test suite, curl - rotate a token it was handed
+# deliberately. The browser never uses that path.
+app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
+app.config["JWT_REFRESH_COOKIE_NAME"] = cookies.REFRESH_COOKIE
+app.config["JWT_REFRESH_COOKIE_PATH"] = "/api/auth"
+app.config["JWT_REFRESH_COOKIE_SECURE"] = config.IS_PROD
+app.config["JWT_REFRESH_COOKIE_SAMESITE"] = "Strict"
+# flask-jwt-extended's own CSRF double-submit is turned off because it expects
+# the client to fetch a token from a csrf endpoint first. auth._same_origin
+# does the same job with the Origin header, which needs no extra round trip and
+# no extra cookie.
+app.config["JWT_COOKIE_CSRF_PROTECT"] = False
 
 # Only meaningful in production; localhost over http would otherwise break.
 app.config["HSTS_MAX_AGE"] = 15552000  # 180 days

@@ -13,8 +13,13 @@
 
   var TOKEN_KEY = "sitesketch_token_v1";
   var USER_KEY = "sitesketch_user_v1";
-  var REFRESH_KEY = "sitesketch_refresh_v1";
   var EMAIL_KEY = "sitesketch_last_email_v1";
+  var PREF_KEY = "sitesketch_remember_pref_v1";
+
+  /* There is deliberately no refresh token in web storage any more. It is an
+     HttpOnly cookie the browser attaches on its own, so a script that manages
+     to run on the page cannot read it. The access token below is the only
+     credential in storage and it expires in 30 minutes. */
 
   /* ---------------- transport ---------------- */
 
@@ -22,18 +27,16 @@
     try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
   }
 
-  /* "Keep me signed in" decides where the refresh token lives:
-     localStorage survives closing the browser, sessionStorage does not.
-     The password is never stored - anything saved here can be read by any
-     script on the page, so only a token and the email address are kept. */
-  function refreshToken() {
-    try {
-      return localStorage.getItem(REFRESH_KEY) || sessionStorage.getItem(REFRESH_KEY) || "";
-    } catch (e) {
-      try { return localStorage.getItem(REFRESH_KEY) || ""; } catch (e2) { return ""; }
-    }
+  function preference(key, fallback) {
+    try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
   }
 
+  function rememberPreference(value) {
+    try { localStorage.setItem(PREF_KEY, value ? "1" : "0"); } catch (e) { /* private mode */ }
+  }
+
+  /* Remembered between visits so the login form is not empty every time.
+     Only the address - never the password. */
   function rememberedEmail() {
     try { return localStorage.getItem(EMAIL_KEY) || ""; } catch (e) { return ""; }
   }
@@ -76,12 +79,10 @@
 
   function renew() {
     if (refreshing) return refreshing;
-    var rt = refreshToken();
-    if (!rt) return Promise.resolve(false);
 
     refreshing = fetch("/api/auth/refresh", {
       method: "POST",
-      headers: { Authorization: "Bearer " + rt }
+      credentials: "same-origin"
     }).then(function (res) {
       if (!res.ok) return false;
       return res.json().then(function (data) {
@@ -118,7 +119,7 @@
         if (res.status === 401) {
           /* An expired access token is not a failed session: refresh it and
              replay the request once before bothering the user. */
-          if (attempt < 1 && refreshToken()) {
+          if (attempt < 1) {
             return renew().then(function (ok) {
               if (ok) return send(path, options, attempt + 1);
               return { ok: false, status: 401, error: (data && data.error) || "Please sign in again." };
@@ -145,16 +146,9 @@
     return send(path, options, 0);
   }
 
-  function setSession(tokenValue, user, refresh, remember) {
+  function setSession(tokenValue, user, remember) {
     try {
       localStorage.setItem(TOKEN_KEY, tokenValue);
-      if (refresh) {
-        /* remembered: survive a browser restart. not remembered: this tab only. */
-        localStorage.removeItem(REFRESH_KEY);
-        sessionStorage.removeItem(REFRESH_KEY);
-        var store = remember === false ? sessionStorage : localStorage;
-        store.setItem(REFRESH_KEY, refresh);
-      }
       /* the screens render user.name; normalise whatever the API sends */
       localStorage.setItem(USER_KEY, JSON.stringify(Object.assign({}, user, {
         name: user.name || user.username || user.email
@@ -167,8 +161,12 @@
     try {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
-      localStorage.removeItem(REFRESH_KEY);
-      sessionStorage.removeItem(REFRESH_KEY);
+    } catch (e) { /* ignore */ }
+    /* Ask the server to drop the cookie too. Fire and forget: whether this
+       succeeds must not decide whether the local copy is cleared. */
+    try {
+      fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" })
+        .catch(function () { /* offline */ });
     } catch (e) { /* ignore */ }
   }
 
@@ -402,12 +400,16 @@
     currentUser: currentUser,
     requireAuth: requireAuth,
     login: function (email, password, remember) {
+      /* remember is sent to the server because it decides the cookie's
+         lifespan. The client cannot inspect an HttpOnly cookie, so it has no
+         way to work this out afterwards. */
       return request("/api/auth/login", {
         method: "POST",
-        body: { email: email, password: password }
+        body: { email: email, password: password, remember: !!remember }
       }).then(function (res) {
         if (!res.ok) return { ok: false, error: res.error };
-        setSession(res.data.token, res.data.user, res.data.refresh, remember);
+        setSession(res.data.token, res.data.user);
+        rememberPreference(!!remember);
         return { ok: true, user: res.data.user };
       });
     },
@@ -417,7 +419,7 @@
         body: { username: name, email: email, password: password }
       }).then(function (res) {
         if (!res.ok) return { ok: false, error: res.error };
-        setSession(res.data.token, res.data.user, res.data.refresh);
+        setSession(res.data.token, res.data.user);
         return { ok: true, user: res.data.user };
       });
     },
@@ -429,8 +431,10 @@
     rememberedEmail: function () {
       return rememberedEmail();
     },
+    /* Only the preference, never the token: whether the box was ticked is not
+       a secret, and the real cookie cannot be read from script. */
     rememberMe: function () {
-      return !!refreshToken();
+      return preference(PREF_KEY, "0") === "1";
     },
 
     /* projects */
