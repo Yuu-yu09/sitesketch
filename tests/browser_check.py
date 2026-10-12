@@ -91,9 +91,38 @@ def run(page):
         assert token and "expired.jwt.value" != token, "token was never renewed"
 
     def t_project_created_and_listed():
+        """Seed a project, then confirm the dashboard lists it.
+
+        The earlier version of this check asserted on `.proj-card`, but the
+        "New plan" call-to-action carries that same class - so on an account
+        with no projects it passed anyway, and every builder check after it
+        then failed because there was nothing to open. It now creates a
+        project through the same API the app uses, and only counts real
+        cards.
+        """
+        made = page.evaluate("""async () => {
+            const r = await fetch('/api/projects', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + localStorage.getItem('sitesketch_token_v1'),
+                },
+                body: JSON.stringify({
+                    name: 'Browser check project',
+                    type: 'business',
+                    goal: 'get-contact',
+                    plan_json: {pages: [{id: 'home', sections: []}]},
+                }),
+            });
+            return r.status;
+        }""")
+        assert made == 201, f"could not seed a project: {made}"
+
         page.goto(f"{BASE}/dashboard.html", wait_until="domcontentloaded")
-        page.wait_for_timeout(800)
-        expect(page.locator(".proj-card").first).to_be_visible(timeout=SLOW)
+        # .proj-new is the "New plan" button, not a project.
+        cards = page.locator(".proj-card:not(.proj-new)")
+        expect(cards.first).to_be_visible(timeout=SLOW)
+        assert cards.count() >= 1, "no project cards rendered"
 
     check("session survives a page reload", t_session_survives_reload)
     check("a refresh token is stored", t_refresh_token_is_stored)
@@ -106,7 +135,7 @@ def run(page):
     def t_open_builder():
         page.goto(f"{BASE}/dashboard.html", wait_until="domcontentloaded")
         page.wait_for_timeout(900)
-        href = page.locator(".proj-card").first.get_attribute("href") or ""
+        href = page.locator(".proj-card:not(.proj-new)").first.get_attribute("href") or ""
         assert "builder.html" in href, f"project card does not link to the builder: {href!r}"
         page.goto(f"{BASE}/{href}", wait_until="domcontentloaded")
         page.wait_for_selector(".ss-sec", timeout=SLOW)

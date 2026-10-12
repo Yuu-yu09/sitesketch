@@ -17,6 +17,8 @@ import threading
 import time
 from collections import defaultdict, deque
 
+import config
+
 
 class RateLimiter:
     def __init__(self) -> None:
@@ -59,12 +61,24 @@ limiter = RateLimiter()
 
 
 def client_key(request, scope: str = "") -> str:
-    """Identify the caller.
+    """Identify the caller by IP address.
 
-    Prefers the proxy-supplied client IP, because behind Vercel
-    request.remote_addr is the proxy and would otherwise put every visitor
-    in one bucket and lock everyone out together.
+    Behind Vercel, request.remote_addr is the proxy, so every visitor would
+    share one bucket and lock each other out. We have to read the forwarded
+    address instead - but only the one our own proxy observed.
+
+    X-Forwarded-For is appended to, not built fresh, so it looks like:
+        <spoofable, client supplied> , <real address seen by Vercel>
+    The left-most entry is whatever the caller felt like sending and must
+    never be trusted: it would hand an attacker a fresh bucket per request
+    and defeat the limiter completely, which is the one thing it exists to
+    stop. The right-most entry is the one our proxy appended.
     """
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    ip = forwarded.split(",")[0].strip() if forwarded else (request.remote_addr or "unknown")
+    ip = request.remote_addr or "unknown"
+    if config.IS_PROD:
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            observed = forwarded.rsplit(",", 1)[-1].strip()
+            if observed:
+                ip = observed
     return f"{scope}:{ip}"

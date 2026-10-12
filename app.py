@@ -21,6 +21,7 @@ import gemini
 import media
 import projects
 from db import DatabaseUnavailable, query, query_one
+from ratelimit import limiter
 
 ROOT = pathlib.Path(__file__).parent
 
@@ -106,6 +107,21 @@ PAGES = ("", "index", "login", "register", "dashboard", "plan", "builder", "publ
 
 
 # ---------------------------------------------------------------- API: health
+
+@app.post("/api/dev/reset-limits")
+def dev_reset_limits():
+    """Clear the rate limiter counters. Development only.
+
+    The test suite runs every check from one address, so without this the
+    register limit would lock the run out partway through and failures
+    would look like application bugs. Returns 404 in production so the
+    route does not exist on a live deployment.
+    """
+    if config.IS_PROD:
+        return jsonify(error="Not found"), 404
+    limiter.reset()
+    return jsonify(ok=True)
+
 
 @app.get("/api/health")
 def health():

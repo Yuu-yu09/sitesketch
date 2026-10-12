@@ -64,6 +64,42 @@ token = None
 project_id = None
 marker = f"e2e marker {uuid.uuid4().hex[:8]}"
 
+# Response headers from the most recent raw_call, so the security header
+# check can inspect what the server actually sends.
+HEADERS: dict[str, str] = {}
+
+
+def raw_call(method, path, body=None, token=None, headers=None):
+    """Like call(), but never asserts on status and always records headers."""
+    req = urllib.request.Request(f"{BASE}{path}", method=method)
+    req.add_header("Content-Type", "application/json")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    for name, value in (headers or {}).items():
+        req.add_header(name, value)
+    data = json.dumps(body).encode() if body is not None else None
+    try:
+        with urllib.request.urlopen(req, data, timeout=60) as resp:
+            raw = resp.read().decode()
+            status = resp.status
+            HEADERS.clear()
+            HEADERS.update({k.lower(): v for k, v in resp.headers.items()})
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode()
+        status = exc.code
+        HEADERS.clear()
+        HEADERS.update({k.lower(): v for k, v in exc.headers.items()})
+    try:
+        parsed = json.loads(raw) if raw else None
+    except json.JSONDecodeError:
+        parsed = raw[:120]
+    return status, parsed, 0.0
+
+
+def reset_limits():
+    """Clear rate limiter counters. The route 404s in production."""
+    raw_call("POST", "/api/dev/reset-limits")
+
 
 # ---------------------------------------------------------------- health
 def t_health():
@@ -101,6 +137,109 @@ def t_register_weak_password():
     call("POST", "/api/auth/register",
          {"username": "weakling", "email": f"weak_{uuid.uuid4().hex[:6]}@example.com", "password": "short"},
          expect=400)
+
+
+# ------------------------------------------------------------------ security
+def t_rejects_common_password():
+    """Length alone still lets the top of every wordlist through."""
+    # the register limit is per hour and several checks share one address
+    reset_limits()
+    call("POST", "/api/auth/register",
+         {"username": "commonpw", "email": f"common_{uuid.uuid4().hex[:6]}@example.com",
+          "password": "password123"},
+         expect=400)
+
+
+def t_rejects_single_character_class_password():
+    call("POST", "/api/auth/register",
+         {"username": "letterspw", "email": f"letters_{uuid.uuid4().hex[:6]}@example.com",
+          "password": "abcdefghijklmnop"},
+         expect=400)
+
+
+def t_rejects_bad_username_characters():
+    call("POST", "/api/auth/register",
+         {"username": "bad user!", "email": f"badname_{uuid.uuid4().hex[:6]}@example.com",
+          "password": PASSWORD},
+         expect=400)
+
+
+def t_security_headers_present():
+    status, _, _ = raw_call("GET", "/")
+    assert status == 200, status
+    for header, needle in [
+        ("content-security-policy", "script-src 'self'"),
+        ("content-security-policy", "object-src 'none'"),
+        ("content-security-policy", "frame-ancestors 'none'"),
+        ("x-content-type-options", "nosniff"),
+        ("x-frame-options", "DENY"),
+        ("referrer-policy", "strict-origin"),
+    ]:
+        value = HEADERS.get(header, "")
+        assert needle in value, f"{header} missing {needle!r} (got {value!r})"
+
+
+def t_login_is_rate_limited():
+    """Guessing a password has to get expensive."""
+    # Every check in this file runs from one address, so clear the counter
+    # first and again afterwards - otherwise the burst below locks the rest
+    # of the run out and the failures look like application bugs.
+    reset_limits()
+
+    codes = []
+    for i in range(14):
+        status, _, _ = raw_call("POST", "/api/auth/login",
+                                {"email": f"nobody_{uuid.uuid4().hex[:6]}@example.com",
+                                 "password": f"guess-{i}"})
+        codes.append(status)
+
+    assert 429 in codes, f"never rate limited: {codes}"
+    # the limit should bite well before 14 tries
+    assert codes.index(429) <= 12, f"allowed too many attempts: {codes}"
+    # and the rejection has to say when to come back
+    status, data, _ = raw_call("POST", "/api/auth/login",
+                               {"email": "x@y.com", "password": "z"})
+    assert status == 429 and data.get("retry_after"), f"{status} {data}"
+
+    reset_limits()
+    return f"{codes.count(401)} tries then blocked, Retry-After {data['retry_after']}s"
+
+
+def t_spoofed_forwarded_header_does_not_buy_a_new_bucket():
+    """A forged X-Forwarded-For must not reset the limiter.
+
+    Otherwise anyone guessing a password just sends a new fake address each
+    time and is never blocked, which is the one thing the limiter is for.
+    """
+    reset_limits()
+    for i in range(12):
+        raw_call("POST", "/api/auth/login",
+                 {"email": "nobody@example.com", "password": f"guess-{i}"},
+                 headers={"X-Forwarded-For": f"203.0.113.{i}"})
+
+    status, _, _ = raw_call("POST", "/api/auth/login",
+                            {"email": "nobody@example.com", "password": "guess-13"},
+                            headers={"X-Forwarded-For": "203.0.113.99"})
+    reset_limits()
+    assert status == 429, f"spoofing X-Forwarded-For bypassed the limit: {status}"
+
+
+def t_refresh_token_renews_the_session():
+    """The bug that logged people out: a 30 minute token with nothing to renew it."""
+    status, data, _ = raw_call("POST", "/api/auth/register",
+                               {"username": f"ref{uuid.uuid4().hex[:6]}",
+                                "email": f"ref_{uuid.uuid4().hex[:6]}@example.com",
+                                "password": PASSWORD})
+    assert status == 201 and data.get("refresh"), data
+    assert data.get("expires_in", 0) >= 900, f"access token expires in {data.get('expires_in')}s"
+
+    status, renewed, _ = raw_call("POST", "/api/auth/refresh",
+                                  token=data["refresh"])
+    assert status == 200 and renewed.get("token"), renewed
+
+    # the access token must not work as a refresh token
+    status, _, _ = raw_call("POST", "/api/auth/refresh", token=data["token"])
+    assert status in (401, 422), f"access token accepted as refresh: {status}"
 
 
 def t_login():
@@ -323,6 +462,13 @@ for name, fn in [
     ("register creates an account", t_register),
     ("duplicate email rejected", t_register_duplicate),
     ("weak password rejected", t_register_weak_password),
+    ("common password rejected", t_rejects_common_password),
+    ("single-class password rejected", t_rejects_single_character_class_password),
+    ("bad username characters rejected", t_rejects_bad_username_characters),
+    ("security headers on every response", t_security_headers_present),
+    ("login attempts are rate limited", t_login_is_rate_limited),
+    ("spoofed forwarded header cannot dodge the limit", t_spoofed_forwarded_header_does_not_buy_a_new_bucket),
+    ("refresh token renews an expired session", t_refresh_token_renews_the_session),
     ("login works", t_login),
     ("wrong password rejected", t_login_wrong_password),
     ("unknown email rejected", t_login_unknown_email),
