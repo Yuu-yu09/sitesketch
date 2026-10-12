@@ -318,7 +318,10 @@
         : "";
 
       return '<figure class="ss-tile ss-tile--' + size + '" data-tile="' + i + '">' +
-        picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title || "Photo") +
+        /* an unfilled slot stays visibly empty instead of borrowing the
+           same stock photo as every other slot, which made five blanks
+           look like five copies of one picture */
+        picture(item.img, "items:" + i + ":img", item.title || "Add a photo") +
         controls +
         (item.text || size !== "s"
           ? '<figcaption><span' + ed("items:" + i + ":text") + ">" +

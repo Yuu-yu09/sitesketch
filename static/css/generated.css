@@ -300,6 +300,24 @@
   background: var(--soft);
 }
 .ss-tile--s .ss-img--empty { aspect-ratio: auto; }
+/* an unfilled slot says so, rather than looking like a broken image */
+.ss-site .ss-tile .ss-img--empty {
+  aspect-ratio: auto;
+  height: 100%;
+  border: 2px dashed color-mix(in srgb, var(--muted) 42%, transparent);
+  border-radius: 0;
+  background: transparent;
+  display: grid;
+  place-items: center;
+}
+.ss-site .ss-tile .ss-img--empty::after {
+  content: "Add a photo";
+  font-size: .8rem;
+  color: var(--muted);
+  letter-spacing: .02em;
+}
+.ss-site .ss-tile:hover .ss-img--empty { border-color: var(--accent); }
+.ss-site .ss-tile:hover .ss-img--empty::after { color: var(--accent); }
 .ss-tile figcaption {
   padding: .5rem .6rem;
   font-size: .82rem;

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>render check</title>
+  <link rel="stylesheet" href="/static/css/fonts.css">
+  <link rel="stylesheet" href="/static/icons/bootstrap-icons.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/generated.css">
+</head>
+<body class="builder-body">
+  <main class="builder-canvas" id="canvas"></main>
+
+  <script>document.write('<script src="/static/js/api.js?v=' + Date.now() + '"><\/script>')</script>
+  <script>document.write('<script src="/static/js/site.js?v=' + Date.now() + '"><\/script>')</script>
+  <script>document.write('<script src="/static/js/design.js?v=' + Date.now() + '"><\/script>')</script>
+  <script>document.write('<script src="/static/js/editor.js?v=' + Date.now() + '"><\/script>')</script>
+  <script>document.write('<script src="/static/js/crop.js?v=' + Date.now() + '"><\/script>')</script>
+  <script>document.write('<script src="/static/js/editorui.js?v=' + Date.now() + '"><\/script>')</script>
+  <script src="/static/js/vendor/Sortable.min.js"></script>
+  <script>
+    // Renders a plan straight from a fixture, with no database involved.
+    // Used to eyeball the built page and the editor chrome offline.
+    var PLAN = {
+      meta: { type: "portfolio", goal: "showcase-work", theme: "modern", siteName: "Field Notes" },
+      pages: [{
+        id: "home",
+        name: "Home",
+        sections: [
+          { id: "s_hero", type: "hero", title: "Landscape photography", subtitle: "Long exposures from the coast", fields: { buttonText: "See the work" } },
+          {
+            id: "s_wall",
+            type: "images",
+            title: "Selected work",
+            subtitle: "Drag these around and size them however you like",
+            items: [
+              { img: "", size: "w", text: "Dawn on the headland" },
+              { img: "", size: "s", text: "" },
+              { img: "", size: "t", text: "Long exposure" },
+              { img: "", size: "s", text: "" },
+              { img: "", size: "l", text: "The whole set" }
+            ]
+          },
+          { id: "s_about", type: "about", title: "About", subtitle: "Ten years of weather", body: "I shoot slowly, mostly on foot." },
+          { id: "s_contact", type: "contact", title: "Get in touch", subtitle: "Prints and commissions" }
+        ]
+      }]
+    };
+
+    var editable = location.hash.indexOf("edit") !== -1;
+    document.getElementById("canvas").innerHTML =
+      SS.renderPage(PLAN, "home", { editable: editable });
+    SS.observeMotion(document.getElementById("canvas"));
+  </script>
+</body>
+</html>
