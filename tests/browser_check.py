@@ -335,6 +335,108 @@ def run(page, phase=None):
     check("published page metadata is sane", t_published_page_metadata)
     check("published nav points at real pages", t_published_nav_points_at_real_pages)
 
+    # ------------------------------------------------------- cookies and legal
+    # These only exist in a browser, so the API suite cannot see them.
+
+    def t_cookie_notice_appears_for_a_new_visitor():
+        """No stored choice means the notice is shown, and it says the truth."""
+        fresh = page.context.browser.new_context(viewport={"width": 1280, "height": 900})
+        try:
+            p = fresh.new_page()
+            p.goto(f"{BASE}/login.html", wait_until="domcontentloaded")
+            bar = p.locator("#consentBar")
+            expect(bar).to_be_visible(timeout=8000)
+            text = (bar.inner_text() or "").lower()
+            # The claim on the page is that nothing tracks anybody. If a
+            # tracker is ever added, this copy becomes a lie and this fails.
+            assert "no analytics" in text, f"notice does not say what it should: {text!r}"
+            assert "one cookie" in text, f"notice does not say how many: {text!r}"
+        finally:
+            fresh.close()
+
+    def t_cookie_notice_can_be_dismissed_and_stays_dismissed():
+        fresh = page.context.browser.new_context(viewport={"width": 1280, "height": 900})
+        try:
+            p = fresh.new_page()
+            p.goto(f"{BASE}/login.html", wait_until="domcontentloaded")
+            p.wait_for_selector("#consentBar", timeout=8000)
+            p.click("#consentBar .btn-primary")
+            p.wait_for_timeout(300)
+            assert p.locator("#consentBar").count() == 0, "notice did not go away"
+
+            stored = p.evaluate("() => localStorage.getItem('sitesketch_consent_v1')")
+            assert stored, "the choice was not saved"
+
+            p.goto(f"{BASE}/register.html", wait_until="domcontentloaded")
+            p.wait_for_timeout(700)
+            assert p.locator("#consentBar").count() == 0, "notice came back after a choice"
+        finally:
+            fresh.close()
+
+    def t_privacy_page_lists_the_real_inventory():
+        p = page.context.new_page()
+        try:
+            p.goto(f"{BASE}/privacy.html", wait_until="domcontentloaded")
+            p.wait_for_selector(".legal-table", timeout=8000)
+            body = p.inner_text("body")
+            lowered = body.lower()
+
+            # rendered from the API, so these are the real names
+            assert "sitesketch_refresh" in body, "the session cookie is not listed"
+            assert "supabase" in lowered, "no third parties listed"
+            # inner_text gives the *rendered* text and the table headers are
+            # uppercased in CSS, so this cannot be matched case-sensitively
+            assert "how long" in lowered, "the retention table did not render"
+
+            # the headline promise, checked against the rendered page
+            assert "no analytics" in lowered, "the short version does not say it"
+            assert "loading" not in lowered, "a table failed to load"
+        finally:
+            p.close()
+
+    def t_preferences_can_be_withdrawn():
+        fresh = page.context.browser.new_context(viewport={"width": 1280, "height": 900})
+        try:
+            p = fresh.new_page()
+            p.goto(f"{BASE}/privacy.html", wait_until="domcontentloaded")
+            p.wait_for_selector("#prefWithdraw", timeout=8000)
+            p.click("#prefWithdraw")
+            p.wait_for_timeout(400)
+            # withdrawing has to clear the record; the notice may or may not
+            # be on this particular page, but the choice must be gone
+            assert p.evaluate("() => localStorage.getItem('sitesketch_consent_v1')") is None, \
+                "consent was not actually withdrawn"
+        finally:
+            fresh.close()
+
+    def t_terms_page_is_reachable():
+        p = page.context.new_page()
+        try:
+            p.goto(f"{BASE}/terms.html", wait_until="domcontentloaded")
+            assert "Terms of use" in p.title(), p.title()
+            body = p.inner_text("body")
+            assert "Your content" in body, "terms page did not render"
+            assert "—" not in p.inner_text("#legalDate"), "the date placeholder was never filled"
+        finally:
+            p.close()
+
+    def t_login_page_offers_the_legal_links():
+        p = page.context.new_page()
+        try:
+            p.goto(f"{BASE}/login.html", wait_until="domcontentloaded")
+            p.wait_for_timeout(500)
+            # the notice links to the preference centre, and the header offers terms
+            assert p.locator('a[href*="privacy"]').count() > 0, "no link to the privacy page"
+        finally:
+            p.close()
+
+    check("cookie notice appears for a new visitor", t_cookie_notice_appears_for_a_new_visitor)
+    check("cookie notice is dismissed once and stays gone", t_cookie_notice_can_be_dismissed_and_stays_dismissed)
+    check("privacy page lists the real inventory", t_privacy_page_lists_the_real_inventory)
+    check("preferences can be withdrawn", t_preferences_can_be_withdrawn)
+    check("terms page is reachable", t_terms_page_is_reachable)
+    check("login page links to the legal pages", t_login_page_offers_the_legal_links)
+
 
 def main() -> int:
     console_errors: list[tuple[str, str]] = []

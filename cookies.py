@@ -99,6 +99,21 @@ COOKIE_INVENTORY: list[dict] = [
         "details": "An email address, and nothing else. No password is ever written down anywhere.",
     },
     {
+        "name": "sitesketch_remember_pref_v1",
+        "storage": "localStorage",
+        "category": "Functional",
+        "purpose": "Remembers whether you ticked “Keep me signed in”, so the box is right next time.",
+        "lifespan": "Until you clear it",
+        "essential": False,
+        "script_readable": True,
+        "third_party": False,
+        "details": (
+            "The word “yes” or “no”. Whether the box was ticked is not a secret, "
+            "and the cookie it refers to is HttpOnly so this value cannot be used "
+            "to reach anything."
+        ),
+    },
+    {
         "name": CONSENT_KEY,
         "storage": "localStorage",
         "category": "Functional",

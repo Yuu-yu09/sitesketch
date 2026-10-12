@@ -402,15 +402,57 @@ def t_inventory_covers_every_storage_key():
 
 
 def t_no_credential_is_in_cookies_or_storage():
-    """Nothing cookie-shaped may ever hold a password or a card number."""
+    """The inventory must not declare anything that holds a secret.
+
+    Checked as properties rather than by grepping the prose. An earlier
+    version banned the word "password" from the purpose text and flagged the
+    session cookie for saying "without asking for your password again" - it
+    describes what the cookie *avoids* needing, not what it stores. Rewriting
+    honest copy to satisfy a grep is backwards, so this asserts the things
+    that are actually load bearing instead.
+    """
     status, data, _ = call("GET", "/api/privacy/summary", expect=200)
-    for cookie in data["cookies"]:
-        blob = (cookie["name"] + " " + cookie["purpose"] + " " + cookie["details"]).lower()
-        for banned in ("password", "card number", "credit card", "cvv"):
-            # "your password" appearing in a sentence saying it is NOT stored is
-            # fine; a cookie whose stated purpose is holding one is not.
-            if banned in blob and "never" not in blob and "not stored" not in blob:
-                raise AssertionError(f"{cookie['name']} mentions {banned}: {cookie['purpose']}")
+
+    for entry in data["cookies"]:
+        name = entry["name"].lower()
+        for banned in ("password", "passwd", "card", "cvv", "secret"):
+            assert banned not in name, \
+                f"{entry['name']} looks like it stores a {banned}"
+
+    # The one entry that is a credential has to be the locked-down kind.
+    session = [c for c in data["cookies"] if c["name"] == "sitesketch_refresh"]
+    assert len(session) == 1, "the session cookie is not in the inventory"
+    assert session[0]["script_readable"] is False, \
+        "the session cookie is readable by script"
+    assert session[0]["essential"] is True, "the session cookie is not marked essential"
+
+    # Nothing anywhere claims to handle payment details.
+    everything = json.dumps(data).lower()
+    for banned in ("card number", "credit card", "cvv", "payment details"):
+        assert banned not in everything, f"the policy mentions {banned}"
+
+    # and the retention table has to state the quiet part out loud
+    rows = {r["data"].lower(): r for r in data["retention"]}
+    assert any("not stored" in r["kept"].lower() for r in rows.values()), \
+        "the retention table never states that the password is not stored"
+
+
+def t_password_is_not_stored_anywhere():
+    """The hash lives in Postgres and never travels to the browser."""
+    reset_limits()
+    who = f"pw{uuid.uuid4().hex[:6]}"
+    status, data, _ = raw_call("POST", "/api/auth/register",
+                               {"username": who, "email": f"{who}@example.com",
+                                "password": PASSWORD})
+    assert status == 201, data
+    blob = json.dumps(data)
+    assert PASSWORD not in blob, "the response echoed the password"
+    assert "password_hash" not in blob, "the response exposed the hash"
+
+    status, me, _ = raw_call("GET", "/api/auth/me", token=data["token"])
+    assert status == 200, me
+    assert PASSWORD not in json.dumps(me), "the profile endpoint echoed the password"
+    assert "password_hash" not in json.dumps(me), "the profile endpoint exposed the hash"
 
 
 def t_legal_pages_are_reachable():
@@ -421,14 +463,35 @@ def t_legal_pages_are_reachable():
 
 
 def t_consent_notice_is_not_served_to_published_sites():
-    """A published site runs no script, so it must not carry the consent code."""
-    status, data, _ = raw_call("POST", f"/api/projects/{project_id}/publish",
-                               {"slug": "e2e-kitchen", "pages": _compiled()},
-                               token=token)
+    """A published site runs no script, so it must not carry the consent code.
+
+    Self-contained on purpose: this lives in the auth block, which runs before
+    the shared test project exists, so it cannot borrow that one.
+    """
+    reset_limits()
+    who = f"consent{uuid.uuid4().hex[:6]}"
+    _, reg, _ = raw_call("POST", "/api/auth/register",
+                         {"username": who, "email": f"{who}@example.com",
+                          "password": PASSWORD})
+    assert reg.get("token"), reg
+    owner = reg["token"]
+
+    _, made, _ = raw_call("POST", "/api/projects",
+                          {"name": "Consent check", "type": "business",
+                           "goal": "get-contact"}, token=owner)
+    assert made.get("id"), made
+
+    slug = "consent-check-site"
+    status, data, _ = raw_call("POST", f"/api/projects/{made['id']}/publish",
+                               {"slug": slug, "pages": _compiled()}, token=owner)
     assert status == 200, data
-    status, body = raw_text("GET", "/site/e2e-kitchen")
+
+    status, body = raw_text("GET", f"/site/{slug}")
     assert status == 200, status
     assert "consent" not in body.lower(), "the consent banner leaked into a published site"
+
+    # tidy up so repeated runs do not pile up published rows
+    raw_call("DELETE", f"/api/projects/{made['id']}", token=owner)
 
 
 def t_cookie_inventory_is_published():
@@ -805,6 +868,7 @@ for name, fn in [
     ("privacy summary is served", t_privacy_summary_is_served),
     ("inventory covers every storage key", t_inventory_covers_every_storage_key),
     ("no credential is ever stored client-side", t_no_credential_is_in_cookies_or_storage),
+    ("password never leaves the server", t_password_is_not_stored_anywhere),
     ("privacy and terms pages are reachable", t_legal_pages_are_reachable),
     ("published sites carry no consent code", t_consent_notice_is_not_served_to_published_sites),
     ("login works", t_login),
