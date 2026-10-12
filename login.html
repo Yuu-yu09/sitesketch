@@ -53,7 +53,12 @@
           <p class="err" id="ePw">Enter your password.</p>
         </div>
 
-        <button class="btn btn-primary btn-block" type="submit" id="submitBtn">Sign in</button>
+        <label class="remember">
+        <input type="checkbox" id="rememberMe" checked>
+        <span>Keep me signed in on this device</span>
+      </label>
+
+      <button class="btn btn-primary btn-block" type="submit" id="submitBtn">Sign in</button>
       </form>
 
       <p class="auth-alt">New to SiteSketch? <a href="register.html">Start your plan</a></p>
@@ -72,6 +77,17 @@
       var formError = document.getElementById("formError");
       var email = document.getElementById("email");
       var pw = document.getElementById("password");
+      var rememberMe = document.getElementById("rememberMe");
+
+      /* Come back to a half-filled form only for the email. Saving the
+         password would put it somewhere any script on the page can read. */
+      var lastEmail = API.rememberedEmail();
+      if (lastEmail) {
+        email.value = lastEmail;
+        pw.focus();
+      } else {
+        email.focus();
+      }
 
       document.getElementById("pwToggle").addEventListener("click", function () {
         var show = pw.type === "password";
@@ -98,7 +114,7 @@
         btn.disabled = true;
         btn.textContent = "Signing in…";
 
-        API.login(email.value.trim(), pw.value).then(function (res) {
+        API.login(email.value.trim(), pw.value, rememberMe.checked).then(function (res) {
           if (!res.ok) {
             formError.textContent = res.error;
             formError.classList.add("show");

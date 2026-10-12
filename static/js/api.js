@@ -14,6 +14,7 @@
   var TOKEN_KEY = "sitesketch_token_v1";
   var USER_KEY = "sitesketch_user_v1";
   var REFRESH_KEY = "sitesketch_refresh_v1";
+  var EMAIL_KEY = "sitesketch_last_email_v1";
 
   /* ---------------- transport ---------------- */
 
@@ -21,8 +22,27 @@
     try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
   }
 
+  /* "Keep me signed in" decides where the refresh token lives:
+     localStorage survives closing the browser, sessionStorage does not.
+     The password is never stored - anything saved here can be read by any
+     script on the page, so only a token and the email address are kept. */
   function refreshToken() {
-    try { return localStorage.getItem(REFRESH_KEY) || ""; } catch (e) { return ""; }
+    try {
+      return localStorage.getItem(REFRESH_KEY) || sessionStorage.getItem(REFRESH_KEY) || "";
+    } catch (e) {
+      try { return localStorage.getItem(REFRESH_KEY) || ""; } catch (e2) { return ""; }
+    }
+  }
+
+  function rememberedEmail() {
+    try { return localStorage.getItem(EMAIL_KEY) || ""; } catch (e) { return ""; }
+  }
+
+  function rememberEmail(value) {
+    try {
+      if (value) localStorage.setItem(EMAIL_KEY, value);
+      else localStorage.removeItem(EMAIL_KEY);
+    } catch (e) { /* private mode */ }
   }
 
   /* One refresh at a time. Several requests can come back 401 together, and
@@ -125,14 +145,21 @@
     return send(path, options, 0);
   }
 
-  function setSession(tokenValue, user, refresh) {
+  function setSession(tokenValue, user, refresh, remember) {
     try {
       localStorage.setItem(TOKEN_KEY, tokenValue);
-      if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
+      if (refresh) {
+        /* remembered: survive a browser restart. not remembered: this tab only. */
+        localStorage.removeItem(REFRESH_KEY);
+        sessionStorage.removeItem(REFRESH_KEY);
+        var store = remember === false ? sessionStorage : localStorage;
+        store.setItem(REFRESH_KEY, refresh);
+      }
       /* the screens render user.name; normalise whatever the API sends */
       localStorage.setItem(USER_KEY, JSON.stringify(Object.assign({}, user, {
         name: user.name || user.username || user.email
       })));
+      if (user && user.email) rememberEmail(user.email);
     } catch (e) { /* private mode */ }
   }
 
@@ -141,6 +168,7 @@
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
       localStorage.removeItem(REFRESH_KEY);
+      sessionStorage.removeItem(REFRESH_KEY);
     } catch (e) { /* ignore */ }
   }
 
@@ -373,13 +401,13 @@
     /* auth */
     currentUser: currentUser,
     requireAuth: requireAuth,
-    login: function (email, password) {
+    login: function (email, password, remember) {
       return request("/api/auth/login", {
         method: "POST",
         body: { email: email, password: password }
       }).then(function (res) {
         if (!res.ok) return { ok: false, error: res.error };
-        setSession(res.data.token, res.data.user, res.data.refresh);
+        setSession(res.data.token, res.data.user, res.data.refresh, remember);
         return { ok: true, user: res.data.user };
       });
     },
@@ -395,6 +423,14 @@
     },
     logout: function () {
       clearSession();
+    },
+
+    /* remembered email and the "keep me signed in" choice, for the login form */
+    rememberedEmail: function () {
+      return rememberedEmail();
+    },
+    rememberMe: function () {
+      return !!refreshToken();
     },
 
     /* projects */
