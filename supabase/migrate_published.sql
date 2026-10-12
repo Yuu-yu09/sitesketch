@@ -11,8 +11,18 @@
 
 alter table projects add column if not exists published_pages jsonb;
 alter table projects add column if not exists published_at timestamptz;
+-- Which key in published_pages is the home page.
+--
+-- This has to be stored rather than worked out. published_pages is jsonb, and
+-- jsonb does not preserve key order: it reorders by key length and then
+-- bytewise. So {"home": ..., "faq": ..., "about-us": ...} comes back as
+-- faq, home, about-us, and picking the first key served the FAQ page at
+-- /site/<slug> on every multi-page site.
+alter table projects add column if not exists published_home text;
 
 comment on column projects.published_pages is
   'Compiled HTML per page: {"home": "<!doctype html>...", "about": "..."}';
 comment on column projects.published_at is
   'When the currently stored compiled pages were produced';
+comment on column projects.published_home is
+  'Key in published_pages that /site/<slug> should serve';

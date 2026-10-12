@@ -482,9 +482,11 @@
     },
 
     /* publish */
-    setPublished: function (projectId, published, slug, pages) {
+    setPublished: function (projectId, published, slug, pages, home) {
       var path = "/api/projects/" + encodeURIComponent(projectId) + (published ? "/publish" : "/unpublish");
-      var body = published ? { slug: slug, pages: pages || null } : {};
+      var body = published
+        ? { slug: slug, pages: pages || null, home: home || null }
+        : {};
       return request(path, { method: "POST", body: body })
         .then(function (res) {
           if (!res.ok) return { ok: false, error: res.error, project: null };

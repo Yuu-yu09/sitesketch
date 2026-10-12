@@ -19,6 +19,13 @@
         email.focus();
       }
 
+      /* Put the checkbox back the way it was left. It used to be a fixed
+         default, which quietly signed people in for thirty days when they
+         were expecting the safer default. */
+      if (rememberMe) {
+        rememberMe.checked = API.rememberMe();
+      }
+
       document.getElementById("pwToggle").addEventListener("click", function () {
         var show = pw.type === "password";
         pw.type = show ? "text" : "password";

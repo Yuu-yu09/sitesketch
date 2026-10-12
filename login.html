@@ -55,7 +55,10 @@
         </div>
 
         <label class="remember">
-        <input type="checkbox" id="rememberMe" checked>
+          <!-- Unchecked by default: a persistent cookie has to be something
+               you choose, not something you get by ignoring a box. JS puts
+               the checkbox back the way you left it. -->
+          <input type="checkbox" id="rememberMe">
         <span>Keep me signed in on this device</span>
       </label>
 

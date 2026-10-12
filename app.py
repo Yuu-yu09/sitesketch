@@ -362,7 +362,7 @@ def _published_site(slug: str):
     if not slug or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,60}", slug):
         return None
     row = query_one(
-        "select slug, published_pages, view_count"
+        "select slug, published_pages, published_home"
         " from projects where slug = %s and is_published = true",
         (slug,),
     )
@@ -378,12 +378,15 @@ def site_home(slug: str):
     if not row:
         return _no_site()
     pages = row["published_pages"]
-    # The first key is the page the plan lists first, which is what
-    # SS.compileSite treated as the home page when it wrote the nav links.
-    home = next(iter(pages), None)
-    if home is None:
+    # published_home, never the first key: published_pages is jsonb and jsonb
+    # reorders keys by length and bytewise, so the first key after a round
+    # trip is whichever key happened to sort first, not the home page.
+    home = row["published_home"] or "home"
+    if home not in pages:
+        home = "home" if "home" in pages else next(iter(pages), "")
+    if not home:
         return _no_site()
-    return _site_response(slug, home, pages[home], row["view_count"])
+    return _site_response(slug, home, pages[home])
 
 
 @app.get("/site/<slug>/<page_id>")
@@ -395,10 +398,10 @@ def site_page(slug: str, page_id: str):
     html = pages.get(page_id)
     if html is None:
         return _no_site()
-    return _site_response(slug, page_id, html, row["view_count"])
+    return _site_response(slug, page_id, html)
 
 
-def _site_response(slug: str, page_id: str, html: str, views: int):
+def _site_response(slug: str, page_id: str, html: str):
     res = app.response_class(html, mimetype="text/html; charset=utf-8")
     # The document only changes when the owner republishes, so the validator
     # is built from the slug, the page and its length - deliberately not from

@@ -108,13 +108,13 @@
         function compile() {
           var slug = slugInput.value;
           return loadSiteCss().then(function (css) {
-            var pages = SS.compileSite(plan, {
+            var built = SS.compileSite(plan, {
               pageBase: "/site/" + slug,
               css: css
             });
-            var keys = Object.keys(pages);
+            var keys = Object.keys(built.pages || {});
             if (!keys.length) throw new Error("this plan has no pages to publish");
-            return pages;
+            return built;
           });
         }
 
@@ -131,8 +131,8 @@
           pubBtn.innerHTML = '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i> ' +
             (republish ? "Republishing…" : "Compiling…");
 
-          compile().then(function (pages) {
-            return API.setPublished(proj.id, true, slugInput.value, pages);
+          compile().then(function (built) {
+            return API.setPublished(proj.id, true, slugInput.value, built.pages, built.home);
           }).then(function (res) {
             if (!res.ok) {
               pubBtn.disabled = false;

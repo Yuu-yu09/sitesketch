@@ -367,6 +367,79 @@ def t_logout_clears_the_session_cookie():
         f"logout did not expire the cookie: {cleared!r}"
 
 
+def t_multipage_keys_survive_normalisation():
+    """Page ids that are not already slugs must still be reachable.
+
+    The client normalises page ids into URLs and the server stores the pages
+    under the same normalised key. When the two disagreed, a page called
+    "About Us" was stored as "about-us" while the link still pointed at
+    "/About%20Us", so every sub-page of a multi-page site 404'd.
+    """
+    reset_limits()
+    who = f"mp{uuid.uuid4().hex[:6]}"
+    _, reg, _ = raw_call("POST", "/api/auth/register",
+                         {"username": who, "email": f"{who}@example.com",
+                          "password": PASSWORD})
+    owner = reg["token"]
+    _, made, _ = raw_call("POST", "/api/projects",
+                          {"name": "Multipage", "type": "business", "goal": "get-contact"},
+                          token=owner)
+    pid = made["id"]
+
+    pages = {
+        "home": "<!doctype html><p>the home page</p>",
+        "About Us": "<!doctype html><p>about, with a space and capitals</p>",
+        "FAQ": "<!doctype html><p>questions</p>",
+    }
+    slug = "mp-" + uuid.uuid4().hex[:8]
+    status, data, _ = raw_call("POST", f"/api/projects/{pid}/publish",
+                               {"slug": slug, "pages": pages}, token=owner)
+    assert status == 200, data
+
+    for key, needle in (("about-us", "about, with a space"),
+                        ("faq", "questions")):
+        status, body = raw_text("GET", f"/site/{slug}/{key}")
+        assert status == 200, f"/site/{slug}/{key} -> {status}"
+        assert needle in body, f"{key} served the wrong page"
+
+    # the home page is still the first key, not whatever sorted first
+    status, body = raw_text("GET", f"/site/{slug}")
+    assert status == 200 and "the home page" in body, status
+
+    raw_call("DELETE", f"/api/projects/{pid}", token=owner)
+
+
+def t_colliding_page_keys_are_refused():
+    """Two pages normalising to one address must not silently drop one."""
+    reset_limits()
+    who = f"cl{uuid.uuid4().hex[:6]}"
+    _, reg, _ = raw_call("POST", "/api/auth/register",
+                         {"username": who, "email": f"{who}@example.com",
+                          "password": PASSWORD})
+    owner = reg["token"]
+    _, made, _ = raw_call("POST", "/api/projects",
+                          {"name": "Collide", "type": "business", "goal": "get-contact"},
+                          token=owner)
+    status, data, _ = raw_call("POST", f"/api/projects/{made['id']}/publish",
+                               {"slug": "collide-" + uuid.uuid4().hex[:8],
+                                "pages": {"home": "<p>a</p>", "About Us": "<p>b</p>",
+                                          "about-us": "<p>c</p>"}},
+                               token=owner)
+    assert status == 400, f"a silent page loss was accepted: {status} {data}"
+    raw_call("DELETE", f"/api/projects/{made['id']}", token=owner)
+
+
+def t_keep_me_signed_in_is_off_by_default():
+    """The safe default has to be the safe default, not just the markup."""
+    reset_limits()
+    raw_call("GET", "/login.html")   # warm, no cookies involved
+    status, _, _ = raw_call("POST", "/api/auth/login",
+                            {"email": EMAIL, "password": PASSWORD})
+    raw = HEADERS.get("set-cookie", "").lower()
+    assert "max-age" not in raw, \
+        f"signing in without asking granted a persistent cookie: {raw!r}"
+
+
 def t_privacy_summary_is_served():
     status, data, _ = call("GET", "/api/privacy/summary", expect=200)
     assert data["retention"], "no retention table published"
@@ -481,7 +554,7 @@ def t_consent_notice_is_not_served_to_published_sites():
                            "goal": "get-contact"}, token=owner)
     assert made.get("id"), made
 
-    slug = "consent-check-site"
+    slug = "consent-check-" + uuid.uuid4().hex[:8]
     status, data, _ = raw_call("POST", f"/api/projects/{made['id']}/publish",
                                {"slug": slug, "pages": _compiled()}, token=owner)
     assert status == 200, data
@@ -866,6 +939,9 @@ for name, fn in [
     ("logout clears the session cookie", t_logout_clears_the_session_cookie),
     ("cookie inventory is published", t_cookie_inventory_is_published),
     ("privacy summary is served", t_privacy_summary_is_served),
+    ("multi-page keys survive normalisation", t_multipage_keys_survive_normalisation),
+    ("colliding page keys are refused", t_colliding_page_keys_are_refused),
+    ("keep me signed in is off by default", t_keep_me_signed_in_is_off_by_default),
     ("inventory covers every storage key", t_inventory_covers_every_storage_key),
     ("no credential is ever stored client-side", t_no_credential_is_in_cookies_or_storage),
     ("password never leaves the server", t_password_is_not_stored_anywhere),

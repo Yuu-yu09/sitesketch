@@ -597,6 +597,24 @@
 
   /* ---------- page ---------- */
 
+  /* The one place a page id becomes part of a URL.
+
+     It has to match projects.slugify on the server exactly, because the
+     server stores compiled pages under the slugified key and looks them up by
+     the path segment. "About Us" and "about-us" both have to arrive as
+     "about-us" or the link is dead. Kept short and boring on purpose. */
+  SS.pageKey = function (id) {
+    var out = String(id === undefined || id === null ? "" : id)
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9-\s]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60);
+    return out || "home";
+  };
+
   function navHTML(plan, pageId, spec, options) {
     options = options || {};
     var meta = plan.meta || {};
@@ -610,8 +628,9 @@
        the navigation is dead. pageBase is what makes them real. */
     function hrefFor(id) {
       if (!options.pageBase) return "#" + esc(id);
-      return id === homeId ? options.pageBase
-                           : options.pageBase + "/" + encodeURIComponent(id);
+      var key = SS.pageKey(id);
+      return key === SS.pageKey(homeId) ? options.pageBase
+                                         : options.pageBase + "/" + key;
     }
 
     var links = pages.map(function (p) {
@@ -886,21 +905,29 @@
     var base = options.pageBase || "";
     var css = options.css || "";
     var pages = plan.pages || [];
-    if (!pages.length) return {};
+    if (!pages.length) return { pages: {}, home: "" };
 
     var spec = SS.specFor(plan);
     var fonts = window.DESIGN ? DESIGN.fontLink(spec) : "";
     var siteName = (plan.meta && plan.meta.siteName) || "SiteSketch";
     var out = {};
+    var homeKey = "";
 
     pages.forEach(function (page, i) {
-      var pageBase = i === 0 ? base : base + "/" + encodeURIComponent(page.id);
+      /* One normalisation, used for the stored key AND the links. These have
+         to agree or the navigation 404s: the server stores pages under a
+         slugified key, so a page id of "About Us" has to become "about-us"
+         in the href too, not just in the payload. Doing it in one place is
+         the only way to be sure they cannot drift. */
+      var key = SS.pageKey(page.id);
+      var pageBase = i === 0 ? base : base + "/" + key;
       var body = SS.renderPage(plan, page.id, {
         editable: false,
         live: false,          /* see the note above: no observer on the server-side page */
         pageBase: pageBase
       });
       if (!body) return;
+      if (i === 0) homeKey = key;
 
       /* The first page is the site; the rest are sections of it. Comparing
          page.name to pages[0].id to spot that looks tempting but is wrong -
@@ -911,7 +938,7 @@
       var blurb = (first.subtitle || "").trim();
       var desc = i === 0 ? (blurb || siteName) : ((page.name || "") + " · " + (blurb || siteName));
 
-      out[page.id] = "<!doctype html>\n" +
+      out[key] = "<!doctype html>\n" +
         '<html lang="en">\n<head>\n' +
         '<meta charset="utf-8">\n' +
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
@@ -929,7 +956,10 @@
         "</head>\n<body>\n" + body + "\n</body>\n</html>\n";
     });
 
-    return out;
+    /* home is returned rather than left for the caller to guess. The server
+       stores these pages as jsonb, which reorders keys, so "the first one" is
+       not a fact that survives the round trip. */
+    return { pages: out, home: homeKey };
   };
 
   window.SS = SS;

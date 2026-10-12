@@ -33,38 +33,60 @@ def slugify(text: str) -> str:
     return out or "my-site"
 
 
-def clean_published_pages(raw) -> tuple[dict, str | None]:
+def page_key(page_id: str) -> str:
+    """The key a compiled page is stored and served under.
+
+    Must agree with SS.pageKey in static/js/site.js, because the client builds
+    the nav links and the server stores the pages from the same compile step.
+    When they disagreed, a page id of "About Us" was stored as "about-us"
+    while the link still pointed at "/About%20Us", so every sub-page 404'd.
+    """
+    return NOT_SLUG.sub("-", (page_id or "").lower()).strip("-")[:60]
+
+
+def clean_published_pages(raw, home_hint: str = "") -> tuple[dict, str, str | None]:
     """Validate and sanitise the compiled pages sent with a publish request.
 
-    Returns (pages, error). Anything executable is stripped before it reaches
-    the database, so a stored published site is inert even before the route
-    that serves it adds `script-src 'none'`.
+    Returns (pages, home, error). Anything executable is stripped before it
+    reaches the database, so a stored published site is inert even before the
+    route that serves it adds `script-src 'none'`.
+
+    `home` is returned explicitly rather than worked out from the dict later,
+    because published_pages is jsonb and jsonb does not preserve key order.
     """
     if raw is None:
-        return {}, None
+        return {}, "", None
     if not isinstance(raw, dict):
-        return {}, "Compiled pages must be an object of page id to HTML"
+        return {}, "", "Compiled pages must be an object of page id to HTML"
 
     pages: dict[str, str] = {}
     total = 0
     for page_id, html in list(raw.items())[:MAX_PUBLISHED_PAGES + 1]:
         if not isinstance(page_id, str) or not isinstance(html, str):
-            return {}, "Compiled pages must be strings"
-        # The key becomes part of the public URL, so it gets the same
-        # treatment as a slug rather than being trusted.
-        key = slugify(page_id)
-        if not key or key == "my-site" and page_id.strip("-") == "":
-            return {}, "A page id is not usable in a URL"
+            return {}, "", "Compiled pages must be strings"
+        key = page_key(page_id)
+        if not key:
+            return {}, "", f"“{page_id}” cannot be used as a page address"
+        if key in pages:
+            # "About Us" and "about-us" both normalise to about-us. One of
+            # them would silently vanish, which is worse than a refusal.
+            return {}, "", f"Two pages both want the address “{key}”"
         total += len(html)
         if total > MAX_PUBLISHED_BYTES:
-            return {}, "That site is too large to publish"
+            return {}, "", "That site is too large to publish"
         pages[key] = published_html.sanitise(html)
 
     if not pages:
-        return {}, "There were no pages to publish"
+        return {}, "", "There were no pages to publish"
     if len(pages) > MAX_PUBLISHED_PAGES:
-        return {}, "That site has too many pages"
-    return pages, None
+        return {}, "", "That site has too many pages"
+
+    # Fall back to the conventional name, then to whatever exists, rather than
+    # trusting the order the keys happen to come back in.
+    home = page_key(home_hint or "")
+    if home not in pages:
+        home = "home" if "home" in pages else next(iter(pages))
+    return pages, home, None
 
 
 def serialize(row: dict) -> dict:
@@ -181,7 +203,7 @@ def publish(pid: str):
     if not SLUG_RE.match(slug):
         return jsonify(error="That address can only use letters, numbers and dashes"), 400
 
-    pages, problem = clean_published_pages(body.get("pages"))
+    pages, home, problem = clean_published_pages(body.get("pages"), body.get("home") or "")
     if problem:
         return jsonify(error=problem), 400
 
@@ -197,9 +219,9 @@ def publish(pid: str):
     row = db.query_one(
         "update projects"
         " set is_published = true, slug = %s, published_pages = %s::jsonb,"
-        "     published_at = now()"
+        "     published_home = %s, published_at = now()"
         " where id = %s::uuid and user_id = %s::uuid returning *",
-        (slug, json.dumps(pages), pid, get_jwt_identity()),
+        (slug, json.dumps(pages), home, pid, get_jwt_identity()),
     )
     return jsonify(serialize(row))
 
