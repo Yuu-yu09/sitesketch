@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy &amp; cookie preferences — SiteSketch</title>
+  <meta name="description" content="What SiteSketch stores, which cookies it sets, who it tells, and how to change or withdraw your choices.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%23fff' stroke='%2316283C' stroke-width='2.5'/%3E%3Cpath d='M16 3.5v25M3.5 16h25' stroke='%2316283C' stroke-width='1.4' opacity='.35'/%3E%3Crect x='17.5' y='4.5' width='10' height='10' fill='%23D6452F'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="static/css/fonts.css">
+  <link rel="stylesheet" href="static/icons/bootstrap-icons.css">
+  <link rel="stylesheet" href="static/css/app.css">
+</head>
+<body class="legal-page">
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html" aria-label="SiteSketch home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="6" fill="#fff" stroke="#16283C" stroke-width="2.5"/>
+          <path d="M16 3.5v25M3.5 16h25" stroke="#16283C" stroke-width="1.4" opacity=".35"/>
+          <rect x="17.5" y="4.5" width="10" height="10" fill="#D6452F"/>
+        </svg>
+        <span>SiteSketch</span>
+      </a>
+      <nav class="topnav">
+        <a href="dashboard.html">Dashboard</a>
+        <a href="terms.html">Terms</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal">
+    <h1>Privacy &amp; cookie preferences</h1>
+    <p class="legal-lede">
+      Plain English, and short. SiteSketch is a school project, so there is no
+      marketing team here to hide behind.
+    </p>
+
+    <!-- The headline claim, stated first because it is the one that matters. -->
+    <div class="callout callout--good">
+      <h2><i class="bi bi-shield-check" aria-hidden="true"></i> The short version</h2>
+      <ul>
+        <li>We set <strong>one cookie</strong>, to keep you signed in.</li>
+        <li>We use <strong>no analytics, no advertising, and no trackers</strong>.</li>
+        <li>We never see or store your password — not even hashed in a way we could read.</li>
+        <li>Nothing you write is sold, shared or used to profile you.</li>
+        <li>Your published site is public to anyone who has its address. That is the point of publishing it.</li>
+      </ul>
+    </div>
+
+    <h2>What we collect, and why</h2>
+    <div id="retentionTable" class="legal-table-wrap">
+      <p class="legal-note">Loading…</p>
+    </div>
+
+    <h2>Cookies and storage, item by item</h2>
+    <p>
+      Every value below is declared in <code>cookies.py</code> and this page is
+      rendered from that list, so it cannot drift away from what the code
+      actually does. If something is added that is not on this page, that is a
+      bug, and there is a test that fails when it happens.
+    </p>
+    <div id="cookieTable" class="legal-table-wrap">
+      <p class="legal-note">Loading…</p>
+    </div>
+
+    <h2>Your cookie choices</h2>
+    <p>
+      You can change these at any time. Withdrawing is as easy as agreeing and
+      does not need a confirmation step that talks you out of it.
+    </p>
+    <div class="pref-panel">
+      <div id="prefStatus" class="pref-status">Checking your saved choices…</div>
+      <div class="pref-actions">
+        <button type="button" id="prefEssential" class="btn btn-primary">
+          Accept everything
+        </button>
+        <button type="button" id="prefMinimal" class="btn btn-ghost">
+          Essential only
+        </button>
+        <button type="button" id="prefWithdraw" class="btn btn-ghost">
+          Withdraw consent
+        </button>
+      </div>
+      <p class="legal-note">
+        Being honest about what these buttons do today: there is nothing
+        non-essential in use, so all three leave you with a working site. They
+        are here so that if analytics or advertising is ever added, your choice
+        is already recorded and enforced rather than being bolted on afterwards.
+      </p>
+    </div>
+
+    <h2>Who else sees anything</h2>
+    <p>
+      These are the services that handle data on our behalf. Simply being asked
+      for a file means your IP address reaches them, which is a disclosure in
+      its own right, so they are all listed.
+    </p>
+    <div id="thirdPartyList" class="legal-table-wrap">
+      <p class="legal-note">Loading…</p>
+    </div>
+
+    <h2>Your rights</h2>
+    <p>
+      Under the GDPR, UK GDPR and CCPA/CPRA you have the right to see what we
+      hold about you, to correct it, to have it deleted, to get a portable copy,
+      and to object to processing. Because this is a demonstration project,
+      the practical answer is: delete your projects in the builder, and delete
+      your account from the dashboard, and the rows go with it. If you want a
+      copy of your data or want something removed that you cannot remove
+      yourself, ask and it will be done by hand.
+    </p>
+
+    <h2>Children</h2>
+    <p>
+      SiteSketch is not directed at children under 13 and we do not knowingly
+      collect their details. If you believe a child has signed up, tell us and
+      the account will be removed.
+    </p>
+
+    <h2>Changes to this page</h2>
+    <p>
+      If this policy changes we will say so here, and the date below will move.
+      Material changes will also re-open the cookie notice rather than being
+      applied silently to people who had already decided.
+    </p>
+
+    <p class="legal-meta">Last updated <span id="legalDate">—</span>.</p>
+  </main>
+
+  <footer class="legal-foot">
+    <a href="index.html">Home</a> ·
+    <a href="terms.html">Terms of use</a> ·
+    <a href="privacy.html">Privacy</a>
+  </footer>
+
+  <script src="static/js/api.js"></script>
+  <script src="static/js/site.js"></script>
+  <script src="static/js/consent.js"></script>
+  <script src="static/js/pages/privacy.js"></script>
+</body>
+</html>

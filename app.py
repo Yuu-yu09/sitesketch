@@ -20,6 +20,7 @@ import config
 import cookies
 import gemini
 import media
+import privacy
 import projects
 from db import DatabaseUnavailable, query, query_one
 from ratelimit import limiter
@@ -107,6 +108,7 @@ jwt = JWTManager(app)
 app.register_blueprint(auth.bp)
 app.register_blueprint(projects.bp)
 app.register_blueprint(media.bp)
+app.register_blueprint(privacy.bp)
 
 
 # Every rejected token answers 401 with the same shape, so the client has one

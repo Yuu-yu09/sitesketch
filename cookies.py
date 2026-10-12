@@ -36,10 +36,12 @@ import config
 # ---------------------------------------------------------------- the inventory
 
 REFRESH_COOKIE = "sitesketch_refresh"
+CONSENT_KEY = "sitesketch_consent_v1"
 
 COOKIE_INVENTORY: list[dict] = [
     {
         "name": REFRESH_COOKIE,
+        "storage": "cookie",
         "category": "Essential",
         "purpose": (
             "Keeps you signed in. Holds a signed session token that lets the "
@@ -57,14 +59,55 @@ COOKIE_INVENTORY: list[dict] = [
         ),
     },
     {
-        "name": "sitesketch_consent",
+        "name": REFRESH_COOKIE.replace("refresh", "token_v1"),
+        "storage": "localStorage",
+        "category": "Essential",
+        "purpose": (
+            "Holds your short-lived access token (30 minutes) so the app can "
+            "tell you are signed in without asking on every screen."
+        ),
+        "lifespan": "Until you sign out, or 30 minutes",
+        "essential": True,
+        "script_readable": True,
+        "third_party": False,
+        "details": (
+            "Readable by script, which is the one weakness left in this design. "
+            "It is deliberately short lived and cannot be renewed without the "
+            "HttpOnly cookie above, so stealing it buys at most half an hour."
+        ),
+    },
+    {
+        "name": "sitesketch_user_v1",
+        "storage": "localStorage",
+        "category": "Essential",
+        "purpose": "Caches your display name so the header can render before the API answers.",
+        "lifespan": "Until you sign out",
+        "essential": True,
+        "script_readable": True,
+        "third_party": False,
+        "details": "Your id, username and email. Never the password - it is never stored at all.",
+    },
+    {
+        "name": "sitesketch_last_email_v1",
+        "storage": "localStorage",
         "category": "Functional",
-        "purpose": "Remembers that you have seen the cookie notice, so it is not shown on every visit.",
+        "purpose": "Pre-fills the email box next time so you are not typing it out again.",
+        "lifespan": "Until you clear it",
+        "essential": False,
+        "script_readable": True,
+        "third_party": False,
+        "details": "An email address, and nothing else. No password is ever written down anywhere.",
+    },
+    {
+        "name": CONSENT_KEY,
+        "storage": "localStorage",
+        "category": "Functional",
+        "purpose": "Records the cookie preferences you chose, so the notice is not shown every visit.",
         "lifespan": "12 months",
         "essential": False,
         "script_readable": True,
         "third_party": False,
-        "details": "Contains only the categories you agreed to. No identifier, no fingerprint.",
+        "details": "The categories you agreed to, and when. No identifier and no fingerprint.",
     },
 ]
 
