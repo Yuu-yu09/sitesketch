@@ -361,6 +361,34 @@
         renderPanel();
       }
 
+      /* ---------------- first-run hints ----------------
+         Drag handles, inline editing and preview are all invisible until
+         you happen to hover the right pixel, so we say them once. */
+      var HINT_KEY = "sitesketch_builder_hints_v1";
+      function showHints() {
+        var seen = false;
+        try { seen = localStorage.getItem(HINT_KEY) === "1"; } catch (e) { /* ignore */ }
+        if (seen) return;
+
+        var bar = document.createElement("div");
+        bar.className = "builder-hints";
+        bar.innerHTML =
+          '<span class="hint-item"><i class="bi bi-grip-vertical" aria-hidden="true"></i> ' +
+            "Drag a handle to move a block</span>" +
+          '<span class="hint-item"><i class="bi bi-fonts" aria-hidden="true"></i> ' +
+            "Click any text to type</span>" +
+          '<span class="hint-item"><i class="bi bi-image" aria-hidden="true"></i> ' +
+            "Click a photo to swap or crop it</span>" +
+          '<span class="hint-item"><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> ' +
+            "Preview shows the whole site</span>" +
+          '<button type="button" class="hint-dismiss" aria-label="Hide these tips">Got it</button>';
+        document.body.appendChild(bar);
+        bar.querySelector(".hint-dismiss").addEventListener("click", function () {
+          bar.remove();
+          try { localStorage.setItem(HINT_KEY, "1"); } catch (e) { /* ignore */ }
+        });
+      }
+
       /* ---------------- boot ----------------
          The builder is reachable from the plan flow, but also directly by
          url, so it must survive a project whose plan_json is empty or
@@ -435,6 +463,7 @@
         /* design controls live on the right and start open, so the page is
            the first thing you see rather than a wall of buttons */
         openPanel("styles");
+        showHints();
       }
 
       if (wantedId) {

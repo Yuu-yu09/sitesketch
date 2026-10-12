@@ -946,7 +946,59 @@ textarea { resize: vertical; min-height: 96px; }
 }
 .swatch.is-on { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* first-run hints, dismissed for good once read */
+.builder-hints {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: min(760px, calc(100vw - 2rem));
+  padding: .6rem .9rem;
+  background: var(--ink);
+  color: #F7F4EC;
+  border-radius: 10px;
+  box-shadow: 4px 4px 0 rgba(22, 40, 60, .22);
+  font-size: .82rem;
+}
+.builder-hints .hint-item { display: inline-flex; align-items: center; gap: .35rem; }
+.builder-hints .hint-item i { opacity: .75; }
+.builder-hints .hint-dismiss {
+  border: 0;
+  border-radius: 6px;
+  background: #F7F4EC;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  padding: .3rem .7rem;
+  cursor: pointer;
+}
+.builder-body.is-focus .builder-hints { display: none; }
+
 /* ---------- photo wall tiles (editor only) ---------- */
+.ss-site.is-editing [data-foot] .ss-tile-tools button { opacity: 1; }
+
+/* the footer announces itself as editable, because otherwise a user has
+   no way of knowing the text down there is click-to-type like the rest */
+.ss-site.is-editing [data-foot]::after {
+  content: "Footer — click any text to edit";
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: .7;
+  pointer-events: none;
+}
+.ss-site.is-editing [data-foot].is-selected::after { color: var(--accent); opacity: 1; }
 .ss-site.is-editing .ss-tile { cursor: default; }
 .ss-site.is-editing .ss-tile:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ss-site.is-editing .ss-tile.is-ghost { opacity: .35; }
@@ -1005,7 +1057,9 @@ textarea { resize: vertical; min-height: 96px; }
 }
 
 /* The grip stays in the layout (never display:none) so keyboard users can
-   Tab to it; it is transparent and click-through until hover or focus. */
+   Tab to it. It sits faintly visible at all times rather than appearing
+   only on hover, because a handle you cannot see is a handle nobody
+   discovers - the whole point is that dragging blocks around is obvious. */
 .sec-grip {
   position: absolute;
   top: 6px;
@@ -1023,17 +1077,17 @@ textarea { resize: vertical; min-height: 96px; }
   font-size: .95rem;
   line-height: 1;
   cursor: grab;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .12s ease;
+  opacity: .45;
+  transition: opacity .12s ease, transform .12s ease;
 }
+.sec-grip:hover { opacity: 1; transform: scale(1.08); }
 .sec-grip:active { cursor: grabbing; }
-.sec-grip:focus-visible { opacity: 1; pointer-events: auto; outline: 2px solid var(--accent); outline-offset: 2px; }
+.sec-grip:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 2px; }
 .ss-sec:hover > .sec-grip,
-.ss-sec.is-selected > .sec-grip { opacity: 1; pointer-events: auto; }
+.ss-sec.is-selected > .sec-grip { opacity: 1; }
 
 /* keyboard reordering: focus the grip to reveal it without hovering */
-.ss-sec:focus-within > .sec-grip { opacity: 1; pointer-events: auto; }
+.ss-sec:focus-within > .sec-grip { opacity: 1; }
 .ss-sec.is-dragging { opacity: .85; }
 
 /* floating block toolbar (sits over the selected section) */
