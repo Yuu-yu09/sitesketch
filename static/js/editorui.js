@@ -233,7 +233,144 @@
 
   /* ----------------------------------------------------------------- styles */
 
-  /* ------------------------------------------------------- photo settings */
+  /* -------------------------------------------------- background decoration */
+
+  /* Free-form shapes the owner places on the wall itself: behind the
+     photographs or in front of them, any size, any colour, any position.
+     Nothing here is a preset layout, it is a set of parts to arrange. */
+  function decorPanel(section) {
+    var Editor = window.Editor;
+    var list = Array.isArray(section.decor) ? section.decor : [];
+
+    var rows = list.map(function (d, i) {
+      var shape = (window.SS.PHOTO_SHAPES || []).indexOf(d.shape) === -1 ? "circle" : d.shape;
+      return '<div class="decor-row" data-decor-row="' + i + '">' +
+        '<div class="decor-head">' +
+          '<strong>' + SS.esc((window.SS.PHOTO_SHAPE_LABEL || {})[shape] || shape) + "</strong>" +
+          '<span class="decor-layer">' +
+            '<button type="button" class="chip' + (d.layer === "over" ? " is-on" : "") +
+              '" data-decor-layer="' + i + '" aria-pressed="' + (d.layer === "over") + '">' +
+              (d.layer === "over" ? "In front" : "Behind") + "</button>" +
+          "</span>" +
+          '<button type="button" class="icon-btn" data-decor-del="' + i + '" ' +
+            'aria-label="Remove this shape"><i class="bi bi-x-lg" aria-hidden="true"></i></button>' +
+        "</div>" +
+        '<div class="colour-row">' +
+          '<input type="color" data-decor-color="' + i + '" value="' +
+            SS.esc(normHex(d.color) || "#16283c") + '" aria-label="Shape colour">' +
+          '<select data-decor-shape="' + i + '" aria-label="Shape">' +
+            (window.SS.PHOTO_SHAPES || []).map(function (key) {
+              return '<option value="' + key + '"' + (key === shape ? " selected" : "") + ">" +
+                SS.esc((window.SS.PHOTO_SHAPE_LABEL || {})[key] || key) + "</option>";
+            }).join("") +
+          "</select>" +
+        "</div>" +
+        decorSliders(i, d) +
+        "</div>";
+    }).join("");
+
+    return '<div class="panel-section">' +
+      "<h3>Background shapes</h3>" +
+      (list.length
+        ? '<div class="decor-list">' + rows + "</div>"
+        : '<p class="hint">Add shapes to sit behind or in front of your photos.</p>') +
+      '<button type="button" class="btn btn-block" id="decorAdd">' +
+        '<i class="bi bi-plus-lg" aria-hidden="true"></i> Add a shape</button>' +
+      "</div>";
+  }
+
+  function decorSliders(i, d) {
+    function slider(key, label, min, max, step, fallback, suffix) {
+      return '<label class="field"><span>' + label + "</span>" +
+        '<input type="range" data-decor-prop="' + key + '" data-decor-at="' + i + '" ' +
+          'min="' + min + '" max="' + max + '" step="' + step + '" value="' +
+          (d[key] === undefined ? fallback : d[key]) + '">' +
+        '<output data-decor-out="' + key + '">' +
+          (d[key] === undefined ? fallback : d[key]) + (suffix || "") + "</output></label>";
+    }
+    return '<div class="decor-sliders">' +
+      slider("x", "Across", -40, 140, 1, 0, "%") +
+      slider("y", "Down", -60, 160, 1, 0, "%") +
+      slider("w", "Width", 1, 200, 1, 30, "%") +
+      slider("h", "Height", 1, 200, 1, 30, "%") +
+      slider("opacity", "Strength", 5, 100, 1, 100, "%") +
+      slider("rotate", "Turn", -180, 180, 1, 0, "°") +
+      "</div>";
+  }
+
+  /* wires every decoration control; called after the panel is rebuilt */
+  EditorUI.wireDecor = function (host, section) {
+    var Editor = window.Editor;
+
+    function setAt(i, patch) {
+      var d = section.decor[i];
+      if (!d) return;
+      Object.keys(patch).forEach(function (k) { d[k] = patch[k]; });
+      Editor.render();
+      Editor.wireWall();
+      if (Editor.onChange) Editor.onChange("decor");
+    }
+
+    host.querySelectorAll("[data-decor-at]").forEach(function (input) {
+      var i = parseInt(input.getAttribute("data-decor-at"), 10);
+      var key = input.getAttribute("data-decor-prop");
+      var out = host.querySelector('[data-decor-out="' + key + '"]');
+      input.addEventListener("input", function () { if (out) out.textContent = this.value; });
+      input.addEventListener("change", function () {
+        var v = parseFloat(this.value);
+        var patch = {};
+        patch[key] = key === "opacity" ? v / 100 : v;
+        setAt(i, patch);
+      });
+    });
+
+    host.querySelectorAll("[data-decor-color]").forEach(function (input) {
+      input.addEventListener("input", function () {
+        setAt(parseInt(input.getAttribute("data-decor-color"), 10), { color: input.value });
+      });
+    });
+
+    host.querySelectorAll("[data-decor-shape]").forEach(function (select) {
+      select.addEventListener("change", function () {
+        setAt(parseInt(select.getAttribute("data-decor-shape"), 10), { shape: select.value });
+      });
+    });
+
+    host.querySelectorAll("[data-decor-layer]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var i = parseInt(button.getAttribute("data-decor-layer"), 10);
+        var d = section.decor[i];
+        if (d) setAt(i, { layer: d.layer === "over" ? "under" : "over" });
+      });
+    });
+
+    host.querySelectorAll("[data-decor-del]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        section.decor.splice(parseInt(button.getAttribute("data-decor-del"), 10), 1);
+        Editor.render();
+        Editor.wireWall();
+        if (Editor.onChange) Editor.onChange("decor");
+        EditorUI.blockPanel(host);
+      });
+    });
+
+    var add = host.querySelector("#decorAdd");
+    if (add) {
+      add.addEventListener("click", function () {
+        section.decor = Array.isArray(section.decor) ? section.decor : [];
+        section.decor.push({
+          shape: "circle", color: "#16283c", x: 6, y: 8, w: 34, h: 34,
+          layer: "under", opacity: 1, rotate: 0
+        });
+        Editor.render();
+        Editor.wireWall();
+        if (Editor.onChange) Editor.onChange("decor");
+        EditorUI.blockPanel(host);
+      });
+    }
+  };
+
+/* ------------------------------------------------------- photo settings */
 
   /* Shape and frame for one picture. Crop lives on the image itself
      (double click a picture, or the crop button), so this panel handles
@@ -656,6 +793,8 @@
           "</select></label>" +
       "</div>" +
 
+      (section.type === "images" ? decorPanel(section) : "") +
+
       '<div class="panel-section">' +
         '<button type="button" class="btn btn-block" id="blockReset">Reset this section</button>' +
         '<button type="button" class="btn btn-block" id="blockToggle">' +
@@ -729,6 +868,9 @@
       if (Editor.onChange) Editor.onChange("hidden");
       refresh();
     });
+
+    /* background decoration lives on the images block */
+    if (section.type === "images" && EditorUI.wireDecor) EditorUI.wireDecor(host, section);
   };
 
   function normHex(value) {

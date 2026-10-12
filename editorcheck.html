@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>editor check</title>
+  <link rel="stylesheet" href="/static/css/fonts.css">
+  <link rel="stylesheet" href="/static/icons/bootstrap-icons.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/generated.css">
+  <style>
+    /* a stand-in for the builder shell so the panels can be driven here */
+    #panelBody { width: 330px; }
+    .shell-row { display: grid; grid-template-columns: 1fr 330px; gap: 1rem; }
+  </style>
+</head>
+<body class="builder-body">
+  <div class="shell-row">
+    <main class="builder-canvas" id="canvas"></main>
+    <aside class="builder-panel"><div id="panelBody"></div></aside>
+  </div>
+
+  <script src="/static/js/api.js?v=1"></script>
+  <script src="/static/js/site.js?v=1"></script>
+  <script src="/static/js/design.js?v=1"></script>
+  <script src="/static/js/editor.js?v=1"></script>
+  <script src="/static/js/crop.js?v=1"></script>
+  <script src="/static/js/editorui.js?v=1"></script>
+  <script src="/static/js/vendor/Sortable.min.js"></script>
+  <script>
+    var PLAN = {
+      id: "check",
+      meta: { type: "portfolio", goal: "showcase-work", theme: "modern", siteName: "Field Notes" },
+      pages: [{
+        id: "home", name: "Home",
+        sections: [
+          { id: "s_hero", type: "hero", title: "Landscape photography", subtitle: "Long exposures", fields: { buttonText: "See the work" } },
+          {
+            id: "s_wall", type: "images", title: "Selected work", subtitle: "Shape and frame each one",
+            items: [
+              { img: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=1200&q=70", size: "w", text: "Plain" },
+              { img: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=1200&q=70", size: "s", text: "" },
+              { img: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1200&q=70", size: "t", text: "Tall" }
+            ]
+          }
+        ]
+      }]
+    };
+
+    var canvas = document.getElementById("canvas");
+    Editor.mount({ root: canvas, plan: PLAN, pageId: "home", onChange: function () {} });
+
+    // expose for the checks
+    window.PLAN = PLAN;
+    window.openPhoto = function (i) {
+      Editor.openPhotoSettings("s_wall", i);
+    };
+  </script>
+</body>
+</html>

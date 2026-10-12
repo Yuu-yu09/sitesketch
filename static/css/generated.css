@@ -270,11 +270,22 @@
    size each one. There is no preset arrangement, so the result is not
    the same on every site. */
 .ss-wall {
+  position: relative;          /* decoration is placed against the wall */
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   grid-auto-rows: clamp(84px, 11vw, 124px);
   gap: .7rem;
 }
+
+/* owner-placed decoration, behind or in front of the photographs */
+.ss-decor {
+  position: absolute;
+  display: block;
+  pointer-events: none;        /* never blocks a click on a photo */
+  z-index: 0;
+}
+.ss-decor--over { z-index: 3; }
+.ss-decor--under { z-index: 0; }
 .ss-tile {
   margin: 0;
   position: relative;
@@ -329,7 +340,9 @@
   aspect-ratio: 1;
 }
 
-.ss-tile {
+/* The shape library lives on the site root so both photo tiles and the
+   owner's background decoration can use the same clip-paths. */
+.ss-site {
   --shape-rounded: inset(0 round var(--tile-radius, 28px));
   --shape-circle: inset(0 round 50%);
   --shape-arch: inset(0 round 50% 50% 0 0 / 38% 38% 0 0);

@@ -327,6 +327,38 @@
     circle: 1, arch: 1, diamond: 1, blob: 1, leaf: 1
   };
 
+  /* Free-floating decoration on the wall: a shape the owner places behind
+     or in front of the photographs, at any position, any size, any colour.
+     Position and size are percentages of the wall so the arrangement
+     survives a phone screen without needing a second set of numbers. */
+  function decorHTML(section) {
+    var list = Array.isArray(section.decor) ? section.decor : [];
+    if (!list.length) return "";
+    return list.map(function (d, i) {
+      var shape = PHOTO_SHAPES.indexOf(d.shape) === -1 ? "circle" : d.shape;
+      var layer = d.layer === "over" ? "over" : "under";
+      var css = [
+        "left:" + clampNum(d.x, -40, 140) + "%",
+        "top:" + clampNum(d.y, -60, 160) + "%",
+        "width:" + clampNum(d.w, 1, 200) + "%",
+        "height:" + clampNum(d.h, 1, 200) + "%",
+        "background:" + (d.color || "#16283c"),
+        "opacity:" + (d.opacity === undefined || d.opacity === null ? 1 : clampNum(d.opacity, 0.05, 1)),
+        "transform:rotate(" + clampNum(d.rotate, -180, 180) + "deg)"
+      ];
+      if (shape === "rounded" && d.radius) css.push("border-radius:" + d.radius);
+      if (d.shape === "rect") css.push("border-radius:0");
+      return '<span class="ss-decor ss-decor--' + layer + '" data-decor="' + i +
+        '" style="' + esc(css.join(";")) + ';clip-path:var(--shape-' + shape + ')" aria-hidden="true"></span>';
+    }).join("");
+  }
+
+  function clampNum(value, lo, hi) {
+    var n = Number(value);
+    if (!isFinite(n)) return lo;
+    return Math.min(hi, Math.max(lo, n));
+  }
+
   /* the shape lives on an inner wrapper so the frame can sit outside it */
   function tileStyle(item) {
     var css = [];
@@ -392,7 +424,7 @@
       '<div class="ss-wrap">' +
       '<h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       text(s.subtitle, "subtitle") +
-      '<div class="ss-wall" data-wall>' + tiles + addTile + "</div>" +
+      '<div class="ss-wall" data-wall>' + decorHTML(s) + tiles + addTile + "</div>" +
       "</div></section>";
   };
 

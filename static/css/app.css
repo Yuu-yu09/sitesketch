@@ -907,6 +907,48 @@ textarea { resize: vertical; min-height: 96px; }
 }
 .panel-section .btn-block { width: 100%; margin-bottom: .45rem; }
 
+/* ---------- background decoration controls ---------- */
+.decor-list { display: grid; gap: .6rem; margin-bottom: .7rem; }
+.decor-row {
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: .55rem .6rem .3rem;
+  background: #fff;
+}
+.decor-head {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  margin-bottom: .45rem;
+}
+.decor-head strong { flex: 1; font-size: .84rem; }
+.decor-head .icon-btn {
+  width: 26px; height: 26px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: #fff;
+  display: grid; place-items: center;
+  cursor: pointer;
+}
+.decor-head .icon-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.decor-layer .chip { cursor: pointer; font-size: .68rem; padding: .2rem .45rem; }
+.decor-layer .chip.is-on { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+.decor-row .colour-row { margin-bottom: .45rem; }
+.decor-row .colour-row select {
+  flex: 1;
+  padding: .35rem .45rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: .78rem;
+  min-width: 0;
+}
+.decor-sliders .field { margin-bottom: .4rem; }
+.decor-sliders .field > span:first-child { font-size: .68rem; }
+.decor-sliders output { font-size: .68rem; color: var(--ink-2); }
+
 /* ---------- shape and frame panel ---------- */
 .photo-preview {
   display: grid;
