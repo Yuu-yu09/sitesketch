@@ -56,8 +56,8 @@
               <i class="bi bi-eye" aria-hidden="true"></i>
             </button>
           </div>
-          <p class="hint" id="pwHint">At least 8 characters.</p>
-          <p class="err">Password must be at least 8 characters.</p>
+          <p class="hint" id="pwHint">At least 10 characters, with letters, numbers and a symbol.</p>
+          <p class="err">Use at least 10 characters with a mix of letters, numbers and symbols.</p>
         </div>
 
         <div class="field" id="fPw2">
@@ -105,8 +105,13 @@
         var bad = false;
         bad = invalid("fName", name.value.trim().length < 2) || bad;
         bad = invalid("fEmail", !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) || bad;
-        bad = invalid("fPw", pw.value.length < 8) || bad;
-        bad = invalid("fPw2", pw2.value !== pw.value || pw.value.length < 8) || bad;
+        /* mirrors the server rule so people are told before they submit */
+        var classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter(function (re) {
+          return re.test(pw.value);
+        }).length;
+        var strongEnough = pw.value.length >= 10 && classes >= 3;
+        bad = invalid("fPw", !strongEnough) || bad;
+        bad = invalid("fPw2", pw2.value !== pw.value || !strongEnough) || bad;
         if (bad) { (document.querySelector(".field.invalid input") || {}).focus(); return; }
 
         var btn = document.getElementById("submitBtn");

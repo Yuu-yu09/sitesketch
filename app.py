@@ -32,6 +32,48 @@ app.config["JWT_TOKEN_LOCATION"] = ["headers"]
 # renew it, so people were logged out mid-edit for no visible reason.
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=30)
 app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=30)
+
+# Only meaningful in production; localhost over http would otherwise break.
+app.config["HSTS_MAX_AGE"] = 15552000  # 180 days
+
+
+@app.after_request
+def _security_headers(res):
+    """Headers that cost nothing and close off whole classes of attack.
+
+    The CSP is the important one: it is the backstop for any XSS we failed
+    to prevent in our own escaping. No inline scripts, no inline event
+    handlers, and nothing may be pulled from a source we did not choose.
+    """
+    res.headers.setdefault("X-Content-Type-Options", "nosniff")
+    res.headers.setdefault("X-Frame-Options", "DENY")
+    res.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    res.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    res.headers.setdefault(
+        "Content-Security-Policy",
+        "; ".join([
+            "default-src 'self'",
+            # styles: Google Fonts for the typefaces, unsafe-inline for the
+            # small amount of element.style the editor applies while dragging
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com data:",
+            # scripts are all local files; no inline, no eval
+            "script-src 'self'",
+            "img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co",
+            "connect-src 'self' https://*.supabase.co",
+            "frame-src 'self'",
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "object-src 'none'",
+        ]),
+    )
+    if config.IS_PROD:
+        res.headers.setdefault(
+            "Strict-Transport-Security",
+            f"max-age={app.config['HSTS_MAX_AGE']}; includeSubDomains",
+        )
+    return res
 CORS(app)
 jwt = JWTManager(app)
 app.register_blueprint(auth.bp)
