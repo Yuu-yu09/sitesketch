@@ -8,11 +8,15 @@ each step, then cleans up after itself.
 """
 
 import json
+import pathlib
 import sys
 import time
 import urllib.error
 import urllib.request
 import uuid
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+import published_html  # noqa: E402
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:3000").rstrip("/")
 results = []
@@ -99,6 +103,27 @@ def raw_call(method, path, body=None, token=None, headers=None):
 def reset_limits():
     """Clear rate limiter counters. The route 404s in production."""
     raw_call("POST", "/api/dev/reset-limits")
+
+
+def raw_text(method, path):
+    """Full response body as text.
+
+    raw_call() falls back to the first 120 characters when a body is not JSON,
+    which silently truncates an HTML page and makes assertions on content
+    near the end of the document fail for the wrong reason.
+    """
+    req = urllib.request.Request(f"{BASE}{path}", method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            body = resp.read().decode("utf-8", "replace")
+            HEADERS.clear()
+            HEADERS.update({k.lower(): v for k, v in resp.headers.items()})
+            return resp.status, body
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", "replace")
+        HEADERS.clear()
+        HEADERS.update({k.lower(): v for k, v in exc.headers.items()})
+        return exc.code, body
 
 
 # ---------------------------------------------------------------- health
@@ -377,6 +402,123 @@ def t_republish_same_slug():
     assert data["slug"] == "e2e-kitchen", data
 
 
+# ---------------------------------------------------------------- published site
+
+def _compiled(marker: str = "Hello from the compiled site") -> dict:
+    """Stand-in for what the browser hands over at publish time.
+
+    Deliberately carries the things a hand-edited plan_json could contain, so
+    the sanitiser and the serving CSP are both exercised by the same request.
+    """
+    return {
+        "home": (
+            "<!doctype html><html><head><title>Compiled</title></head><body>"
+            f"<h1>{marker}</h1>"
+            "<script>window.pwned = 1;</script>"
+            '<img src=x onerror="alert(1)">'
+            '<a href="javascript:alert(2)">click</a>'
+            "<p>Safe text survives.</p>"
+            "</body></html>"
+        ),
+        "about": "<!doctype html><html><body><h1>The about page</h1></body></html>",
+    }
+
+
+def t_publish_stores_compiled_pages():
+    status, data, _ = call("POST", f"/api/projects/{project_id}/publish",
+                          {"slug": "e2e-kitchen", "pages": _compiled()},
+                          token=token, expect=200)
+    assert data["is_published"] is True, data
+    assert data.get("published_at"), "publish did not record when it happened"
+
+
+def t_published_site_is_served():
+    status, body = raw_text("GET", "/site/e2e-kitchen")
+    assert status == 200, status
+    assert "Hello from the compiled site" in body, "home page did not serve"
+    assert "Safe text survives." in body, "sanitising ate real content"
+    return f"{len(body)} bytes"
+
+
+def t_published_second_page_is_served():
+    status, body = raw_text("GET", "/site/e2e-kitchen/about")
+    assert status == 200, status
+    assert "The about page" in body, body[:200]
+
+
+def t_published_site_has_no_working_script():
+    """A published site must not be able to run code on our origin.
+
+    Two independent guards, and this asserts both: nothing executable
+    survives being stored, and the route answers with a CSP that would stop
+    it anyway.
+    """
+    status, body = raw_text("GET", "/site/e2e-kitchen")
+    assert status == 200, status
+    leftovers = published_html.audit(body)
+    assert not leftovers, f"published page still contains {leftovers}"
+    assert "window.pwned" not in body, "script body survived"
+    assert "onerror" not in body, "event handler survived"
+
+    csp = HEADERS.get("content-security-policy", "")
+    assert "script-src 'none'" in csp, csp
+    assert HEADERS.get("x-content-type-options") == "nosniff"
+
+
+def t_published_site_is_public_and_cached():
+    """No token, and cheap to serve."""
+    status, _ = raw_text("GET", "/site/e2e-kitchen")
+    assert status == 200, "a published site should need no login"
+    assert HEADERS.get("etag"), "no validator, so it can never be cached"
+    assert "max-age" in HEADERS.get("cache-control", "")
+
+
+def t_unknown_slug_is_not_found():
+    for path in ("/site/nobody-uses-this", "/site/e2e-kitchen/no-such-page"):
+        status, _ = raw_text("GET", path)
+        assert status == 404, f"{path} -> {status}"
+
+
+def t_publish_rejects_a_slug_already_taken():
+    # registers a second account, and the register limit is per hour
+    reset_limits()
+    other = call("POST", "/api/auth/register",
+                 {"username": f"slugtest{uuid.uuid4().hex[:6]}",
+                  "email": f"slug_{uuid.uuid4().hex[:6]}@example.com",
+                  "password": PASSWORD}, expect=201)[1]
+    # A different project has to make the claim: republishing e2e-kitchen onto
+    # its own slug is exactly what the button does and must stay allowed.
+    _, squatter, _ = call("POST", "/api/projects",
+                          {"name": "Squatter", "type": "business", "goal": "get-contact"},
+                          token=other["token"], expect=201)
+
+    status, data, _ = raw_call("POST", f"/api/projects/{squatter['id']}/publish",
+                               {"slug": "e2e-kitchen", "pages": _compiled()},
+                               token=other["token"])
+    assert status == 409, f"expected the clash to be refused, got {status}: {data}"
+    assert "taken" in str(data.get("error", "")).lower(), data
+
+    # and the site that already owns the address is untouched
+    status, body = raw_text("GET", "/site/e2e-kitchen")
+    assert status == 200 and "Hello from the compiled site" in body, status
+
+
+def t_publish_rejects_junk_pages():
+    for bad in (["not", "a", "dict"], {"home": 12345}, {"home": "x" * (5 * 1024 * 1024)}):
+        status, data, _ = raw_call("POST", f"/api/projects/{project_id}/publish",
+                                   {"slug": "e2e-junk", "pages": bad}, token=token)
+        assert status == 400, f"{str(bad)[:40]} -> {status} {data}"
+
+
+def t_unpublished_site_is_not_reachable():
+    call("POST", f"/api/projects/{project_id}/unpublish", {}, token=token, expect=200)
+    status, _ = raw_text("GET", "/site/e2e-kitchen")
+    assert status == 404, f"an unpublished site is still being served: {status}"
+    # put it back so the cleanup test sees the state it expects
+    call("POST", f"/api/projects/{project_id}/publish",
+         {"slug": "e2e-kitchen", "pages": _compiled()}, token=token, expect=200)
+
+
 def t_projects_require_auth():
     call("GET", "/api/projects", expect=401)
     call("POST", "/api/projects", {"name": "sneaky", "type": "business", "goal": "get-contact"}, expect=401)
@@ -506,6 +648,15 @@ for name, fn in [
     ("publish sets slug", t_publish),
     ("unpublish keeps the slug", t_unpublish),
     ("republish with same slug", t_republish_same_slug),
+    ("publish stores the compiled pages", t_publish_stores_compiled_pages),
+    ("published site is served", t_published_site_is_served),
+    ("published second page is served", t_published_second_page_is_served),
+    ("published site cannot run script", t_published_site_has_no_working_script),
+    ("published site is public and cacheable", t_published_site_is_public_and_cached),
+    ("unknown slug and page are 404", t_unknown_slug_is_not_found),
+    ("publish refuses a taken slug", t_publish_rejects_a_slug_already_taken),
+    ("publish rejects junk pages", t_publish_rejects_junk_pages),
+    ("unpublished site is unreachable", t_unpublished_site_is_not_reachable),
     ("projects endpoints need a token", t_projects_require_auth),
     ("no demo door: registration required", t_no_demo_door),
     ("AI design generation", t_ai_design),

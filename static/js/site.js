@@ -597,17 +597,32 @@
 
   /* ---------- page ---------- */
 
-  function navHTML(plan, pageId, spec) {
+  function navHTML(plan, pageId, spec, options) {
+    options = options || {};
     var meta = plan.meta || {};
     var name = meta.siteName || "SiteSketch";
-    var links = (plan.pages || []).map(function (p) {
-      return '<a href="#' + esc(p.id) + '"' + (p.id === pageId ? ' aria-current="page" style="color:var(--text)"' : "") + ">" +
+    var pages = plan.pages || [];
+    var homeId = pages.length ? pages[0].id : pageId;
+
+    /* In the builder the pages are switched by tabs, so the links are only
+       ever in-page anchors and are never followed. On a published site each
+       page is its own document, so the same links have to be real URLs or
+       the navigation is dead. pageBase is what makes them real. */
+    function hrefFor(id) {
+      if (!options.pageBase) return "#" + esc(id);
+      return id === homeId ? options.pageBase
+                           : options.pageBase + "/" + encodeURIComponent(id);
+    }
+
+    var links = pages.map(function (p) {
+      return '<a href="' + esc(hrefFor(p.id)) + '"' +
+        (p.id === pageId ? ' aria-current="page" style="color:var(--text)"' : "") + ">" +
         esc(p.name) + "</a>";
     }).join("");
     var style = spec.nav || "bar";
     var cls = style === "outline" ? "ss-nav ss-nav--outline" : style === "minimal" ? "ss-nav ss-nav--minimal" : "ss-nav ss-nav--bar";
     return '<nav class="' + cls + '"><div class="ss-wrap ss-navrow">' +
-      '<a class="ss-brand" href="#">' + esc(name) + "</a>" +
+      '<a class="ss-brand" href="' + esc(hrefFor(homeId)) + '">' + esc(name) + "</a>" +
       '<div class="ss-navlinks">' + links + "</div></div></nav>";
   }
 
@@ -818,7 +833,7 @@
     var cssVars = window.DESIGN ? DESIGN.cssVars(spec) : "";
 
     return '<div class="' + cls + '" style="' + cssVars + '">' +
-      navHTML(plan, page.id, spec) +
+      navHTML(plan, page.id, spec, options) +
       '<main data-reveal>' + body + "</main>" +
       footerHTML(plan, spec, options.editable) +
       "</div>";
@@ -847,6 +862,69 @@
 
   /* kept for older call sites */
   SS.renderSite = function (plan, pageId, options) { return SS.renderPage(plan, pageId, options); };
+
+  /* ---------------------------------------------------------------- publish
+     Compiles a whole plan into one self-contained HTML document per page.
+
+     A published site runs no JavaScript at all. That is a deliberate choice
+     rather than a shortcut:
+
+       - the server can answer with `script-src 'none'`, so anything that
+         slips through the escaping in user content still cannot run;
+       - the page cannot be slow because of our code, and cannot break
+         because of a browser API that moved on;
+       - the whole site is a handful of documents that the CDN and the
+         browser cache like.
+
+     The cost is the scroll-reveal animation, which needs an
+     IntersectionObserver to add .is-in. Left switched on it would hide every
+     section forever, so the compiled markup deliberately renders without the
+     `is-live` class and everything is visible on arrival.
+  */
+  SS.compileSite = function (plan, options) {
+    options = options || {};
+    var base = options.pageBase || "";
+    var css = options.css || "";
+    var pages = plan.pages || [];
+    if (!pages.length) return {};
+
+    var spec = SS.specFor(plan);
+    var fonts = window.DESIGN ? DESIGN.fontLink(spec) : "";
+    var siteName = (plan.meta && plan.meta.siteName) || "SiteSketch";
+    var out = {};
+
+    pages.forEach(function (page, i) {
+      var pageBase = i === 0 ? base : base + "/" + encodeURIComponent(page.id);
+      var body = SS.renderPage(plan, page.id, {
+        editable: false,
+        live: false,          /* see the note above: no observer on the server-side page */
+        pageBase: pageBase
+      });
+      if (!body) return;
+
+      var title = page.name === pages[0].id ? siteName : page.name + " · " + siteName;
+      var desc = (page.name && page.name) || siteName;
+
+      out[page.id] = "<!doctype html>\n" +
+        '<html lang="en">\n<head>\n' +
+        '<meta charset="utf-8">\n' +
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
+        "<title>" + esc(title) + "</title>\n" +
+        '<meta name="description" content="' + esc(desc) + '">\n' +
+        '<meta property="og:title" content="' + esc(title) + '">\n' +
+        '<meta property="og:description" content="' + esc(desc) + '">\n' +
+        '<meta property="og:type" content="website">\n' +
+        (fonts ? '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n' +
+                 '<link rel="stylesheet" href="' + esc(fonts) + '">\n' : "") +
+        /* inlined so a published page is a single document with no extra
+           round trip, and so the server does not have to trust a <link> it
+           did not write itself */
+        "<style>\n" + css + "\n</style>\n" +
+        "</head>\n<body>\n" + body + "\n</body>\n</html>\n";
+    });
+
+    return out;
+  };
 
   window.SS = SS;
 })();

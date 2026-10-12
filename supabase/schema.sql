@@ -72,6 +72,10 @@ create table if not exists projects (
   theme        text not null default 'modern',
   slug         text unique,
   is_published boolean not null default false,
+  -- Compiled HTML per page, produced in the browser at publish time so the
+  -- published site needs no JavaScript. See supabase/migrate_published.sql.
+  published_pages jsonb,
+  published_at   timestamptz,
   view_count   int not null default 0,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()

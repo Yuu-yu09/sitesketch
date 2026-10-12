@@ -15,15 +15,56 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 import db
+import published_html
 
 bp = Blueprint("projects", __name__, url_prefix="/api/projects")
 
 NOT_SLUG = re.compile(r"[^a-z0-9]+")
 
+# A published site is compiled HTML that we store and serve. The cap keeps one
+# project from filling the table: roughly a dozen pages of generated markup.
+MAX_PUBLISHED_BYTES = 4 * 1024 * 1024
+MAX_PUBLISHED_PAGES = 40
+SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$")
+
 
 def slugify(text: str) -> str:
     out = NOT_SLUG.sub("-", (text or "").lower()).strip("-")[:60]
     return out or "my-site"
+
+
+def clean_published_pages(raw) -> tuple[dict, str | None]:
+    """Validate and sanitise the compiled pages sent with a publish request.
+
+    Returns (pages, error). Anything executable is stripped before it reaches
+    the database, so a stored published site is inert even before the route
+    that serves it adds `script-src 'none'`.
+    """
+    if raw is None:
+        return {}, None
+    if not isinstance(raw, dict):
+        return {}, "Compiled pages must be an object of page id to HTML"
+
+    pages: dict[str, str] = {}
+    total = 0
+    for page_id, html in list(raw.items())[:MAX_PUBLISHED_PAGES + 1]:
+        if not isinstance(page_id, str) or not isinstance(html, str):
+            return {}, "Compiled pages must be strings"
+        # The key becomes part of the public URL, so it gets the same
+        # treatment as a slug rather than being trusted.
+        key = slugify(page_id)
+        if not key or key == "my-site" and page_id.strip("-") == "":
+            return {}, "A page id is not usable in a URL"
+        total += len(html)
+        if total > MAX_PUBLISHED_BYTES:
+            return {}, "That site is too large to publish"
+        pages[key] = published_html.sanitise(html)
+
+    if not pages:
+        return {}, "There were no pages to publish"
+    if len(pages) > MAX_PUBLISHED_PAGES:
+        return {}, "That site has too many pages"
+    return pages, None
 
 
 def serialize(row: dict) -> dict:
@@ -40,6 +81,8 @@ def serialize(row: dict) -> dict:
         "created_at": int(row["created_at"].timestamp() * 1000),
         "updated_at": int(row["updated_at"].timestamp() * 1000),
         "plan_json": row["plan_json"] or {},
+        "published_at": (int(row["published_at"].timestamp() * 1000)
+                         if row.get("published_at") else None),
     }
 
 
@@ -133,11 +176,30 @@ def publish(pid: str):
     if not _owned(pid):
         return jsonify(error="Project not found"), 404
     body = request.get_json(silent=True) or {}
+
     slug = slugify(body.get("slug") or body.get("name") or "")
+    if not SLUG_RE.match(slug):
+        return jsonify(error="That address can only use letters, numbers and dashes"), 400
+
+    pages, problem = clean_published_pages(body.get("pages"))
+    if problem:
+        return jsonify(error=problem), 400
+
+    # Slugs are the public address, so a clash has to be a clear refusal
+    # rather than a unique-constraint error surfacing as a 500.
+    taken = db.query_one(
+        "select id from projects where slug = %s and id <> %s::uuid",
+        (slug, pid),
+    )
+    if taken:
+        return jsonify(error=f"“{slug}” is already taken. Try another address."), 409
+
     row = db.query_one(
-        "update projects set is_published = true, slug = %s"
+        "update projects"
+        " set is_published = true, slug = %s, published_pages = %s::jsonb,"
+        "     published_at = now()"
         " where id = %s::uuid and user_id = %s::uuid returning *",
-        (slug, pid, get_jwt_identity()),
+        (slug, json.dumps(pages), pid, get_jwt_identity()),
     )
     return jsonify(serialize(row))
 
@@ -145,6 +207,12 @@ def publish(pid: str):
 @bp.post("/<pid>/unpublish")
 @jwt_required()
 def unpublish(pid: str):
+    """Take the site offline.
+
+    The compiled pages are left in place so republishing is instant, but the
+    public route only ever serves a row whose is_published is true, so
+    nothing is reachable while this is false.
+    """
     if not _owned(pid):
         return jsonify(error="Project not found"), 404
     row = db.query_one(

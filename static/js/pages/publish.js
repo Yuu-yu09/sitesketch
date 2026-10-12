@@ -86,6 +86,38 @@
           fillChecklist();
         }
 
+        /* ---------- compile ----------
+           The plan is turned into finished HTML here, in the browser, because
+           site.js is the only renderer we have and it is written in
+           JavaScript. Doing it at publish time rather than per request means
+           the server never has to run it and the visitor gets a static file.
+
+           generated.css is fetched once and inlined into every page so a
+           published page is one self-contained document. */
+        var siteCss = null;
+        function loadSiteCss() {
+          if (siteCss) return Promise.resolve(siteCss);
+          return fetch("static/css/generated.css")
+            .then(function (r) {
+              if (!r.ok) throw new Error("could not load the site stylesheet");
+              return r.text();
+            })
+            .then(function (text) { siteCss = text; return text; });
+        }
+
+        function compile() {
+          var slug = slugInput.value;
+          return loadSiteCss().then(function (css) {
+            var pages = SS.compileSite(plan, {
+              pageBase: "/site/" + slug,
+              css: css
+            });
+            var keys = Object.keys(pages);
+            if (!keys.length) throw new Error("this plan has no pages to publish");
+            return pages;
+          });
+        }
+
         /* ---------- publish flow ---------- */
         pubBtn.addEventListener("click", function () {
           var f = document.getElementById("fSlug");
@@ -97,21 +129,26 @@
           var republish = proj.is_published;
           pubBtn.disabled = true;
           pubBtn.innerHTML = '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i> ' +
-            (republish ? "Republishing…" : "Publishing…");
+            (republish ? "Republishing…" : "Compiling…");
 
-          setTimeout(function () {
-            API.setPublished(proj.id, true, slugInput.value).then(function (res) {
-              if (!res.ok) {
-                pubBtn.disabled = false;
-                SS.toast(res.error || "Could not publish", "bi-exclamation-triangle");
-                return;
-              }
-              proj = res.project;
+          compile().then(function (pages) {
+            return API.setPublished(proj.id, true, slugInput.value, pages);
+          }).then(function (res) {
+            if (!res.ok) {
               pubBtn.disabled = false;
               render();
-              SS.toast(republish ? "Changes pushed live" : "Published! Your site is live", "bi-rocket-takeoff");
-            });
-          }, 1200);
+              SS.toast(res.error || "Could not publish", "bi-exclamation-triangle");
+              return;
+            }
+            proj = res.project;
+            pubBtn.disabled = false;
+            render();
+            SS.toast(republish ? "Changes pushed live" : "Published! Your site is live", "bi-rocket-takeoff");
+          }).catch(function (err) {
+            pubBtn.disabled = false;
+            render();
+            SS.toast(err.message || "Could not publish", "bi-exclamation-triangle");
+          });
         });
 
         document.getElementById("unpubBtn").addEventListener("click", function () {

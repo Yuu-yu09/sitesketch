@@ -117,6 +117,10 @@
 
   <script src="static/js/api.js"></script>
   <script src="static/js/site.js"></script>
+<!-- design.js resolves the same palette and type spec the builder used.
+     Without it SS.specFor() falls back to defaults and the published site
+     would not match what the user actually designed. -->
+<script src="static/js/design.js"></script>
 <script src="static/js/pages/publish.js"></script>
 </body>
 </html>

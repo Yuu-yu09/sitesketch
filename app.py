@@ -330,6 +330,105 @@ def api_design_library():
     )
 
 
+# ---------------------------------------------------------------- published sites
+
+def _published_site(slug: str):
+    """The compiled document for one page of a published site, or None.
+
+    Nothing here needs a session: a published site is public by definition.
+    The row has to be published *and* to actually carry compiled pages - a
+    project that was published before this feature existed has a slug but no
+    document, and must read as "not found" rather than serving a blank page.
+    """
+    if not slug or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,60}", slug):
+        return None
+    row = query_one(
+        "select slug, published_pages, view_count"
+        " from projects where slug = %s and is_published = true",
+        (slug,),
+    )
+    if not row or not row["published_pages"]:
+        return None
+    return row
+
+
+@app.get("/site/<slug>")
+@app.get("/site/<slug>/")
+def site_home(slug: str):
+    row = _published_site(slug)
+    if not row:
+        return _no_site()
+    pages = row["published_pages"]
+    # The first key is the page the plan lists first, which is what
+    # SS.compileSite treated as the home page when it wrote the nav links.
+    home = next(iter(pages), None)
+    if home is None:
+        return _no_site()
+    return _site_response(slug, home, pages[home], row["view_count"])
+
+
+@app.get("/site/<slug>/<page_id>")
+def site_page(slug: str, page_id: str):
+    row = _published_site(slug)
+    if not row:
+        return _no_site()
+    pages = row["published_pages"]
+    html = pages.get(page_id)
+    if html is None:
+        return _no_site()
+    return _site_response(slug, page_id, html, row["view_count"])
+
+
+def _site_response(slug: str, page_id: str, html: str, views: int):
+    res = app.response_class(html, mimetype="text/html; charset=utf-8")
+    # The document only changes when the owner republishes, so the validator
+    # is built from the slug, the page and its length - deliberately not from
+    # view_count, which changes on every hit and would make this never match.
+    res.headers["Cache-Control"] = "public, max-age=60, must-revalidate"
+    res.headers["ETag"] = f'W/"{slug}-{page_id}-{len(html)}"'
+    # A published site is user-authored HTML on our origin. The document has
+    # already been stripped on the way in; this is what stops anything that
+    # slipped through. No scripts at all - a published page does not use any.
+    res.headers["Content-Security-Policy"] = "; ".join([
+        "default-src 'none'",
+        "style-src 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src https://fonts.gstatic.com",
+        "img-src https: data:",
+        "script-src 'none'",
+        "frame-ancestors 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+    ])
+    res.headers["X-Content-Type-Options"] = "nosniff"
+    res.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    _count_view(slug)
+    return res
+
+
+def _count_view(slug: str) -> None:
+    """Best effort: a failed counter must never fail the page."""
+    try:
+        query("update projects set view_count = view_count + 1 where slug = %s", (slug,))
+    except Exception:
+        pass
+
+
+def _no_site():
+    res = app.response_class(
+        "<!doctype html><meta charset=utf-8><title>Not published</title>"
+        "<div style=\"font:16px/1.6 system-ui;max-width:34rem;margin:18vh auto;"
+        "padding:0 1.5rem;text-align:center\">"
+        "<h1 style=\"font-size:1.6rem;margin:0 0 .5rem\">This site isn't published</h1>"
+        "<p style=\"color:#5a5f6b;margin:0\">The address may be wrong, or the "
+        "owner may have taken it offline.</p></div>",
+        mimetype="text/html; charset=utf-8",
+    )
+    res.status_code = 404
+    res.headers["Cache-Control"] = "no-store"
+    res.headers["X-Content-Type-Options"] = "nosniff"
+    return res
+
+
 # ---------------------------------------------------------------- page serving
 
 @app.get("/")

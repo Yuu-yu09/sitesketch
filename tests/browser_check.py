@@ -16,6 +16,8 @@ from __future__ import annotations
 import sys
 import time
 
+import re
+import uuid
 from playwright.sync_api import expect, sync_playwright
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3000").rstrip("/")
@@ -158,6 +160,7 @@ def run(page, phase=None):
         page.goto(f"{BASE}/{href}", wait_until="domcontentloaded")
         page.wait_for_selector(".ss-sec", timeout=SLOW)
         builder_id["url"] = page.url
+        builder_id["pid"] = href.split("id=")[-1]
         assert page.locator(".ss-sec").count() > 0, "builder rendered no sections"
 
     def t_design_panel_opens_on_the_right():
@@ -229,6 +232,61 @@ def run(page, phase=None):
     check("footer text is editable", t_footer_is_editable)
     check("device preview switches between phone, tablet and desktop", t_device_preview_switches)
 
+    # ---------------------------------------------------------------- publish
+    # The end-to-end one: drive the real Publish button, which compiles the
+    # plan in the browser, and then load the address it claims is live. The
+    # e2e suite posts hand-written HTML instead, so only this can catch a
+    # broken compiler or a nav link that only works in the editor.
+    # The slug is unique per run: a fixed one would be a 409 the second time.
+    slug = f"browser-check-{uuid.uuid4().hex[:8]}"
+
+    def t_publish_compiles_a_live_site():
+        page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector("#pubBtn", timeout=SLOW)
+
+        slug_field = page.locator("#slug")
+        # The button exists in the markup, so it is not a sign the page is
+        # ready - start() fetches the project and only then fills in a
+        # suggested slug. Typing before that gets silently overwritten.
+        expect(slug_field).to_have_value(re.compile(r".+"), timeout=SLOW)
+        slug_field.fill("")
+        slug_field.type(slug, delay=15)
+        assert slug_field.input_value() == slug, slug_field.input_value()
+
+        page.click("#pubBtn")
+        # compile + upload + repaint the status box
+        expect(page.locator("#liveBox")).to_be_visible(timeout=90000)
+        expect(page.locator("#statusHead")).to_have_text("Your site is live", timeout=15000)
+
+    def t_published_page_really_renders():
+        """Load the public address with no session at all."""
+        page.context.clear_cookies()
+        page.goto(f"{BASE}/site/{slug}", wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-site", timeout=30000)
+        # the compiled site must be visible, not stuck at opacity 0 waiting
+        # for the scroll-reveal observer that a script-free page never runs
+        assert page.locator(".ss-sec").count() > 0, "no sections in the published page"
+        opacity = page.evaluate(
+            "() => getComputedStyle(document.querySelector('.ss-sec')).opacity"
+        )
+        assert float(opacity) > 0.9, f"published content is invisible (opacity {opacity})"
+
+        # design.css must be inlined, or the page would be unstyled
+        styled = page.evaluate(
+            "() => getComputedStyle(document.querySelector('.ss-site')).fontSize"
+        )
+        assert styled not in ("", None), "the published page has no design applied"
+
+    def t_published_page_runs_no_script():
+        """A published page has no script of ours and none of anyone else's."""
+        ran = page.evaluate("() => typeof window.pwned")
+        assert ran == "undefined", "unexpected script on the published page"
+
+    check("publish compiles a live site", t_publish_compiles_a_live_site)
+    check("published page really renders", t_published_page_really_renders)
+    check("published page runs no script", t_published_page_runs_no_script)
+
 
 def main() -> int:
     console_errors: list[tuple[str, str]] = []
@@ -254,7 +312,7 @@ def main() -> int:
         )
         page.on("response", lambda res: bad_responses.append(
             (phase["name"], res.url.replace(BASE, ""), res.status)
-        ) if res.status >= 400 and "/api/" in res.url else None)
+        ) if res.status >= 400 and "/api/" not in res.url and "favicon" not in res.url else None)
 
         print(f"\nBrowser journey against {BASE}\n")
         try:
@@ -266,7 +324,6 @@ def main() -> int:
         print("\n  non-2xx API responses:")
         for ph, url, status in bad_responses:
             print(f"    [{status}] {url}  (during {ph})")
-
     # A page that throws is a bug even if every assertion passed.
     #
     # One class of error is expected: the expiry check deliberately throws the
