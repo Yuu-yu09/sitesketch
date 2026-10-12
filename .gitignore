@@ -12,6 +12,11 @@ venv/
 published/
 exports/
 
+# Database dumps: these contain every account row, never commit them.
+# Keep the folder, ignore its contents.
+backups/*
+!backups/.gitkeep
+
 # Editors / OS
 .vscode/
 .DS_Store
