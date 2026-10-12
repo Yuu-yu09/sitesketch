@@ -47,7 +47,18 @@
     };
 
     var canvas = document.getElementById("canvas");
-    Editor.mount({ root: canvas, plan: PLAN, pageId: "home", onChange: function () {} });
+    Editor.mount({
+      root: canvas,
+      plan: PLAN,
+      pageId: "home",
+      onChange: function () {},
+      onOpenSettings: function (id) { window.openBlock(id); },
+      onOpenPhoto: function (sectionId, index) { window.openPhoto(index); }
+    });
+
+    window.openBlock = function (id) {
+      EditorUI.blockPanel(document.getElementById("panelBody"));
+    };
 
     // expose for the checks
     window.PLAN = PLAN;
