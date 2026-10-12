@@ -18,6 +18,11 @@
    single gate any future Analytics or Advertising code has to pass, and the
    categories are already declared in cookies.py, so wiring up a tracker means
    adding a line to that inventory and nothing else.
+
+   It is shown on the landing page only. Putting a fixed bar at the bottom of
+   the signed-in app covered the primary button on the plan wizard's last step,
+   which is the kind of thing that looks like a broken app rather than a
+   consent notice.
    ============================================================ */
 (function () {
   "use strict";
@@ -50,10 +55,23 @@
       return !!(r && r.categories && r.categories.indexOf(category) !== -1);
     },
 
+    /* Accept: everything, including the categories nothing uses yet. */
+    accept: function () {
+      Consent.save(["Functional", "Analytics", "Advertising"]);
+    },
+
+    /* Decline: essential only. This is a real recorded decision, not the same
+       as "has not answered yet", and it is what a person who clicks Decline
+       has asked for. */
+    decline: function () {
+      Consent.save([]);
+    },
+
     save: function (categories) {
       write({
         categories: categories || [],
         essential: true,
+        decision: (categories && categories.length) ? "accepted" : "declined",
         decidedAt: new Date().toISOString(),
         expires: new Date(Date.now() + MONTHS * 30 * 86400000).toISOString()
       });
@@ -92,26 +110,32 @@
     text.className = "consent-text";
     text.innerHTML =
       "<strong>We use one cookie.</strong> It keeps you signed in, and it cannot " +
-      "be read by scripts. We use no analytics and no advertising, so there is " +
-      "nothing here to opt out of &mdash; your choices really do not change what " +
-      "this site does.";
+      "be read by scripts. We use no analytics and no advertising, so declining " +
+      "changes nothing about how this site behaves &mdash; your answer is " +
+      "recorded either way.";
 
     var actions = document.createElement("div");
     actions.className = "consent-actions";
 
-    var ok = document.createElement("button");
-    ok.type = "button";
-    ok.className = "btn btn-primary btn-sm";
-    ok.textContent = "Got it";
-    ok.addEventListener("click", function () { Consent.save(["Functional"]); });
+    var accept = document.createElement("button");
+    accept.type = "button";
+    accept.className = "btn btn-primary btn-sm";
+    accept.textContent = "Accept cookies";
+    accept.addEventListener("click", function () { Consent.accept(); });
+
+    var decline = document.createElement("button");
+    decline.type = "button";
+    decline.className = "btn btn-outline btn-sm";
+    decline.textContent = "Decline";
+    decline.addEventListener("click", function () { Consent.decline(); });
 
     var manage = document.createElement("a");
-    manage.className = "btn btn-ghost btn-sm";
+    manage.className = "consent-manage";
     manage.href = "privacy.html";
-    manage.textContent = "Manage preferences";
-    manage.addEventListener("click", function () { Consent.hide(); });
+    manage.textContent = "or read the details";
 
-    actions.appendChild(ok);
+    actions.appendChild(accept);
+    actions.appendChild(decline);
     actions.appendChild(manage);
 
     bar.appendChild(text);

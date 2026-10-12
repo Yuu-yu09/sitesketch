@@ -36,3 +36,38 @@
   color: var(--ink-2);
 }
 .btn-ghost:hover { color: var(--ink); border-color: var(--ink); box-shadow: none; }
+
+/* The two real answers have to look equally like answers. Declining should
+   not be the shabbier option, or the layout is nudging people. */
+.btn-outline {
+  background: var(--card);
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.btn-outline:hover { background: rgba(22, 40, 60, .06); box-shadow: none; }
+
+.consent-manage {
+  font-size: .88rem;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.consent-manage:hover { color: var(--ink); }
+
+@media (max-width: 560px) {
+  .consent-bar { gap: .7rem; }
+  .consent-actions { width: 100%; }
+  .consent-actions .btn { flex: 1 1 auto; }
+}
+
+/* Sign-in and sign-up carry the legal links. The cookie notice used to be the
+   only thing pointing at them, and moving that to the landing page left these
+   pages with no way to reach the policy at all. */
+.auth-legal {
+  margin: 1rem 0 0;
+  font-size: .85rem;
+  color: var(--ink-2);
+}
+.auth-legal a { color: var(--ink-2); }
+.auth-legal a:hover { color: var(--ink); }

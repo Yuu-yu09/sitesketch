@@ -16,6 +16,7 @@ from __future__ import annotations
 import sys
 import time
 
+import json
 import re
 import uuid
 from playwright.sync_api import expect, sync_playwright
@@ -338,12 +339,12 @@ def run(page, phase=None):
     # ------------------------------------------------------- cookies and legal
     # These only exist in a browser, so the API suite cannot see them.
 
-    def t_cookie_notice_appears_for_a_new_visitor():
+    def t_cookie_notice_appears_on_the_landing_page():
         """No stored choice means the notice is shown, and it says the truth."""
         fresh = page.context.browser.new_context(viewport={"width": 1280, "height": 900})
         try:
             p = fresh.new_page()
-            p.goto(f"{BASE}/login.html", wait_until="domcontentloaded")
+            p.goto(f"{BASE}/index.html", wait_until="domcontentloaded")
             bar = p.locator("#consentBar")
             expect(bar).to_be_visible(timeout=8000)
             text = (bar.inner_text() or "").lower()
@@ -351,27 +352,87 @@ def run(page, phase=None):
             # tracker is ever added, this copy becomes a lie and this fails.
             assert "no analytics" in text, f"notice does not say what it should: {text!r}"
             assert "one cookie" in text, f"notice does not say how many: {text!r}"
+
+            # two real answers, both looking like answers
+            expect(bar.locator("button")).to_have_count(2, timeout=5000)
+            labels = [t.strip() for t in bar.locator("button").all_inner_texts()]
+            joined = " ".join(labels).lower()
+            assert "accept" in joined, labels
+            assert "decline" in joined, labels
         finally:
             fresh.close()
 
-    def t_cookie_notice_can_be_dismissed_and_stays_dismissed():
+    def t_notice_is_not_on_the_sign_in_page():
+        """It belongs on the landing page only.
+
+        A fixed bottom bar on the signed-in pages covered the plan wizard's
+        primary button, which reads as a broken app rather than a notice.
+        """
         fresh = page.context.browser.new_context(viewport={"width": 1280, "height": 900})
         try:
             p = fresh.new_page()
-            p.goto(f"{BASE}/login.html", wait_until="domcontentloaded")
+            for path in ("login.html", "register.html"):
+                p.goto(f"{BASE}/{path}", wait_until="domcontentloaded")
+                p.wait_for_timeout(400)
+                assert p.locator("#consentBar").count() == 0, \
+                    f"the cookie notice is on {path}, where it does not belong"
+        finally:
+            fresh.close()
+
+    def t_declining_is_a_recorded_decision():
+        fresh = page.context.browser.new_context(viewport={"width": 1280, "height": 900})
+        try:
+            p = fresh.new_page()
+            p.goto(f"{BASE}/index.html", wait_until="domcontentloaded")
             p.wait_for_selector("#consentBar", timeout=8000)
-            p.click("#consentBar .btn-primary")
+            p.click("#consentBar button:has-text('Decline')")
             p.wait_for_timeout(300)
             assert p.locator("#consentBar").count() == 0, "notice did not go away"
 
-            stored = p.evaluate("() => localStorage.getItem('sitesketch_consent_v1')")
-            assert stored, "the choice was not saved"
+            saved = json.loads(p.evaluate("() => localStorage.getItem('sitesketch_consent_v1')"))
+            assert saved is not None, "the decision was not saved"
+            # declining is a real answer, distinct from never having been asked
+            assert saved["decision"] == "declined", saved
+            assert saved["categories"] == [], saved
+            assert saved["essential"] is True, "essential is not optional"
 
-            p.goto(f"{BASE}/register.html", wait_until="domcontentloaded")
-            p.wait_for_timeout(700)
-            assert p.locator("#consentBar").count() == 0, "notice came back after a choice"
+            # and it must not come back
+            p.reload(wait_until="domcontentloaded")
+            p.wait_for_timeout(500)
+            assert p.locator("#consentBar").count() == 0, "a declined notice came back"
         finally:
             fresh.close()
+
+    def t_accepting_is_recorded_too():
+        fresh = page.context.browser.new_context(viewport={"width": 1280, "height": 900})
+        try:
+            p = fresh.new_page()
+            p.goto(f"{BASE}/index.html", wait_until="domcontentloaded")
+            p.wait_for_selector("#consentBar", timeout=8000)
+            p.click("#consentBar button:has-text('Accept')")
+            p.wait_for_timeout(300)
+            saved = json.loads(p.evaluate("() => localStorage.getItem('sitesketch_consent_v1')"))
+            assert saved["decision"] == "accepted", saved
+            assert "Functional" in saved["categories"], saved
+        finally:
+            fresh.close()
+
+    def t_landing_page_links_to_the_legal_pages():
+        p = page.context.new_page()
+        try:
+            p.goto(f"{BASE}/index.html", wait_until="domcontentloaded")
+            p.wait_for_timeout(400)
+            for path in ("privacy.html", "terms.html"):
+                assert p.locator(f'a[href="{path}"]').count() > 0, \
+                    f"the landing page does not link to {path}"
+        finally:
+            p.close()
+
+    check("cookie notice appears on the landing page", t_cookie_notice_appears_on_the_landing_page)
+    check("notice is not on the sign-in pages", t_notice_is_not_on_the_sign_in_page)
+    check("declining is a recorded decision", t_declining_is_a_recorded_decision)
+    check("accepting is recorded too", t_accepting_is_recorded_too)
+    check("landing page links to the legal pages", t_landing_page_links_to_the_legal_pages)
 
     def t_privacy_page_lists_the_real_inventory():
         p = page.context.new_page()
@@ -421,17 +482,28 @@ def run(page, phase=None):
             p.close()
 
     def t_login_page_offers_the_legal_links():
-        p = page.context.new_page()
-        try:
-            p.goto(f"{BASE}/login.html", wait_until="domcontentloaded")
-            p.wait_for_timeout(500)
-            # the notice links to the preference centre, and the header offers terms
-            assert p.locator('a[href*="privacy"]').count() > 0, "no link to the privacy page"
-        finally:
-            p.close()
+        """The cookie notice used to be the only route to the policy. When it
+        moved to the landing page these pages had no way to reach it.
 
-    check("cookie notice appears for a new visitor", t_cookie_notice_appears_for_a_new_visitor)
-    check("cookie notice is dismissed once and stays gone", t_cookie_notice_can_be_dismissed_and_stays_dismissed)
+        Uses a signed-out context on purpose: login.html redirects to the
+        dashboard when there is already a session, which is correct and would
+        otherwise make this check look like it failed.
+        """
+        fresh = page.context.browser.new_context(viewport={"width": 1280, "height": 900})
+        try:
+            p = fresh.new_page()
+            for path in ("login.html", "register.html"):
+                p.goto(f"{BASE}/{path}", wait_until="domcontentloaded")
+                p.wait_for_timeout(500)
+                assert "login" in p.url or "register" in p.url, f"{path} redirected to {p.url}"
+                for target in ("privacy.html", "terms.html"):
+                    assert p.locator(f'a[href="{target}"]').count() > 0, \
+                        f"{path} does not link to {target}"
+        finally:
+            fresh.close()
+
+    check("cookie notice appears on the landing page", t_cookie_notice_appears_on_the_landing_page)
+    check("notice is not on the sign-in pages", t_notice_is_not_on_the_sign_in_page)
     check("privacy page lists the real inventory", t_privacy_page_lists_the_real_inventory)
     check("preferences can be withdrawn", t_preferences_can_be_withdrawn)
     check("terms page is reachable", t_terms_page_is_reachable)
