@@ -50,7 +50,7 @@ insert into section_templates (id, type_id, section_type, name, sort_order, defa
 
   ('portfolio.hero',        'portfolio','hero',         'Hero',               1, '{"subtitle":"What you make and where it is going"}',       '[]'),
   ('portfolio.about',       'portfolio','about',        'About',              2, '{"subtitle":"Your background and how you work"}',          '[]'),
-  ('portfolio.gallery',     'portfolio','gallery',      'Selected work',      3, '{"subtitle":"Projects worth opening first"}',              '[]'),
+  ('portfolio.images',      'portfolio','images',       'Photos',             3, '{"subtitle":"Your work, arranged how you like"}',         '[]'),
   ('portfolio.testimonials','portfolio','testimonials', 'Recommendations',    4, '{"subtitle":"What collaborators say"}',                   '[]'),
   ('portfolio.contact',     'portfolio','contact',      'Get in touch',       5, '{"subtitle":"Where to find you online"}',                 '[]'),
 

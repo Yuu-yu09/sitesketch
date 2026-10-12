@@ -289,6 +289,58 @@
       '<ul class="ss-menu">' + rows + "</ul></div></section>";
   };
 
+  /* A free-arrange photo wall.
+     Deliberately not a template: there is no preset layout to pick, the
+     user drops pictures in, drags them into the order they want and
+     sizes each one. The composition is theirs, so two sites built the
+     same way never look the same. */
+  var PHOTO_SIZES = ["s", "w", "t", "l"];
+  var PHOTO_SIZE_LABEL = { s: "Small", w: "Wide", t: "Tall", l: "Large" };
+  SS.PHOTO_SIZES = PHOTO_SIZES;
+  SS.PHOTO_SIZE_LABEL = PHOTO_SIZE_LABEL;
+
+  BLOCKS.images = function (ctx) {
+    var s = ctx.section;
+    var list = items(s);
+
+    var tiles = list.map(function (item, i) {
+      var size = PHOTO_SIZES.indexOf(item.size) === -1 ? "s" : item.size;
+      var controls = ctx.editable
+        ? '<span class="ss-tile-tools">' +
+            '<button type="button" class="ss-tile-grip" data-grip aria-label="Drag to reorder this photo">' +
+              '<i class="bi bi-grip-vertical" aria-hidden="true"></i></button>' +
+            '<button type="button" class="ss-tile-size" data-tile-size="' + i + '" ' +
+              'aria-label="Change size, currently ' + (PHOTO_SIZE_LABEL[size] || size) + '">' +
+              '<i class="bi bi-aspect-ratio" aria-hidden="true"></i></button>' +
+            '<button type="button" class="ss-tile-del" data-tile-del="' + i + '" ' +
+              'aria-label="Remove this photo"><i class="bi bi-x-lg" aria-hidden="true"></i></button>' +
+          "</span>"
+        : "";
+
+      return '<figure class="ss-tile ss-tile--' + size + '" data-tile="' + i + '">' +
+        picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title || "Photo") +
+        controls +
+        (item.text || size !== "s"
+          ? '<figcaption><span' + ed("items:" + i + ":text") + ">" +
+            esc(item.text || "Add a caption") + "</span></figcaption>"
+          : "") +
+        "</figure>";
+    }).join("");
+
+    /* the trailing add-tile exists only in the editor */
+    var addTile = ctx.editable
+      ? '<button type="button" class="ss-tile-add" data-add-tile>' +
+        '<i class="bi bi-plus-lg" aria-hidden="true"></i><span>Add a photo</span></button>'
+      : "";
+
+    return '<section class="ss-sec g-images" ' + ctx.wrapAttrs + '>' +
+      '<div class="ss-wrap">' +
+      '<h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
+      text(s.subtitle, "subtitle") +
+      '<div class="ss-wall" data-wall>' + tiles + addTile + "</div>" +
+      "</div></section>";
+  };
+
   BLOCKS.gallery = function (ctx) {
     var s = ctx.section;
     var cards = items(s).slice(0, 9).map(function (item, i) {

@@ -175,6 +175,7 @@
     products:     [{ n: "cards", f: "card-grid" }, { n: "shelf", f: "shelf" }],
     menu:         [{ n: "list", f: "menu-list" }, { n: "cards", f: "card-grid" }],
     gallery:      [{ n: "masonry", f: "image-grid" }, { n: "spotlight", f: "image-grid" }],
+    images:       [{ n: "wall", f: "image-grid" }],
     team:         [{ n: "cards", f: "card-grid" }, { n: "rows", f: "list-rows" }],
     blog:         [{ n: "featured", f: "editorial" }, { n: "grid", f: "card-grid" }],
     testimonials: [{ n: "big", f: "quote" }, { n: "cards", f: "card-grid" }],

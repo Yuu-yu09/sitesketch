@@ -191,6 +191,14 @@
       { title: "Photo two", text: "" },
       { title: "Photo three", text: "" }
     ],
+    /* the photo wall starts small and spread out, so the user grows it */
+    images: [
+      { img: "", size: "w", text: "" },
+      { img: "", size: "s", text: "" },
+      { img: "", size: "t", text: "" },
+      { img: "", size: "s", text: "" },
+      { img: "", size: "l", text: "" }
+    ],
     team: [
       { title: "First name", text: "Their role" },
       { title: "Second name", text: "Their role" },

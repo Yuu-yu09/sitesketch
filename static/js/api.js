@@ -111,6 +111,7 @@
     about:       { name: "About",          icon: "bi-person",      blurb: "Who you are and what you do" },
     features:    { name: "Features",       icon: "bi-grid",        blurb: "What you offer, in tidy blocks" },
     gallery:     { name: "Gallery",        icon: "bi-images",      blurb: "Photos of your work or place" },
+    images:     { name: "Photos",         icon: "bi-grid-3x3-gap", blurb: "Add your own pictures and arrange them freely" },
     testimonials:{ name: "Testimonials",   icon: "bi-chat-quote",  blurb: "What other people say about you" },
     menu:        { name: "Menu Highlights", icon: "bi-list-ul",    blurb: "Signature dishes and prices" },
     products:    { name: "Products",       icon: "bi-bag",         blurb: "Items you sell" },
@@ -125,7 +126,7 @@
 
   var TYPE_SECTIONS = {
     business:   ["hero", "about", "features", "testimonials", "cta", "contact"],
-    portfolio:  ["hero", "about", "gallery", "testimonials", "contact"],
+    portfolio:  ["hero", "about", "images", "testimonials", "contact"],
     restaurant: ["hero", "menu", "about", "hours", "gallery", "contact"],
     store:      ["hero", "products", "features", "testimonials", "cta", "contact"],
     school:     ["hero", "about", "gallery", "faq", "contact"],

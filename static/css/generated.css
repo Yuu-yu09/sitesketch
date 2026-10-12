@@ -265,6 +265,73 @@
 .ss-menu .ss-row-price { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-weight: 700; }
 @media (max-width: 720px) { .ss-menu { columns: 1; } }
 
+/* ---------- free photo wall ----------
+   A grid the user composes themselves: drag pictures into order and
+   size each one. There is no preset arrangement, so the result is not
+   the same on every site. */
+.ss-wall {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: clamp(84px, 11vw, 124px);
+  gap: .7rem;
+}
+.ss-tile {
+  margin: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--soft);
+  display: flex;
+  flex-direction: column;
+}
+.ss-tile--s { grid-column: span 2; grid-row: span 2; }
+.ss-tile--w { grid-column: span 4; grid-row: span 2; }
+.ss-tile--t { grid-column: span 2; grid-row: span 3; }
+.ss-tile--l { grid-column: span 4; grid-row: span 3; }
+
+.ss-tile img,
+.ss-tile .ss-img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  object-fit: cover;
+  border-radius: 0;
+  background: var(--soft);
+}
+.ss-tile--s .ss-img--empty { aspect-ratio: auto; }
+.ss-tile figcaption {
+  padding: .5rem .6rem;
+  font-size: .82rem;
+  color: var(--muted);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+/* the add-a-photo tile, editor only */
+.ss-tile-add {
+  grid-column: span 2;
+  grid-row: span 2;
+  display: grid;
+  place-content: center;
+  gap: .35rem;
+  align-items: center;
+  border: 2px dashed color-mix(in srgb, var(--muted) 45%, transparent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-size: .85rem;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease;
+}
+.ss-tile-add:hover { border-color: var(--accent); color: var(--accent); }
+.ss-tile-add i { font-size: 1.3rem; }
+
+@media (max-width: 720px) {
+  .ss-wall { grid-template-columns: repeat(2, 1fr); }
+  .ss-tile--w, .ss-tile--l { grid-column: span 2; }
+}
+
 /* image grids */
 .ss-site figure { margin: 0; }          /* browsers default figure to margin: 1em 40px */
 .v-masonry .ss-grid { grid-template-columns: repeat(3, 1fr); }

@@ -125,6 +125,7 @@
     SS.observeMotion(host);
     Editor.restoreText();
     Editor.markSelection();
+    wireWall();
   };
 
   /* contenteditable text is authoritative while typing; after a re-render we
@@ -402,6 +403,121 @@
     if (Editor.onChange) Editor.onChange("structure");
   };
 
+  /* ---------------- the photo wall ----------------
+     Adding, sizing, removing and reordering pictures is deliberately
+     free-form. There is no layout picker here on purpose: a preset is
+     what makes every generated site look the same. */
+
+  var wallSortable = null;
+
+  function currentWall(sectionId) {
+    var root = Editor.root;
+    if (!root) return null;
+    if (sectionId) return root.querySelector('.ss-sec[data-sect="' + cssEscape(sectionId) + '"] [data-wall]');
+    return root.querySelector("[data-wall]");
+  }
+
+  /* A page can hold more than one photo wall, so every lookup is scoped
+     to a section id rather than taking the first one it finds. */
+  function wallSection(sectionId) {
+    if (!Editor.plan) return null;
+    var page = (Editor.plan.pages || []).filter(function (p) { return p.id === Editor.pageId; })[0];
+    if (!page) return null;
+    var list = page.sections.filter(function (s) { return s.type === "images"; });
+    if (!sectionId) return list[0] || null;
+    return list.filter(function (s) { return s.id === sectionId; })[0] || null;
+  }
+
+  function wallItems(sectionId) {
+    var section = wallSection(sectionId);
+    if (!section) return [];
+    if (!Array.isArray(section.items)) section.items = [];
+    return section.items;
+  }
+
+  Editor.wallSection = wallSection;
+
+  Editor.wallChanged = function (reason) {
+    Editor.render();
+    wireWall();
+    if (Editor.onChange) Editor.onChange(reason || "wall");
+  };
+
+  function wireWall() {
+    if (wallSortable) { wallSortable.destroy(); wallSortable = null; }
+    var wall = currentWall();
+    if (!wall || typeof Sortable === "undefined") return;
+
+    /* each wall on the page gets its own instance, scoped to its section */
+    var sectionId = wall.closest(".ss-sec") ? wall.closest(".ss-sec").dataset.sect : null;
+
+    /* dragging a picture reorders it. The grip appears on hover so a
+       click on the picture itself can still open the media picker. */
+    wallSortable = Sortable.create(wall, {
+      draggable: "[data-tile]",
+      handle: ".ss-tile-grip",
+      ghostClass: "is-ghost",
+      animation: 160,
+      forceFallback: true,
+      fallbackTolerance: 4,
+      onEnd: function (event) {
+        var list = wallItems(sectionId);
+        var from = event.oldIndex, to = event.newIndex;
+        if (from === to || from === undefined || to === undefined) return;
+        var moved = list.splice(from, 1)[0];
+        list.splice(to, 0, moved);
+        Editor.wallChanged("wall:reorder");
+      }
+    });
+  }
+  Editor.wireWall = wireWall;
+
+  Editor.addPhoto = function (sectionId, index) {
+    var list = wallItems(sectionId);
+    if (!list.length && !sectionId) return;
+    var at = index === undefined ? list.length : Math.max(0, Math.min(index, list.length));
+    list.splice(at, 0, { img: "", size: "s", text: "" });
+    Editor.wallChanged("wall:add");
+
+    /* open the picker straight away for the picture we just made */
+    var section = wallSection(sectionId);
+    var wall = currentWall(sectionId);
+    var tile = wall ? wall.querySelector('[data-tile="' + at + '"]') : null;
+    if (section && window.EditorUI) EditorUI.openMedia(section.id, "items:" + at + ":img");
+    return tile;
+  };
+
+  Editor.removePhoto = function (sectionId, index) {
+    var list = wallItems(sectionId);
+    if (index < 0 || index >= list.length) return;
+    list.splice(index, 1);
+    Editor.wallChanged("wall:remove");
+  };
+
+  Editor.cyclePhotoSize = function (sectionId, index) {
+    var list = wallItems(sectionId);
+    var item = list[index];
+    if (!item) return;
+    var sizes = window.SS.PHOTO_SIZES || ["s", "w", "t", "l"];
+    var at = sizes.indexOf(item.size);
+    item.size = sizes[(at + 1) % sizes.length];
+    Editor.wallChanged("wall:size");
+    if (window.SS) {
+      SS.toast("Size: " + (SS.PHOTO_SIZE_LABEL[item.size] || item.size), "bi-aspect-ratio");
+    }
+  };
+
+  /* the section a photo tile belongs to, for add/size/remove */
+  Editor.wallSectionOfTile = function (tile) {
+    if (!tile) return null;
+    var host = tile.closest ? tile.closest(".ss-sec") : null;
+    return host ? host.dataset.sect : null;
+  };
+
+  Editor.wallIndexOf = function (tile) {
+    return tile ? parseInt(tile.dataset.tile, 10) : -1;
+  };
+
   /* ---------------- wiring ---------------- */
 
   Editor.mount = function (options) {
@@ -455,6 +571,41 @@
       var footer = event.target.closest("[data-foot]");
       if (footer) {
         Editor.select("footer");
+      }
+    });
+
+    /* photo wall: add, resize and remove pictures.
+       These sit on top of the tiles, so they are handled first. */
+    Editor.root.addEventListener("click", function (event) {
+      var add = event.target.closest("[data-add-tile]");
+      if (add) {
+        event.preventDefault();
+        event.stopPropagation();
+        var host = add.closest(".ss-sec");
+        Editor.addPhoto(host ? host.dataset.sect : null);
+        return;
+      }
+      var sizeBtn = event.target.closest("[data-tile-size]");
+      if (sizeBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        var tile = sizeBtn.closest("[data-tile]");
+        Editor.cyclePhotoSize(Editor.wallSectionOfTile(tile), Editor.wallIndexOf(tile));
+        return;
+      }
+      var delBtn = event.target.closest("[data-tile-del]");
+      if (delBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        var gone = delBtn.closest("[data-tile]");
+        Editor.removePhoto(Editor.wallSectionOfTile(gone), Editor.wallIndexOf(gone));
+        return;
+      }
+      /* clicking anywhere else on a tile selects its block */
+      var anyTile = event.target.closest("[data-tile]");
+      if (anyTile) {
+        var owner = anyTile.closest(".ss-sec");
+        if (owner) Editor.select(owner.dataset.sect);
       }
     });
 

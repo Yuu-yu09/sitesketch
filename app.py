@@ -191,7 +191,7 @@ def _sections_for(kind: str, goal: str) -> list[str]:
 # mirrors TYPE_SECTIONS in static/js/api.js, used only if the seed is missing
 _FALLBACK_SECTIONS = {
     "business":   ["hero", "about", "features", "testimonials", "cta", "contact"],
-    "portfolio":  ["hero", "about", "gallery", "testimonials", "contact"],
+    "portfolio":  ["hero", "about", "images", "testimonials", "contact"],
     "restaurant": ["hero", "menu", "about", "hours", "gallery", "contact"],
     "store":      ["hero", "products", "features", "testimonials", "cta", "contact"],
     "school":     ["hero", "about", "gallery", "faq", "contact"],
