@@ -275,7 +275,11 @@ def main() -> int:
         def log(text):
             print(f"        · {text}")
 
-        page.on("pageerror", lambda e: console.append(f"uncaught: {str(e)[:160]}"))
+        # Full stack, not just the message. "ctx is not defined" on its own
+        # says nothing about which of ninety uses in site.js is at fault.
+        page.on("pageerror", lambda e: console.append(
+            f"uncaught: {str(e).splitlines()[0][:120]}\n      "
+            + "\n      ".join((getattr(e, "stack", "") or "").splitlines()[1:5])))
         page.on("console", lambda m: console.append(f"{m.text[:160]}")
                 if m.type == "error" and "favicon" not in m.text.lower() else None)
 

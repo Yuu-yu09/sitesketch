@@ -223,14 +223,22 @@
       "<div>" + ctx.imageTag + "</div></div></section>";
   };
 
-  function cardsOf(section, path, limit, fallbackImage) {
+  /* crop is passed in rather than read off a `ctx`.
+
+     This helper sits outside every block, so there is no ctx in scope here -
+     reaching for one worked until a list section actually had items, and then
+     it threw "ctx is not defined" and took the whole page down. Empty lists
+     returned early, which is exactly why it looked intermittent: it only
+     broke for the plans that had something to show. */
+  function cardsOf(section, path, limit, fallbackImage, crop) {
     var list = items(section).slice(0, limit || 6);
     if (!list.length) return "";
+    var cropFn = typeof crop === "function" ? crop : function () { return null; };
     return list.map(function (item, i) {
       return '<article class="ss-card">' +
         /* always render the slot, so every card is clickable for a
            picture even before the user chooses one */
-        picture(item.img || fallbackImage, path + ":" + i + ":img", item.title, null, ctx.crop(path + ":" + i + ":img")) +
+        picture(item.img || fallbackImage, path + ":" + i + ":img", item.title, null, cropFn(path + ":" + i + ":img")) +
         "<h3" + ed(path + ":" + i + ":title") + ">" + esc(item.title || "Title") + "</h3>" +
         text(item.text || "A line about this.", path + ":" + i + ":text", "p") +
         "</article>";
@@ -251,7 +259,7 @@
     return '<section class="ss-sec g-features v-grid" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       text(s.subtitle, "subtitle") +
-      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage) + "</div></div></section>";
+      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop) + "</div></div></section>";
   };
 
   BLOCKS.products = function (ctx) {
@@ -281,7 +289,7 @@
       return '<section class="ss-sec g-menu v-grid" ' + ctx.wrapAttrs + '>' +
         '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
         text(s.subtitle, "subtitle") +
-        '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage) + "</div></div></section>";
+        '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop) + "</div></div></section>";
     }
     return '<section class="ss-sec g-menu v-list" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
@@ -458,7 +466,7 @@
     return '<section class="ss-sec g-team v-grid" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       text(s.subtitle, "subtitle") +
-      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage) + "</div></div></section>";
+      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop) + "</div></div></section>";
   };
 
   BLOCKS.blog = function (ctx) {
