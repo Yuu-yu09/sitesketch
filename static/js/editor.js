@@ -437,6 +437,12 @@
 
   Editor.wallSection = wallSection;
 
+  /* asks the host to show the shape/frame panel for one picture */
+  Editor.openPhotoSettings = function (sectionId, index) {
+    if (Editor.onOpenPhoto) Editor.onOpenPhoto(sectionId, index);
+    else if (window.EditorUI) EditorUI.photoPanel(document.getElementById("panelBody"), sectionId, index);
+  };
+
   Editor.wallChanged = function (reason) {
     Editor.render();
     wireWall();
@@ -528,6 +534,7 @@
     Editor.onSelectionChange = options.onSelectionChange || null;
     Editor.onAI = options.onAI || null;
     Editor.onOpenSettings = options.onOpenSettings || null;
+    Editor.onOpenPhoto = options.onOpenPhoto || null;
 
     /* select a section when its padding area is clicked */
     Editor.root.addEventListener("click", function (event) {
@@ -583,6 +590,17 @@
         event.stopPropagation();
         var host = add.closest(".ss-sec");
         Editor.addPhoto(host ? host.dataset.sect : null);
+        return;
+      }
+      var styleBtn = event.target.closest("[data-tile-style]");
+      if (styleBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        var styleTile = styleBtn.closest("[data-tile]");
+        Editor.openPhotoSettings(
+          Editor.wallSectionOfTile(styleTile),
+          Editor.wallIndexOf(styleTile)
+        );
         return;
       }
       var sizeBtn = event.target.closest("[data-tile-size]");

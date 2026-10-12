@@ -323,6 +323,7 @@
          whichever block is selected, and the footer. It lives on the right
          and starts open, and can be closed to see the whole site. */
       var panelMode = "styles";
+      var photoTarget = null;
       var panelBody = document.getElementById("panelBody");
       var panelTitle = document.getElementById("panelTitle");
       var shell = document.getElementById("shell");
@@ -345,7 +346,10 @@
 
       function renderPanel() {
         if (shell.classList.contains("panel-closed")) return;
-        if (panelMode === "footer") EditorUI.footerPanel(panelBody);
+        if (panelMode === "photo") {
+          panelTitle.textContent = "Photo";
+          EditorUI.photoPanel(panelBody, photoTarget && photoTarget.sectionId, photoTarget && photoTarget.index);
+        } else if (panelMode === "footer") EditorUI.footerPanel(panelBody);
         else if (panelMode === "block") EditorUI.blockPanel(panelBody);
         else EditorUI.stylesPanel(panelBody);
       }
@@ -453,6 +457,12 @@
           onOpenSettings: function (id) {
             Editor.select(id);
             openPanel(id === "footer" ? "footer" : "block");
+          },
+          onOpenPhoto: function (sectionId, index) {
+            Editor.select(sectionId);
+            openPanel("photo");
+            photoTarget = { sectionId: sectionId, index: index };
+            renderPanel();
           },
           onAI: aiSection
         });

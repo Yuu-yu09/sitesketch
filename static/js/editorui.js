@@ -233,6 +233,176 @@
 
   /* ----------------------------------------------------------------- styles */
 
+  /* ------------------------------------------------------- photo settings */
+
+  /* Shape and frame for one picture. Crop lives on the image itself
+     (double click a picture, or the crop button), so this panel handles
+     everything around it: how the picture is shaped and how it is framed. */
+  EditorUI.photoPanel = function (host, sectionId, index) {
+    var Editor = window.Editor;
+    host.hidden = false;
+
+    var section = Editor.wallSection(sectionId);
+    var item = section && section.items ? section.items[index] : null;
+    if (!item) {
+      host.innerHTML = '<div class="panel-empty">' +
+        '<i class="bi bi-image" aria-hidden="true"></i>' +
+        "<p>That photo is gone. Pick one on the page.</p></div>";
+      return;
+    }
+
+    function refresh() { EditorUI.photoPanel(host, sectionId, index); }
+    function set(key, value) {
+      if (value === null || value === "") delete item[key];
+      else item[key] = value;
+      Editor.render();
+      Editor.wireWall();
+      if (Editor.onChange) Editor.onChange("photo:" + key);
+    }
+
+    var shape = (window.SS.PHOTO_SHAPES || []).indexOf(item.shape) === -1 ? "rect" : item.shape;
+    var frame = item.frame || {};
+    var hasFrame = (frame.width && frame.width !== "0px") || (frame.color && frame.color !== "transparent");
+
+    var shapeButtons = (window.SS.PHOTO_SHAPES || []).map(function (key) {
+      var label = window.SS.PHOTO_SHAPE_LABEL[key] || key;
+      return '<button type="button" class="shape-btn' + (key === shape ? " is-on" : "") + '" ' +
+        'data-shape-set="' + key + '" aria-pressed="' + (key === shape) + '">' +
+        '<span class="shape-preview shape-preview--' + key + '" aria-hidden="true"></span>' +
+        SS.esc(label) + "</button>";
+    }).join("");
+
+    host.innerHTML =
+      '<div class="panel-section">' +
+        "<h3>Photo " + (index + 1) + "</h3>" +
+        '<div class="photo-preview">' +
+          (item.img
+            ? '<img src="' + SS.esc(item.img) + '" alt="">'
+            : '<span class="hint">No picture chosen yet</span>') +
+        "</div>" +
+        '<div class="photo-actions">' +
+          '<button type="button" class="btn btn-sm" id="photoPick">' +
+            '<i class="bi bi-image" aria-hidden="true"></i> Picture</button>' +
+          '<button type="button" class="btn btn-sm" id="photoCrop">' +
+            '<i class="bi bi-crop" aria-hidden="true"></i> Crop</button>' +
+        "</div>" +
+        '<p class="hint">Crop trims the picture. Shape changes how it is cut out.</p>' +
+      "</div>" +
+
+      '<div class="panel-section">' +
+        "<h3>Shape</h3>" +
+        '<div class="shape-grid">' + shapeButtons + "</div>" +
+        (shape === "rounded"
+          ? '<label class="field"><span>Corner roundness</span>' +
+            '<input type="range" id="shapeRadius" min="0" max="120" step="2" value="' +
+              parseInt(item.radius || "28px", 10) + '">' +
+            '<output id="radiusOut">' + SS.esc(item.radius || "28px") + "</output></label>"
+          : "") +
+      "</div>" +
+
+      '<div class="panel-section">' +
+        "<h3>Frame</h3>" +
+        '<label class="field"><span>Frame width</span>' +
+          '<input type="range" id="frameWidth" min="0" max="24" step="1" value="' +
+            parseInt(frame.width || "0px", 10) + '">' +
+          '<output id="frameWidthOut">' + SS.esc(frame.width || "none") + "</output></label>" +
+        '<label class="field"><span>Frame colour</span>' +
+          '<span class="colour-row">' +
+            '<input type="color" id="frameColor" value="' + SS.esc(normHex(frame.color) || "#16283c") + '">' +
+            '<button type="button" class="btn btn-sm" id="frameColorClear">None</button>' +
+          "</span></label>" +
+        '<label class="field"><span>Frame style</span>' +
+          '<select id="frameStyle">' +
+            (window.SS.PHOTO_FRAME_STYLES || ["solid"]).map(function (f) {
+              return '<option value="' + f + '"' + ((frame.style || "solid") === f ? " selected" : "") + ">" +
+                f.charAt(0).toUpperCase() + f.slice(1) + "</option>";
+            }).join("") +
+          "</select></label>" +
+        '<label class="field"><span>Inset spacing</span>' +
+          '<input type="range" id="framePad" min="0" max="32" step="1" value="' +
+            parseInt(frame.padding || "0px", 10) + '">' +
+          '<output id="framePadOut">' + SS.esc(frame.padding || "0px") + "</output></label>" +
+        '<label class="field"><span>Drop shadow</span>' +
+          '<select id="frameShadow">' +
+            [["none", "None"], ["soft", "Soft"], ["hard", "Hard offset"]].map(function (p) {
+              return '<option value="' + p[0] + '"' + ((frame.shadow || "none") === p[0] ? " selected" : "") + ">" +
+                p[1] + "</option>";
+            }).join("") +
+          "</select></label>" +
+      "</div>" +
+
+      '<div class="panel-section">' +
+        '<button type="button" class="btn btn-block" id="photoReset">Reset shape and frame</button>' +
+      "</div>";
+
+    host.querySelectorAll("[data-shape-set]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        set("shape", button.getAttribute("data-shape-set") === "rect" ? null : button.getAttribute("data-shape-set"));
+        refresh();
+      });
+    });
+
+    var radius = host.querySelector("#shapeRadius");
+    if (radius) {
+      var radiusOut = host.querySelector("#radiusOut");
+      radius.addEventListener("input", function () { radiusOut.textContent = this.value + "px"; });
+      radius.addEventListener("change", function () { set("radius", this.value + "px"); });
+    }
+
+    /* frame values live in item.frame, one object per photo */
+    function setFrame(key, value) {
+      item.frame = item.frame || {};
+      if (value === null || value === "") delete item.frame[key];
+      else item.frame[key] = value;
+      Editor.render();
+      Editor.wireWall();
+      if (Editor.onChange) Editor.onChange("photo:frame");
+    }
+
+    var fw = host.querySelector("#frameWidth");
+    var fwOut = host.querySelector("#frameWidthOut");
+    fw.addEventListener("input", function () { fwOut.textContent = this.value === "0" ? "none" : this.value + "px"; });
+    fw.addEventListener("change", function () { setFrame("width", this.value === "0" ? null : this.value + "px"); });
+
+    var fp = host.querySelector("#framePad");
+    var fpOut = host.querySelector("#framePadOut");
+    fp.addEventListener("input", function () { fpOut.textContent = this.value + "px"; });
+    fp.addEventListener("change", function () { setFrame("padding", this.value + "px"); });
+
+    host.querySelector("#frameColor").addEventListener("input", function () { setFrame("color", this.value); });
+    host.querySelector("#frameColorClear").addEventListener("click", function () { setFrame("color", null); refresh(); });
+    host.querySelector("#frameStyle").addEventListener("change", function () { setFrame("style", this.value); });
+    host.querySelector("#frameShadow").addEventListener("change", function () {
+      setFrame("shadow", this.value === "none" ? null : this.value);
+    });
+
+    host.querySelector("#photoPick").addEventListener("click", function () {
+      EditorUI.openMedia(sectionId, "items:" + index + ":img");
+    });
+    host.querySelector("#photoCrop").addEventListener("click", function () {
+      var src = item.img || Editor.imageFor(sectionId, "items:" + index + ":img");
+      if (!src) { SS.toast("Choose a picture first", "bi-image"); return; }
+      if (window.Crop) {
+        Crop.open({
+          sectionId: sectionId,
+          slot: "items:" + index + ":img",
+          src: src,
+          crop: Editor.cropFor(sectionId, "items:" + index + ":img")
+        });
+      }
+    });
+
+    host.querySelector("#photoReset").addEventListener("click", function () {
+      delete item.shape;
+      delete item.radius;
+      delete item.frame;
+      Editor.render();
+      Editor.wireWall();
+      if (Editor.onChange) Editor.onChange("photo:reset");
+      refresh();
+    });
+  };
+
   /* --------------------------------------------------------------- footer */
 
   /* Editing the footer is the same idea as editing a block: click the

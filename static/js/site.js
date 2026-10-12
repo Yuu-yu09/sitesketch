@@ -293,11 +293,56 @@
      Deliberately not a template: there is no preset layout to pick, the
      user drops pictures in, drags them into the order they want and
      sizes each one. The composition is theirs, so two sites built the
-     same way never look the same. */
+     same way never look the same.
+
+     Each picture also carries its own shape and frame, so it can be a
+     plain rectangle, a circle, an arch, or anything in between, framed
+     however the owner likes. Shape and frame are per-photo, never
+     global, because that is what stops every photo looking the same. */
   var PHOTO_SIZES = ["s", "w", "t", "l"];
   var PHOTO_SIZE_LABEL = { s: "Small", w: "Wide", t: "Tall", l: "Large" };
   SS.PHOTO_SIZES = PHOTO_SIZES;
   SS.PHOTO_SIZE_LABEL = PHOTO_SIZE_LABEL;
+
+  /* clip-path based shapes: they work on any image and need no markup */
+  var PHOTO_SHAPES = ["rect", "rounded", "circle", "arch", "diamond", "blob", "leaf"];
+  var PHOTO_SHAPE_LABEL = {
+    rect: "Square corners",
+    rounded: "Rounded",
+    circle: "Circle",
+    arch: "Arch",
+    diamond: "Diamond",
+    blob: "Organic",
+    leaf: "Leaf"
+  };
+  var PHOTO_FRAME_STYLES = ["solid", "dashed", "double", "none"];
+  SS.PHOTO_SHAPES = PHOTO_SHAPES;
+  SS.PHOTO_SHAPE_LABEL = PHOTO_SHAPE_LABEL;
+  SS.PHOTO_FRAME_STYLES = PHOTO_FRAME_STYLES;
+
+  /* Shapes that only read correctly when square. On a wide tile a "circle"
+     would stretch into an ellipse, which is not what anyone picking Circle
+     means, so these are centred as squares inside whatever space they get. */
+  var FIT_SHAPES = {
+    circle: 1, arch: 1, diamond: 1, blob: 1, leaf: 1
+  };
+
+  /* the shape lives on an inner wrapper so the frame can sit outside it */
+  function tileStyle(item) {
+    var css = [];
+    var shape = PHOTO_SHAPES.indexOf(item.shape) === -1 ? "rect" : item.shape;
+    if (shape !== "rect") css.push("--tile-shape:var(--shape-" + shape + ")");
+    if (shape === "rounded" && item.radius) css.push("--tile-radius:" + item.radius);
+
+    var f = item.frame || {};
+    if (f.width) css.push("--tile-frame-w:" + f.width);
+    if (f.color) css.push("--tile-frame-color:" + f.color);
+    if (f.style) css.push("--tile-frame-style:" + f.style);
+    if (f.padding) css.push("--tile-frame-pad:" + f.padding);
+    if (f.shadow) css.push("--tile-shadow:" + f.shadow);
+
+    return css.length ? ' style="' + esc(css.join(";")) + '; "' : "";
+  }
 
   BLOCKS.images = function (ctx) {
     var s = ctx.section;
@@ -305,10 +350,14 @@
 
     var tiles = list.map(function (item, i) {
       var size = PHOTO_SIZES.indexOf(item.size) === -1 ? "s" : item.size;
+      var shape = PHOTO_SHAPES.indexOf(item.shape) === -1 ? "rect" : item.shape;
       var controls = ctx.editable
         ? '<span class="ss-tile-tools">' +
             '<button type="button" class="ss-tile-grip" data-grip aria-label="Drag to reorder this photo">' +
               '<i class="bi bi-grip-vertical" aria-hidden="true"></i></button>' +
+            '<button type="button" class="ss-tile-style" data-tile-style="' + i + '" ' +
+              'aria-label="Shape and frame, currently ' + (PHOTO_SHAPE_LABEL[shape] || shape) + '">' +
+              '<i class="bi bi-bounding-box-circles" aria-hidden="true"></i></button>' +
             '<button type="button" class="ss-tile-size" data-tile-size="' + i + '" ' +
               'aria-label="Change size, currently ' + (PHOTO_SIZE_LABEL[size] || size) + '">' +
               '<i class="bi bi-aspect-ratio" aria-hidden="true"></i></button>' +
@@ -317,11 +366,14 @@
           "</span>"
         : "";
 
-      return '<figure class="ss-tile ss-tile--' + size + '" data-tile="' + i + '">' +
-        /* an unfilled slot stays visibly empty instead of borrowing the
-           same stock photo as every other slot, which made five blanks
-           look like five copies of one picture */
-        picture(item.img, "items:" + i + ":img", item.title || "Add a photo") +
+      return '<figure class="ss-tile ss-tile--' + size + '" data-tile="' + i + '"' +
+          tileStyle(item) + ">" +
+        '<div class="ss-tile-frame' + (FIT_SHAPES[shape] ? " ss-tile-frame--fit" : "") + '">' +
+          /* an unfilled slot stays visibly empty instead of borrowing the
+             same stock photo as every other slot, which made five blanks
+             look like five copies of one picture */
+          picture(item.img, "items:" + i + ":img", item.title || "Add a photo") +
+        "</div>" +
         controls +
         (item.text || size !== "s"
           ? '<figcaption><span' + ed("items:" + i + ":text") + ">" +
