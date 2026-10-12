@@ -37,7 +37,10 @@ browser preload list) is irreversible for a year. Do it at launch, not now.
 | Account enumeration blocked | Done — login answers the same message for an unknown email, and burns comparable hashing time, so timing does not leak either. |
 | Access tokens | Done — 30 minutes. |
 | Silent renewal | Done — a 30 day refresh token renews the access token and replays the request, so nobody is bounced mid-edit. See `auth.py`, `static/js/api.js`. |
+| Refresh token storage | Done — `HttpOnly` cookie, so page scripts cannot read it. Was previously in `localStorage`, which any XSS could exfiltrate. See section 7. |
+| Refresh token rotation | Done — the token is single-use. Each refresh issues a new one and invalidates the old, so a stolen cookie is usable at most once and the theft becomes visible as a failed refresh. |
 | Rate limit storage | In-process. Single instance only. Move to Redis before scaling past one instance. |
+| Client IP for rate limiting | Spoofing-resistant. `X-Forwarded-For` is read **rightmost-untrusted**, not leftmost. The leftmost value is whatever the caller sent and is trivially forged, so trusting it let anyone reset their own limit by inventing a header. |
 | MFA / 2FA | **Not done.** Needs a TOTP library, a recovery-code flow and an enrolment UI. The practical version for this project: require MFA before exposing any admin surface. |
 | Custom admin URL | Not applicable. There is no `/wp-admin`; admin actions are JWT-scoped per user. `projects.py` re-checks ownership on every read and write, so one user's token cannot touch another's project. |
 
@@ -63,10 +66,10 @@ only secret worth hashing here, and they are.
 - Removed: 142 lines of dead CSS from the retired three-column builder.
   Unreachable code is not a vulnerability on its own, but it is a place
   nobody reviews.
-- **Known leftovers that should go before a real launch:** `rendercheck.html`
-  and `editorcheck.html` are development harnesses that render a fixture
-  plan. They hold no data and no secrets, so they are harmless, but they
-  are not needed in production and are best deleted or moved behind a flag.
+- Removed: `rendercheck.html`, `editorcheck.html` and `shot.html`. These were
+  development harnesses that rendered a fixture plan for eyeballing. They
+  held no data and no secrets, but they were publicly served and nothing
+  needed them in production.
 
 ---
 
@@ -94,10 +97,27 @@ concatenated into a statement.
    No inline script, no `eval`, no third-party script. An injected `<script>`
    tag simply will not run.
 
+   Two exceptions, both deliberate and both scoped to one route:
+
+   - `preview.html` is allowed `frame-ancestors 'self'`, because the builder
+     draws the page being edited inside a same-origin iframe. Blocking that
+     broke the device preview entirely.
+   - A **published** site (`/site/<slug>`) is served with `script-src 'none'`.
+     It is not a weaker policy than the rest of the app; it is a stronger
+     one, and it is possible only because published pages run zero
+     JavaScript. The plan is compiled in the browser at publish time and the
+     finished document is what gets stored, so there is nothing left to
+     execute.
+
    `style-src` allows `unsafe-inline` because the editor sets
    `element.style` while dragging, and `img-src` allows Unsplash and
    Supabase because those are where pictures live. Both are deliberate and
    are the only two relaxations.
+
+   **User-authored HTML on a published page is still sanitised**, because
+   `script-src 'none'` is a backstop, not the control. `published_html.py`
+   strips `<script>`, event handlers, `javascript:` URLs and inline styles
+   before storage, and `audit()` reports what it removed.
 
 **File uploads** (`media.py`) allow an explicit MIME list, are capped at
 6 MB, and the extension is taken from the validated MIME type rather than
@@ -163,13 +183,91 @@ are one bucket deletion away from gone.
 
 ---
 
+## 7. Cookies and consent
+
+**One cookie exists.** `sitesketch_refresh`, and it does one job: keeping
+someone signed in.
+
+| Property | Value | Why |
+|---|---|---|
+| `HttpOnly` | yes | Page scripts cannot read it. This was the point of the change — the token used to sit in `localStorage`, where any XSS could exfiltrate it. |
+| `SameSite` | `Strict` | It is never needed on a cross-site request. |
+| `Path` | `/api/auth` | The browser does not attach it to page loads or asset requests at all. |
+| `Secure` | production only | Omitting it in development, where the origin is plain HTTP. |
+| Lifetime | session, or 30 days | Only 30 days if **Keep me signed in** was ticked. |
+
+**No personal data and no password is in any cookie.** The cookie holds an
+opaque random session identifier, not the email, not the username, not
+anything that identifies the person. That was the requirement, and an opaque
+id is the only way to honour it.
+
+**Rotation on every use.** The refresh token is single-use; using it mints a
+replacement and invalidates the original. This is what limits the damage from
+a stolen cookie, and it is also how a stolen cookie gets noticed.
+
+**The "keep me signed in" choice rides in the token claims**, not in a
+separate preference. A browser will not tell the server whether a cookie is
+persistent, so the only honest place to record the decision is inside the
+token itself.
+
+### CSRF
+
+A cookie is attached automatically by the browser, which is exactly what
+makes it CSRF-able, so this needs an answer. `/api/auth/refresh` checks that
+`Origin`/`Referer` is same-origin. No extra round trip and no token to
+manage; a forged cross-site request cannot forge those headers.
+
+`JWT_COOKIE_CSRF_PROTECT` is `False` **on purpose** — enabling it would mean
+fetching a CSRF token before every refresh, for no additional protection
+over the Origin check. A request arriving with neither header (curl, a native
+app, a server-side call) is allowed, since those are not browsers and cannot
+be the CSRF attack being defended against.
+
+### Consent
+
+The notice appears on the **landing page only**, with **Accept** and
+**Decline**. Both are styled to look equally like real answers — if declining
+is the shabbier option, the layout is nudging people.
+
+- `Decline` writes a **recorded decision**, not a dismissal. `decision:
+  "declined"` is a different state from never having been asked, and
+  `Consent.granted()` can tell them apart.
+- `Consent.granted(category)` is the single gate any future Analytics or
+  Advertising code must pass. Nothing currently uses it because **there is no
+  analytics and no advertising** — which is what makes the landing-page copy
+  ("we use one cookie, declining changes nothing") true rather than
+  misleading. If a tracker is ever added, that copy becomes a lie and
+  `browser_check.py` fails.
+- Withdrawal is one click, with no confirmation step designed to talk someone
+  out of it.
+
+### Legal pages
+
+`privacy.html` (with the preference centre) and `terms.html` are published
+and reachable. Sign-in and sign-up carry their own links to both — the cookie
+notice used to be the only route there, so moving it to the landing page
+would have left those pages with no way to reach the policy at all.
+
+The cookie inventory on `/privacy` is **rendered from `cookies.py`**, and the
+retention table from `privacy.py`. It is generated rather than written, so
+the policy cannot drift away from what the code actually does. A third-party
+script audit lives in `privacy.py` (`THIRD_PARTIES`) and is currently empty,
+which is the honest answer.
+
+---
+
 ## Outstanding, in priority order
 
 1. **Rotate the secrets pasted into chat** — database password,
    `sb_secret_*`, OAuth secrets, `JWT_SECRET`, and a Vercel token that
    appeared in a screenshot. Anyone reading that transcript has them.
-2. Delete `rendercheck.html` and `editorcheck.html` from production.
+2. **Move the access token out of `localStorage`.** It is the last piece of
+   auth state JavaScript can reach: 30 minutes, and readable by any XSS.
+   Doing it properly means an async auth bootstrap, which is a real refactor,
+   so it was scoped out rather than half-done.
 3. Back up the `media` bucket, not just the database.
 4. Move rate-limit counters to Redis if more than one instance runs.
 5. MFA, if an admin surface is ever exposed.
 6. Centralised logging, so incidents are reviewable after the fact.
+7. Google/GitHub OAuth — `oauth_accounts` is still commented out in
+   `schema.sql`.

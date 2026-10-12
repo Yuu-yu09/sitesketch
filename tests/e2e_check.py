@@ -159,6 +159,11 @@ def t_register_duplicate():
 
 
 def t_register_weak_password():
+    # Register is 5/hour per IP and several checks share one address. Without
+    # this the check silently depended on budget left over from earlier ones,
+    # so it passed or failed depending on what ran before it - and failed
+    # outright whenever another suite ran alongside this one.
+    reset_limits()
     call("POST", "/api/auth/register",
          {"username": "weakling", "email": f"weak_{uuid.uuid4().hex[:6]}@example.com", "password": "short"},
          expect=400)

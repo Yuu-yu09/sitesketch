@@ -22,13 +22,29 @@ Remote: `Yuu-yu09/sitesketch`, branch `main`. Check with
 
 Working full-stack app. Flask + Supabase (Postgres + Storage) + Gemini, static frontend.
 
-- 7 screens: landing, login, register, dashboard, plan wizard, builder, publish.
+- 9 screens: landing, login, register, dashboard, plan wizard, builder, publish,
+  privacy, terms.
 - `static/js/api.js` talks to the real Flask API with a JWT. Accounts and projects live
   in Supabase, so anything created on any device is there on the next load.
 - The builder is the WordPress model: the page *is* the editor. One renderer
   (`SS.renderPage`) serves the builder canvas, preview and the published page.
-- Tests: `tests/e2e_check.py` = **30/30**, `tests/media_check.py` = OK.
-  Run: `.venv\Scripts\python.exe tests\e2e_check.py http://127.0.0.1:3000`
+- **Live publishing works.** `/site/<slug>` serves a real multi-page site.
+  See section 4 for the two bugs that hid behind it.
+- Tests, all four suites green as of the last run:
+
+  | Suite | Checks | What it covers |
+  |---|---|---|
+  | `tests\e2e_check.py` | 63 | API level: auth, projects, media, publishing, headers |
+  | `tests\browser_check.py` | 30 | Playwright: the real UI, consent banner, legal pages |
+  | `tests\user_journey.py` | 22 | One new user, nothing to a live site, no API calls |
+  | `tests\check_js_scopes.py` | — | Static: catches out-of-scope `ctx` (see below) |
+
+  ```powershell
+  .venv\Scripts\python.exe tests\e2e_check.py      http://127.0.0.1:3000
+  .venv\Scripts\python.exe tests\browser_check.py  http://127.0.0.1:3000
+  .venv\Scripts\python.exe tests\user_journey.py  http://127.0.0.1:3000
+  .venv\Scripts\python.exe tests\check_js_scopes.py
+  ```
 
 ---
 
@@ -58,22 +74,57 @@ make generated sites look alike) · Preview mode · closable sidebars · first-r
 1. Start the server: `.\.venv\Scripts\python.exe app.py` (port 3000).
 2. **Commit and push anything you change.**
 3. Verify with the suites above before pushing.
-4. `rendercheck.html` renders a fixture plan with **no database** — useful when Supabase is
-   unreachable, and the fastest way to eyeball the built page or editor chrome.
+4. Run the suites **one at a time**. They share a server and an IP address, and
+   register/login are rate limited, so running two together makes checks fail
+   for reasons that have nothing to do with the code.
 
 ---
 
 ## 4. Open work
 
-- **`/site/<slug>` is still 404.** Publish sets the flag but nothing serves the compiled
-  site. Needs: compile → upload to the `sites` bucket → public route for
-  `/site/<slug>` and `/site/<slug>/about`.
 - **Google/GitHub OAuth unimplemented.** `oauth_accounts` exists but is commented out in
   `schema.sql`; no callbacks registered at `/api/auth/google|callback`.
+- **ZIP export is a stub** ("Phase 2"). The `sites` Storage bucket is reserved for it;
+  published pages live in Postgres `published_pages jsonb` instead, so the route can send
+  real security headers rather than serving a bucket upload.
 - **`DESIGN.md`** not written yet.
 - **Secrets pasted in chat need rotating:** DB password, `sb_secret_*`, OAuth secrets,
   `JWT_SECRET`, and a Vercel token from a screenshot. Update `.env` afterwards.
+- **The access token is still in `localStorage`.** 30 minutes, but readable by any XSS.
+  The refresh token moved to an `HttpOnly` cookie; this is the remaining half and it
+  needs an async auth bootstrap, so it was scoped out rather than half-done.
+- No MFA, no real WAF.
+- **No visual verification.** The screenshot tool needs a visible desktop window, which
+  is unavailable in this environment. Everything is checked by DOM assertions instead.
 - Throwaway accounts left in the DB from testing.
+
+### Publishing bugs worth remembering
+
+Both were invisible until `user_journey.py` exercised a real end-to-end flow, and both
+are the kind that look fine in a unit test:
+
+- **`jsonb` reorders object keys.** The homepage was whichever page happened to sort
+  first, so `/site/<slug>` served the wrong page as the index. Fixed with an explicit
+  `published_home` column rather than by picking a key at read time.
+- **Page ids that were not lowercase slugs produced dead links.** The client built
+  `href`s from the raw id while the server stored a slugified key. Fixed with
+  `SS.pageKey` / `projects.page_key`, and colliding keys are refused rather than silently
+  overwriting each other.
+
+Also fixed in the same area: the ETag included `view_count`, so it changed on every
+request; and `_site_response` was left with a stale `views` argument that raised a
+`KeyError` and 500'd the page.
+
+### The `ctx` bug, and why it looked intermittent
+
+`cardsOf()` in `site.js` is defined outside every block renderer, so there is no `ctx` in
+scope — but it called `ctx.crop()`. It returned early for empty lists, so it only threw
+for sections that had items, meaning whether it fired depended on what the AI happened to
+generate. Two runs passed 22/22; then it emptied the builder entirely.
+
+`tests\check_js_scopes.py` now fails the build on that class of mistake. It is a crude
+parse and errs towards reporting, so expect to read a false positive (`sectionHTML`
+declares its own `ctx`) rather than filter it out.
 
 ---
 
