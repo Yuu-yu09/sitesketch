@@ -437,7 +437,7 @@
     var cards = items(s).slice(0, 9).map(function (item, i) {
       return '<figure class="ss-card" style="padding:.6rem">' +
         picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title || s.title, null, ctx.crop("items:" + i + ":img")) +
-        (item.text ? '<figcaption style="margin-top:.5rem;font-size:.86rem;color:var(--muted)">' +
+        (item.text ? '<figcaption>' +
           '<span' + ed("items:" + i + ":text") + ">" + esc(item.text) + "</span></figcaption>" : "") +
         "</figure>";
     }).join("");
@@ -698,8 +698,8 @@
         esc(nameOf(target, label)) + "</a>";
     }
 
-    var items = navItems(plan).filter(function (i) { return i.visible; });
-    var links = items.map(function (item) {
+    var visible = navItems(plan).filter(function (i) { return i.visible; });
+    var links = visible.map(function (item) {
       var kids = item.children.map(function (c) {
         return link(c.pageId, c.label, true);
       }).join("");

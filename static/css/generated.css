@@ -297,6 +297,15 @@
 .ss-card img { margin-bottom: 1rem; }
 .ss-card h3 { margin-bottom: .3rem; }
 .ss-card p { margin: 0; font-size: calc(.95rem * var(--type-scale, 1)); }
+/* Card captions were an inline style with a hardcoded .86rem - the only
+   font-size in the renderer that ignored --type-scale, so the text size
+   control silently left every caption behind. Moved here so it scales with
+   everything else, and raised to .92rem because .86rem measured 13.76px. */
+.ss-card figcaption {
+  margin-top: .5rem;
+  font-size: calc(.92rem * var(--type-scale, 1));
+  color: var(--muted);
+}
 /* asymmetric lead card - avoids the "three equal boxes" look */
 .v-grid .ss-card:first-child {
   grid-column: span 2;

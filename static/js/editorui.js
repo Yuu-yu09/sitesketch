@@ -1300,9 +1300,9 @@ EditorUI.menuPanel = function (host) {
        same as zero: text size defaults to 1 (100%), line spacing to 1 and
        letter spacing to 0em. Reading a slider as 0 because nobody has
        touched it yet would silently shrink every site to nothing. */
-    function typeSlider(key, label, min, max, step, format, current) {
+    function typeSlider(key, label, min, max, step, format, value0) {
       var defaults = { scale: 1, lh: 1, ls: 0 };
-      var value = current == null ? defaults[key] : current;
+      var value = value0 == null ? defaults[key] : value0;
       var id = "type_" + key;
       return '<label class="field" for="' + id + '">' +
         "<span>" + label +
