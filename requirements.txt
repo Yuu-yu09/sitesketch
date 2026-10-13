@@ -1,4 +1,14 @@
-# SiteSketch backend dependencies (Python 3.11+)
+# SiteSketch backend dependencies
+#
+# Python 3.11+ for the app. The test suite also needs Playwright, which is
+# listed under "tests" below - it was previously installed ad hoc, which
+# meant a fresh clone could not run the browser, journey or responsive suites
+# at all, while requirements.txt appeared complete.
+#
+# NOTE: .python-version pins 3.13 and this file claims 3.11+. Those do not
+# agree with each other, and the local interpreter has been 3.14.7. Unresolved
+# - see AGENTS.md.
+
 flask>=3.0
 flask-cors>=4.0
 python-dotenv>=1.0
@@ -9,4 +19,11 @@ requests>=2.31
 gunicorn>=22.0
 
 # tests
-pytest>=8.0
+#
+# The suites are standalone scripts with their own main(), not pytest tests,
+# so pytest is not listed - nothing imports it. Playwright IS used, by
+# browser_check.py, user_journey.py and responsive_audit.py.
+#
+# After installing, browsers need one extra step:
+#     .venv\Scripts\python.exe -m playwright install chromium
+playwright>=1.49
