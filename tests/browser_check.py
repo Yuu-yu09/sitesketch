@@ -509,6 +509,103 @@ def run(page, phase=None):
     check("type scale reaches the rendered text", t_type_scale_reaches_the_rendered_text)
     check("line and letter spacing reach the page", t_line_and_letter_spacing_reach_the_page)
     check("type scale survives a reload", t_type_scale_survives_a_reload)
+    def t_brand_colours_reach_the_page():
+        """A typed hex has to become the actual rendered colour, not just a
+        value sitting in the plan."""
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  s.tokens.colour = { accent: '#B04A26', bg: '#FFFDF9', text: '#2A1E16' };"
+                      "  window.Editor.render(); }")
+        page.wait_for_timeout(400)
+        got = page.evaluate("""
+            () => {
+              const site = window.Editor.root.querySelector('.ss-site');
+              const cs = getComputedStyle(site);
+              return { accent: cs.getPropertyValue('--accent').trim(),
+                       bg: cs.getPropertyValue('--bg').trim(),
+                       text: cs.getPropertyValue('--text').trim() };
+            }""")
+        assert got["accent"] == "#B04A26", f"accent did not apply: {got}"
+        assert got["bg"] == "#FFFDF9", f"background did not apply: {got}"
+        assert got["text"] == "#2A1E16", f"text colour did not apply: {got}"
+
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  delete s.tokens.colour; window.Editor.render(); }")
+        page.wait_for_timeout(300)
+
+    def t_brand_derives_readable_ink():
+        """The other five colours are derived. accentInk in particular is
+        what text on a button is drawn in, so getting it wrong makes the
+        button unreadable rather than merely ugly."""
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  s.tokens.colour = { accent: '#FFE066' };   /* light accent */"
+                      "  window.Editor.render(); }")
+        page.wait_for_timeout(300)
+        light = page.evaluate(
+            "() => getComputedStyle(window.Editor.root.querySelector('.ss-site'))"
+            ".getPropertyValue('--accent-ink').trim()")
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  s.tokens.colour = { accent: '#101010' };   /* dark accent */"
+                      "  window.Editor.render(); }")
+        page.wait_for_timeout(300)
+        dark = page.evaluate(
+            "() => getComputedStyle(window.Editor.root.querySelector('.ss-site'))"
+            ".getPropertyValue('--accent-ink').trim()")
+        assert light != dark, \
+            f"ink did not adapt to the accent: both {light!r}"
+        assert light.upper() == "#14110A", \
+            f"a pale accent should take dark ink, got {light!r}"
+        assert dark.upper() == "#FFFFFF", \
+            f"a dark accent should take white ink, got {dark!r}"
+
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  delete s.tokens.colour; window.Editor.render(); }")
+        page.wait_for_timeout(300)
+
+    def t_partial_brand_set_stays_coherent():
+        """Setting only an accent must not blank the rest of the palette.
+        Someone who knows their brand colour and nothing else should still
+        get a readable page."""
+        got = page.evaluate("""() => {
+            const D = window.DESIGN;
+            const base = D.paletteById('cobalt-cream').c;
+            const out = D.applyBrand(base, { tokens: { colour: { accent: '#7A1F3D' } } });
+            return { surface: out.surface, muted: out.muted, line: out.line,
+                     soft: out.soft, accent: out.accent, text: out.text };
+        }""")
+        for key in ("surface", "muted", "line", "soft"):
+            assert got[key] and got[key].startswith("#"), \
+                f"derived colour {key} is missing: {got}"
+        # text and background must still come from the palette, untouched
+        assert got["accent"] == "#7A1F3D", got
+        assert got["text"].upper() == "#16181D", \
+            f"text should have come from the palette, got {got['text']}"
+
+    def t_brand_colours_survive_a_reload():
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  s.tokens.colour = { accent: '#7A1F3D', bg: '#FFFDF9', text: '#2A1E16' };"
+                      "  window.Editor.onChange('design:colour'); }")
+        page.wait_for_timeout(1600)
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        accent = page.evaluate(
+            "() => getComputedStyle(document.querySelector('.ss-site'))"
+            ".getPropertyValue('--accent').trim()")
+        assert accent.upper() == "#7A1F3D", f"brand colour not persisted: {accent}"
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  delete s.tokens.colour; window.Editor.onChange('design:colour'); }")
+        page.wait_for_timeout(1200)
+
+    check("brand colours reach the page", t_brand_colours_reach_the_page)
+    check("brand derives readable ink", t_brand_derives_readable_ink)
+    check("a partial brand set stays coherent", t_partial_brand_set_stays_coherent)
+    check("brand colours survive a reload", t_brand_colours_survive_a_reload)
     check("footer text is editable", t_footer_is_editable)
     check("device preview switches between phone, tablet and desktop", t_device_preview_switches)
 

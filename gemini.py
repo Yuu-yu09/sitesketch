@@ -587,6 +587,7 @@ Rules:
 
     raw = generate_json(prompt, schema, system=PLAN_SYSTEM)
     return {
+        "source": "ai",
         "headline": str(raw.get("headline") or "")[:120],
         "tagline": str(raw.get("tagline") or "")[:180],
         "sections": [
@@ -599,4 +600,202 @@ Rules:
             for row in (raw.get("sections") or [])
             if row.get("type")
         ],
+    }
+
+
+# ------------------------------------------------------------- offline copy
+#
+# Written by hand, not generated, so it exists the moment the network does
+# not. Measured during development: a trivial Gemini call took 161s and
+# succeeded, which means the first run of the wizard could sit on a spinner
+# for two and a half minutes. generate_design already had a fallback;
+# generate_plan only had a 502, so the whole signup flow broke.
+#
+# The same rules the model is given, because the fallback copy is still copy
+# somebody has to look at: no lorem ipsum, no em dashes, headlines under eight
+# words, subtitles under twenty. "{name}" is substituted with the site name.
+#
+# Two or three variants each, chosen by a seed taken from the description, so
+# two bakeries do not receive word-for-word the same page. It is still visibly
+# templated - that is the honest cost of it working offline.
+
+FALLBACK_HEADLINES: dict[str, list[str]] = {
+    "business":  ["Good work, done properly", "Built to last", "People who do the job right"],
+    "restaurant": ["Good food, properly made", "Come hungry", "Made fresh, served daily"],
+    "store":     ["Made to last", "Find what you need", "Good things, honest prices"],
+    "portfolio": ["Work worth looking at", "Selected projects", "Things I have made"],
+    "school":    ["Learn it properly", "Taught by people who do it", "Skills that stick"],
+    "blog":      ["Worth reading", "Notes and updates", "Writing about the work"],
+}
+
+FALLBACK_SECTIONS: dict[str, list[dict[str, str]]] = {
+    "hero": [
+        {"title": "Welcome to {name}", "subtitle": "Tell people what you do and why it is worth their time.",
+         "buttonText": "Get in touch"},
+        {"title": "{name}", "subtitle": "A short line that says what this place is, in plain words.",
+         "buttonText": "See more"},
+        {"title": "Made with care", "subtitle": "Everything here was chosen for a reason. Here is why.",
+         "buttonText": "Find out more"},
+    ],
+    "about": [
+        {"title": "About {name}", "subtitle": "Who you are, how long you have been doing this, and what you care about.",
+         "buttonText": "Read more"},
+        {"title": "The short version", "subtitle": "Enough about us. Here is the part that matters.",
+         "buttonText": "Our story"},
+        {"title": "Why we do this", "subtitle": "It started as a small idea and turned into something we are proud of.",
+         "buttonText": "More"},
+    ],
+    "features": [
+        {"title": "What we do", "subtitle": "The things people come here for, in plain terms.",
+         "buttonText": "Ask us"},
+        {"title": "What you get", "subtitle": "Three reasons people choose us over the alternative.",
+         "buttonText": "Get started"},
+        {"title": "How it works", "subtitle": "Simple from the first message to the last.",
+         "buttonText": "Talk to us"},
+    ],
+    "menu": [
+        {"title": "The menu", "subtitle": "Our most-ordered dishes. Prices include everything.",
+         "buttonText": "Order"},
+        {"title": "What we are cooking", "subtitle": "This changes with the season and with the market.",
+         "buttonText": "See the menu"},
+        {"title": "Signature dishes", "subtitle": "The ones people keep coming back for.",
+         "buttonText": "Order now"},
+    ],
+    "products": [
+        {"title": "What we sell", "subtitle": "Everything here is in stock and ready to go.",
+         "buttonText": "Shop now"},
+        {"title": "The range", "subtitle": "Pick what you need. Prices are what you see.",
+         "buttonText": "Browse"},
+        {"title": "Current stock", "subtitle": "Small batches, so things sell out. Check back often.",
+         "buttonText": "View all"},
+    ],
+    "gallery": [
+        {"title": "Pictures", "subtitle": "A look at the place and the people in it.",
+         "buttonText": "See more"},
+        {"title": "Recent work", "subtitle": "A few from the last few months.",
+         "buttonText": "More photos"},
+        {"title": "Inside {name}", "subtitle": "No stock images. This is what it actually looks like.",
+         "buttonText": "Take a look"},
+    ],
+    "images": [
+        {"title": "Photos", "subtitle": "Add your own pictures here and arrange them however you like.",
+         "buttonText": "Add photos"},
+        {"title": "Show, do not tell", "subtitle": "A few pictures say more than a paragraph.",
+         "buttonText": "View gallery"},
+        {"title": "Around the place", "subtitle": "Drag these into whatever order suits your story.",
+         "buttonText": "More"},
+    ],
+    "testimonials": [
+        {"title": "What people say", "subtitle": "The short version, from people who came before you.",
+         "buttonText": "Read more"},
+        {"title": "In their words", "subtitle": "We would rather let them speak than write it ourselves.",
+         "buttonText": "All reviews"},
+        {"title": "Kind words", "subtitle": "A few things customers have told us.",
+         "buttonText": "More"},
+    ],
+    "team": [
+        {"title": "Who you will meet", "subtitle": "The people who will actually answer you.",
+         "buttonText": "Say hello"},
+        {"title": "The team", "subtitle": "Small enough that you get the same face each time.",
+         "buttonText": "Meet us"},
+        {"title": "Who we are", "subtitle": "No stock photos. These are the actual people.",
+         "buttonText": "Contact"},
+    ],
+    "faq": [
+        {"title": "Common questions", "subtitle": "The things people ask before they get in touch.",
+         "buttonText": "Ask something"},
+        {"title": "Before you ask", "subtitle": "Answers to what most people want to know first.",
+         "buttonText": "More"},
+        {"title": "Questions", "subtitle": "If yours is not here, just message us.",
+         "buttonText": "Get in touch"},
+    ],
+    "hours": [
+        {"title": "Where to find us", "subtitle": "Opening hours and the address, all in one place.",
+         "buttonText": "Get directions"},
+        {"title": "Opening hours", "subtitle": "Come by. We are usually glad to see you.",
+         "buttonText": "Find us"},
+        {"title": "Come and see us", "subtitle": "Hours, address and how to get here.",
+         "buttonText": "Directions"},
+    ],
+    "cta": [
+        {"title": "Ready when you are", "subtitle": "One message is all it takes to start.",
+         "buttonText": "Get started"},
+        {"title": "Get in touch", "subtitle": "Tell us what you need and we will come back to you.",
+         "buttonText": "Send a message"},
+        {"title": "Next step", "subtitle": "No forms that go nowhere. This one gets read.",
+         "buttonText": "Contact us"},
+    ],
+    "contact": [
+        {"title": "Contact", "subtitle": "Email, phone or a visit. Whichever suits you.",
+         "buttonText": "Send a message"},
+        {"title": "Get in touch", "subtitle": "We answer everything, usually the same day.",
+         "buttonText": "Message us"},
+        {"title": "Say hello", "subtitle": "Use whichever way is easiest for you.",
+         "buttonText": "Contact"},
+    ],
+    "blog": [
+        {"title": "Latest writing", "subtitle": "Recent posts, newest first.",
+         "buttonText": "Read more"},
+        {"title": "From the notebook", "subtitle": "Notes on the work, published occasionally.",
+         "buttonText": "See all posts"},
+        {"title": "Recent posts", "subtitle": "Short pieces, written when there is something worth saying.",
+         "buttonText": "Browse"},
+    ],
+    "newsletter": [
+        {"title": "Stay in touch", "subtitle": "Occasional email. No more than that.",
+         "buttonText": "Sign up"},
+        {"title": "Get the occasional update", "subtitle": "One email now and then, nothing you did not ask for.",
+         "buttonText": "Subscribe"},
+        {"title": "Keep up to date", "subtitle": "Sign up and we will keep you posted.",
+         "buttonText": "Join"},
+    ],
+}
+
+
+def fallback_plan(ctx: dict) -> dict:
+    """A complete plan with no network involved.
+
+    Used when generate_plan cannot be reached or does not answer in time. The
+    result is marked source="fallback" so the UI can say so rather than
+    pretending the model wrote it.
+    """
+    description = str(ctx.get("description") or "")
+    name = str(ctx.get("siteName") or "Our Website").strip() or "Our Website"
+
+    kind, _goal = _guess_type(description)
+    types = list(ctx.get("sections") or [])
+    if not types:
+        types = ["hero", "about", "contact"]
+
+    # Seeded from the description, so the same business gets the same page
+    # and two different businesses do not get the same one.
+    seed = sum(ord(c) for c in description.lower()) or 1
+    rng = random.Random(seed)
+
+    def fill(text: str) -> str:
+        return text.replace("{name}", name)
+
+    headlines = FALLBACK_HEADLINES.get(kind) or FALLBACK_HEADLINES["business"]
+
+    sections: list[dict[str, str]] = []
+    for key in types:
+        options = FALLBACK_SECTIONS.get(key)
+        if not options:
+            # An unknown type still gets something, so a taxonomy addition
+            # never produces a blank band on the page.
+            options = [{"title": key.replace("-", " ").title(),
+                        "subtitle": f"About {name}.", "buttonText": "Get in touch"}]
+        row = options[rng.randrange(len(options))]
+        sections.append({
+            "type": key,
+            "title": fill(row["title"])[:120],
+            "subtitle": fill(row["subtitle"])[:220],
+            "buttonText": row.get("buttonText", "")[:40],
+        })
+
+    return {
+        "source": "fallback",
+        "headline": headlines[rng.randrange(len(headlines))],
+        "tagline": f"{name}, described plainly.",
+        "sections": sections,
     }

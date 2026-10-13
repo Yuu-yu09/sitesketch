@@ -909,11 +909,45 @@
     var spec = window.Editor.spec();
     var refresh = function () { window.Editor.render(); };
 
+    /* One labelled colour row: a swatch that opens the OS picker, a text
+       field for pasting a hex, and both writing the same value.
+
+       The text field is not redundant. Pasting "#B04A26" out of a brand
+       guide is what people actually do, and a colour input alone makes
+       that impossible. */
+    function brandColour(key, label, current) {
+      var id = "colour_" + key;
+      var value = /^#[0-9a-f]{6}$/i.test(String(current || "")) ? String(current) : "";
+      return '<div class="brand-row">' +
+        '<label class="field" for="' + id + '_hex"><span>' + label + "</span>" +
+          '<span class="brand-inputs">' +
+            '<input type="color" id="' + id + '" value="' + (value || "#000000") + '"' +
+              ' aria-label="Choose ' + label.toLowerCase() + '">' +
+            '<input type="text" id="' + id + '_hex" class="hex-field" value="' + value + '"' +
+              ' placeholder="auto" maxlength="7 spellcheck="false' +
+              ' aria-label="' + label + ' hex value">' +
+          "</span>" +
+        "</label>" +
+      "</div>";
+    }
+
     host.innerHTML =
       '<div class="panel-section">' +
         '<h3>Colours</h3>' +
         '<div class="palette-current" id="paletteName"></div>' +
         '<div id="swatchHost"></div>' +
+        /* Three inputs, not eight. A palette is eight interlocking
+           colours and nobody picks eight sensible ones; what a shopkeeper
+           has is a brand colour, a background and an ink. The other five
+           are derived from these, because each exists only to keep the
+           other three readable. */
+        '<fieldset class="brand-colours">' +
+          '<legend>Your brand colours</legend>' +
+          brandColour("accent", "Accent", spec.tokens.colour && spec.tokens.colour.accent) +
+          brandColour("bg", "Background", spec.tokens.colour && spec.tokens.colour.bg) +
+          brandColour("text", "Text", spec.tokens.colour && spec.tokens.colour.text) +
+          '<button class="btn btn-block btn-ghost btn-sm" id="colourReset">Clear brand colours</button>' +
+        "</fieldset>" +
       "</div>" +
       '<div class="panel-section">' +
         "<h3>Typography</h3>" +
@@ -971,6 +1005,55 @@
     if (paletteName && current) paletteName.textContent = current.name;
 
     host.querySelector("#swatchHost").appendChild(paletteSwatches(plan, refresh));
+
+    /* ---------- brand colour bindings ---------- */
+    ["accent", "bg", "text"].forEach(function (key) {
+      var picker = host.querySelector("#colour_" + key);
+      var hex = host.querySelector("#colour_" + key + "_hex");
+      if (!picker || !hex) return;
+
+      function write(value) {
+        var spec2 = window.Editor.spec();
+        var colour = spec2.tokens.colour || (spec2.tokens.colour = {});
+        if (value) colour[key] = value;
+        else delete colour[key];
+        /* leaving nothing set should behave like never having touched it */
+        if (!Object.keys(colour).length) delete spec2.tokens.colour;
+        window.Editor.onChange("design:colour");
+        refresh();
+      }
+
+      picker.addEventListener("input", function () {
+        hex.value = this.value.toUpperCase();
+        write(this.value.toUpperCase());
+      });
+
+      /* Only a complete, valid hex is written. Taking the value on every
+         keystroke would store "#B04" as a colour and blank the page while
+         somebody is still typing the rest of it. */
+      hex.addEventListener("change", function () {
+        var raw = this.value.trim();
+        if (!raw) { write(""); return; }
+        var v = raw.charAt(0) === "#" ? raw : "#" + raw;
+        if (!/^#[0-9a-f]{6}$/i.test(v)) {
+          SS.toast("Use a full colour like #B04A26", "bi-exclamation-triangle");
+          return;
+        }
+        picker.value = v;
+        this.value = v.toUpperCase();
+        write(v.toUpperCase());
+      });
+    });
+
+    var colourReset = host.querySelector("#colourReset");
+    if (colourReset) {
+      colourReset.addEventListener("click", function () {
+        delete window.Editor.spec().tokens.colour;
+        window.Editor.onChange("design:colour");
+        refresh();
+        window.EditorUI.stylesPanel(host);
+      });
+    }
 
     /* One slider row for a type-scale token.
 

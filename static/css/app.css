@@ -1019,6 +1019,50 @@ textarea { resize: vertical; min-height: 96px; }
 }
 .field input[type="range"] { width: 100%; }
 .field output { font-size: .72rem; color: var(--ink-2); }
+
+/* Brand colours: a swatch to click, a hex to paste. The hex field is not a
+   convenience - pasting #B04A26 out of a brand guide is what people do, and
+   a bare colour input makes that impossible. */
+.brand-colours {
+  margin: .9rem 0 0;
+  padding: .8rem .75rem .6rem;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.brand-colours legend {
+  padding: 0 .35rem;
+  font-size: .72rem;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.brand-row { margin-bottom: .5rem; }
+.brand-inputs { display: flex; align-items: center; gap: .45rem; }
+.brand-inputs input[type="color"] {
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.brand-inputs .hex-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: .4rem .5rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: .82rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase;
+}
+.brand-colours .btn-ghost { margin-top: .2rem; }
 .colour-row { display: flex; align-items: center; gap: .4rem; }
 .colour-row input[type="color"] {
   width: 40px;

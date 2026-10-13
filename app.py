@@ -245,16 +245,23 @@ def api_plan():
     section_types = _sections_for(kind, goal)
     site_name = (body.get("siteName") or _name_from(description)).strip()[:60]
 
+    ctx = {
+        "siteName": site_name,
+        "type": kind,
+        "goal": goal,
+        "description": description,
+        "sections": section_types,
+    }
+
     try:
-        written = gemini.generate_plan({
-            "siteName": site_name,
-            "type": kind,
-            "goal": goal,
-            "description": description,
-            "sections": section_types,
-        })
-    except gemini.GeminiError as exc:
-        return jsonify(error="ai_unavailable", detail=str(exc)), 502
+        written = gemini.generate_plan(ctx)
+    except gemini.GeminiError:
+        # A slow or unreachable model must not cost someone their first run.
+        # Measured: a trivial Gemini call took 161s, so this path is not
+        # theoretical. The plan still builds, the sections are the same
+        # ones the taxonomy recommended, and source="fallback" tells the
+        # browser to say so rather than pass the copy off as AI-written.
+        written = gemini.fallback_plan(ctx)
 
     return jsonify(
         type=kind,
@@ -263,6 +270,7 @@ def api_plan():
         headline=written.get("headline", ""),
         tagline=written.get("tagline", ""),
         sections=written.get("sections", []),
+        source=written.get("source", "ai"),
     )
 
 

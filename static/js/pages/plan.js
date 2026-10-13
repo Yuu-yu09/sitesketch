@@ -213,7 +213,19 @@
 
           renderRecs();
           goStep(3);
-          SS.toast("Drafted as a " + draft.type + " site — review it below", "bi-lightning");
+
+          /* Say which one it was. The writing service can be slow enough
+             that the plan is served from our own copy library instead, and
+             telling someone the model wrote words it did not write is not
+             a small thing to get wrong. */
+          if (draft.source === "fallback") {
+            SS.toast(
+              "The writing service was slow, so we drafted it from our templates — edit anything you like",
+              "bi-info-circle"
+            );
+          } else {
+            SS.toast("Drafted as a " + draft.type + " site — review it below", "bi-lightning");
+          }
         });
       });
     })();

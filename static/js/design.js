@@ -207,10 +207,84 @@
   var RADII = ["0px", "4px", "10px", "999px"];
   var SPACES = { compact: 0.8, comfy: 1, airy: 1.35 };
 
+  /* ---------- brand colours ----------
+     A palette is eight interlocking colours and nobody can pick eight
+     sensible ones. What a shopkeeper actually has is a brand colour, a
+     background and an ink colour, so those three are exposed and the
+     remaining five are derived from them.
+
+     Derived rather than chosen because each one exists to make the other
+     three readable: surface has to sit against bg, muted has to stay
+     legible against text, and line has to be visible without shouting.
+     Asking for them invites five bad decisions. */
+
+  var INK = "#16181D";
+  var PAPER = "#FFFFFF";
+
+  function hex(v) {
+    return /^#[0-9a-f]{6}$/i.test(String(v || "")) ? String(v).toUpperCase() : null;
+  }
+  function rgb(hexv) {
+    var n = parseInt(hexv.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function luminance(hexv) {
+    function lin(c) {
+      c /= 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+    var c = rgb(hexv);
+    return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+  }
+  function mix(a, b, t) {
+    var x = rgb(a), y = rgb(b);
+    function h(n) {
+      var s = Math.max(0, Math.min(255, Math.round(n))).toString(16);
+      return s.length === 1 ? "0" + s : s;
+    }
+    return "#" + h(x.r + (y.r - x.r) * t) + h(x.g + (y.g - x.g) * t) + h(x.b + (y.b - x.b) * t);
+  }
+  D.mix = mix;
+  D.readableInk = function (bg) {
+    return luminance(bg) > 0.45 ? "#14110A" : "#FFFFFF";
+  };
+
+  /* Applies spec.tokens.colour on top of the chosen palette. Anything the
+     user did not set keeps the palette's value, so a partial brand set -
+     just an accent, say - still produces a coherent page. */
+  D.applyBrand = function (base, spec) {
+    var u = (spec.tokens || {}).colour || {};
+    var c = {};
+    Object.keys(base).forEach(function (k) { c[k] = base[k]; });
+
+    if (hex(u.bg)) c.bg = hex(u.bg);
+    if (hex(u.text)) c.text = hex(u.text);
+
+    /* Accent first, then everything keyed off it. */
+    if (hex(u.accent)) c.accent = hex(u.accent);
+    if (hex(u.accent)) c.accentInk = D.readableInk(c.accent);
+
+    /* Surface sits just off the background rather than a fixed white, so a
+       dark brand background does not produce white cards punched out of it. */
+    c.surface = mix(c.bg, c.text, 0.04);
+
+    /* Muted is the text colour pulled back toward the background. */
+    c.muted = mix(c.text, c.bg, 0.42);
+
+    /* Hairlines need to be visible but not loud. */
+    c.line = mix(c.text, c.bg, 0.82);
+
+    /* The soft tint carries the accent, so buttons and chips stay on brand. */
+    c.soft = mix(c.bg, c.accent, 0.14);
+
+    return c;
+  };
+
   D.resolvePalette = function (spec) {
     var t = spec.tokens || {};
-    if (t.colors) return t.colors;                    /* inline (future Gemini output) */
-    return D.paletteById(t.palette).c;
+    var base = t.colors || D.paletteById(t.palette).c;  /* inline wins, else the palette */
+    /* The user's own brand colours sit on top of whichever of those it is. */
+    return t.colour ? D.applyBrand(base, spec) : base;
   };
 
   D.resolveFont = function (spec) {
