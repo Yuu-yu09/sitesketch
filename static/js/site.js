@@ -712,7 +712,12 @@
       var sub = kids
         ? '<div class="ss-submenu" data-submenu>' + kids + "</div>"
         : "";
-      return '<div class="ss-navitem"' + (item.children.length ? " has-sub" : "") + ">" +
+      /* has-sub belongs INSIDE the class attribute. Appending it after the
+         closing quote produced <div class="ss-navitem" has-sub=""> - a stray
+         boolean attribute that matched no selector, so .ss-navitem.has-sub
+         never applied and the submenu could never open. */
+      var cls = "ss-navitem" + (item.children.length ? " has-sub" : "");
+      return '<div class="' + cls + '">' +
         link(item.pageId, item.label, false) + sub + "</div>";
     }).join("");
 

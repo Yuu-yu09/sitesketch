@@ -608,13 +608,27 @@ def run(page, phase=None):
     check("brand colours survive a reload", t_brand_colours_survive_a_reload)
     def t_menu_panel_lists_every_page():
         """The menu is its own list now, not something derived from the
-        pages, so it has to start out containing all of them."""
+        pages, so it has to start out containing all of them.
+
+        Adds a second page first: reordering, submenus and deleting a page
+        are all meaningless with only one page, and a single-page project is
+        what the rest of this suite happens to have."""
+        page.click("#addPage")
+        page.wait_for_selector('.menu-row, .panel-section', timeout=8000)
+        page.wait_for_timeout(500)
+        # naming it, because an unnamed page reads as "Page 2" everywhere
+        page.evaluate("() => {"
+                      "  const plan = window.Editor.plan;"
+                      "  plan.pages[plan.pages.length - 1].name = 'About';"
+                      "  window.Editor.render(); }")
+
         page.click("#menuBtn")
         page.wait_for_timeout(400)
         assert page.locator("#menuBtn").get_attribute("aria-pressed") == "true", \
             "the menu panel did not open"
         labels = page.locator(".menu-row input[data-nav-label]").count()
         page_count = page.evaluate("() => window.Editor.plan.pages.length")
+        assert page_count >= 2, f"setup failed, only {page_count} page(s)"
         assert labels == page_count, \
             f"menu shows {labels} items for {page_count} pages"
 
@@ -636,14 +650,16 @@ def run(page, phase=None):
         count_before = page.locator(".ss-navitem").count()
         page.evaluate("() => {"
                       "  const plan = window.Editor.plan;"
+                      "  plan.nav = plan.nav || plan.pages.map(p => ({ pageId: p.id,"
+                      "    label: '', visible: true, children: [] }));"
                       "  plan.nav[0].visible = false;"
                       "  window.Editor.render(); window.Editor.onChange('nav'); }")
         page.wait_for_timeout(400)
         count_after = page.locator(".ss-navitem").count()
         assert count_after == count_before - 1, \
             f"hiding a menu item changed {count_before} -> {count_after}"
-        assert page.evaluate("() => window.Editor.plan.pages.length") == \
-            page.evaluate("() => window.Editor.plan.pages.length"), "pages were touched"
+        pages_now = page.evaluate("() => window.Editor.plan.pages.length")
+        assert pages_now >= 2, f"hiding a menu item deleted a page ({pages_now} left)"
 
         # put it back, so later checks see a whole menu
         page.evaluate("() => {"
@@ -680,6 +696,20 @@ def run(page, phase=None):
         assert page.locator(".ss-navitem.has-sub").count() > 0, \
             "the parent is not marked as having a submenu"
 
+        # The class existing is not the same as the menu opening. The first
+        # version of this put has-sub outside the class attribute, so the
+        # element matched nothing and the submenu could never open - and a
+        # count-only assertion is exactly what let that through.
+        parent = page.locator(".ss-navitem.has-sub").first
+        submenu = parent.locator(".ss-submenu")
+        assert submenu.count() == 1, "no submenu inside the parent"
+        hidden = submenu.evaluate("el => getComputedStyle(el).display")
+        assert hidden == "none", f"the submenu starts open ({hidden})"
+        parent.hover()
+        page.wait_for_timeout(300)
+        shown = submenu.evaluate("el => getComputedStyle(el).display")
+        assert shown != "none", "hovering the parent did not open the submenu"
+
     def t_deleting_a_page_drops_it_from_the_menu():
         """A saved menu that points at a deleted page must not render a dead
         link - that is exactly the bug that shipped once already with page
@@ -687,25 +717,30 @@ def run(page, phase=None):
         page.evaluate("() => {"
                       "  const plan = window.Editor.plan;"
                       "  const victim = plan.pages[1];"
+                      "  if (!victim) return;"
                       "  plan.nav = plan.pages.map(p => ({ pageId: p.id, label: '',"
                       "    visible: true, children: [] }));"
                       "  plan.nav[0].children = [{ pageId: victim.id, label: 'Doomed' }];"
                       "  window.Editor.render(); }")
         page.wait_for_timeout(300)
-        assert page.locator(".ss-submenu a").count() > 0, "setup failed"
+        assert page.locator(".ss-submenu a").count() > 0, \
+            "setup failed: no submenu to delete a page out of"
 
         page.evaluate("() => {"
                       "  const plan = window.Editor.plan;"
                       "  plan.pages.splice(1, 1);"
                       "  window.Editor.render(); }")
         page.wait_for_timeout(400)
-        texts = page.evaluate(
-            "() => Array.from(document.querySelectorAll('.ss-navlinks a'))"
-            ".map(a => a.getAttribute('href'))")
-        assert not any(t == "#" + (page.evaluate("() => window.Editor.plan.pages[0].id") or "")
-                       for t in texts), f"a dead menu link survived: {texts}"
         assert page.locator(".ss-submenu a").count() == 0, \
             "the submenu still points at a page that no longer exists"
+        # and no link anywhere points at the deleted id
+        ids = page.evaluate("() => window.Editor.plan.pages.map(p => p.id)")
+        hrefs = page.evaluate(
+            "() => Array.from(document.querySelectorAll('.ss-navlinks a'))"
+            ".map(a => a.getAttribute('href'))")
+        dead = [h for h in hrefs if any(h == "#" + i for i in ids) is False
+                and h.startswith("#")]
+        assert not dead, f"dead menu links survived: {dead}"
 
     check("menu panel lists every page", t_menu_panel_lists_every_page)
     check("renaming a menu item changes the nav", t_renaming_a_menu_item_changes_the_nav)
