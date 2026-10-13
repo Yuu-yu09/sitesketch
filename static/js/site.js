@@ -623,6 +623,51 @@
     return out || "home";
   };
 
+  /* The menu is a separate structure from the pages.
+
+     Pages are what exist; the menu is which of them a visitor is shown, in
+     what order, under what name, and what hangs beneath. Deriving one from
+     the other means a page cannot be renamed in the menu, reordered, hidden,
+     or nested - and the nav is the second most looked-at thing on a small
+     business site after the hero.
+
+     plan.nav is optional. A plan without one keeps working and renders every
+     page in order, which is what every site made before this existed does. */
+  function navItems(plan) {
+    var pages = plan.pages || [];
+    if (Array.isArray(plan.nav) && plan.nav.length) {
+      /* Drop entries whose page has since been deleted, rather than
+         rendering a link to nothing. */
+      var seen = {};
+      return plan.nav
+        .filter(function (item) {
+          if (!item || !item.pageId || seen[item.pageId]) return false;
+          seen[item.pageId] = true;
+          return pages.some(function (p) { return p.id === item.pageId; });
+        })
+        .map(function (item) {
+          return {
+            pageId: item.pageId,
+            label: String(item.label || ""),
+            visible: item.visible !== false,
+            children: Array.isArray(item.children)
+              ? item.children.filter(function (c) {
+                  return c && c.pageId &&
+                    pages.some(function (p) { return p.id === c.pageId; });
+                }).map(function (c) {
+                  return { pageId: c.pageId, label: String(c.label || "") };
+                })
+              : []
+          };
+        });
+    }
+    /* no saved menu yet: every page, in order, under its own name */
+    return pages.map(function (p) {
+      return { pageId: p.id, label: "", visible: true, children: [] };
+    });
+  }
+  SS.navItems = navItems;
+
   function navHTML(plan, pageId, spec, options) {
     options = options || {};
     var meta = plan.meta || {};
@@ -641,11 +686,36 @@
                                          : options.pageBase + "/" + key;
     }
 
-    var links = pages.map(function (p) {
-      return '<a href="' + esc(hrefFor(p.id)) + '"' +
-        (p.id === pageId ? ' aria-current="page" style="color:var(--text)"' : "") + ">" +
-        esc(p.name) + "</a>";
+    function nameOf(target, label) {
+      if (label) return label;
+      var page = pages.filter(function (p) { return p.id === target; })[0];
+      return page ? page.name : "";
+    }
+
+    /* `target` rather than `pageId`: naming it pageId shadowed the current
+       page and made every link render as the current one. */
+    function link(target, label, sub) {
+      var current = target === pageId;
+      return '<a href="' + esc(hrefFor(target)) + '"' +
+        (current ? ' aria-current="page" style="color:var(--text)"' : "") +
+        (sub ? ' class="ss-sublink"' : "") + ">" +
+        esc(nameOf(target, label)) + "</a>";
+    }
+
+    var items = navItems(plan).filter(function (i) { return i.visible; });
+    var links = items.map(function (item) {
+      var kids = item.children.map(function (c) {
+        return link(c.pageId, c.label, true);
+      }).join("");
+      /* Only wrap in a submenu container when there is something to put in
+         it, so a flat menu stays flat markup. */
+      var sub = kids
+        ? '<div class="ss-submenu" data-submenu>' + kids + "</div>"
+        : "";
+      return '<div class="ss-navitem"' + (item.children.length ? " has-sub" : "") + ">" +
+        link(item.pageId, item.label, false) + sub + "</div>";
     }).join("");
+
     var style = spec.nav || "bar";
     var cls = style === "outline" ? "ss-nav ss-nav--outline" : style === "minimal" ? "ss-nav ss-nav--minimal" : "ss-nav ss-nav--bar";
     return '<nav class="' + cls + '"><div class="ss-wrap ss-navrow">' +

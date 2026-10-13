@@ -606,6 +606,113 @@ def run(page, phase=None):
     check("brand derives readable ink", t_brand_derives_readable_ink)
     check("a partial brand set stays coherent", t_partial_brand_set_stays_coherent)
     check("brand colours survive a reload", t_brand_colours_survive_a_reload)
+    def t_menu_panel_lists_every_page():
+        """The menu is its own list now, not something derived from the
+        pages, so it has to start out containing all of them."""
+        page.click("#menuBtn")
+        page.wait_for_timeout(400)
+        assert page.locator("#menuBtn").get_attribute("aria-pressed") == "true", \
+            "the menu panel did not open"
+        labels = page.locator(".menu-row input[data-nav-label]").count()
+        page_count = page.evaluate("() => window.Editor.plan.pages.length")
+        assert labels == page_count, \
+            f"menu shows {labels} items for {page_count} pages"
+
+    def t_renaming_a_menu_item_changes_the_nav():
+        before = page.locator(".ss-navlinks a").first.inner_text()
+        field = page.locator('.menu-row input[data-nav-label]').first
+        field.fill("Our work")
+        page.wait_for_timeout(500)
+        after = page.locator(".ss-navlinks a").first.inner_text()
+        assert after.strip() == "Our work", \
+            f"the nav still says {after.strip()!r}, expected 'Our work'"
+        assert page.evaluate(
+            "() => window.Editor.plan.nav[0].label") == "Our work", \
+            "the label was not written to the plan"
+
+    def t_a_page_can_be_taken_out_of_the_menu():
+        """Not deleted - still there, just not shown. A visitor should not
+        see a page that is still perfectly editable."""
+        count_before = page.locator(".ss-navitem").count()
+        page.evaluate("() => {"
+                      "  const plan = window.Editor.plan;"
+                      "  plan.nav[0].visible = false;"
+                      "  window.Editor.render(); window.Editor.onChange('nav'); }")
+        page.wait_for_timeout(400)
+        count_after = page.locator(".ss-navitem").count()
+        assert count_after == count_before - 1, \
+            f"hiding a menu item changed {count_before} -> {count_after}"
+        assert page.evaluate("() => window.Editor.plan.pages.length") == \
+            page.evaluate("() => window.Editor.plan.pages.length"), "pages were touched"
+
+        # put it back, so later checks see a whole menu
+        page.evaluate("() => {"
+                      "  window.Editor.plan.nav[0].visible = true;"
+                      "  window.Editor.render(); window.Editor.onChange('nav'); }")
+        page.wait_for_timeout(300)
+
+    def t_menu_items_can_be_reordered():
+        order_before = page.evaluate(
+            "() => Array.from(document.querySelectorAll('.ss-navlinks a'))"
+            ".map(a => a.textContent.trim())")
+        page.locator('.menu-row [data-nav-down]').first.click()
+        page.wait_for_timeout(500)
+        order_after = page.evaluate(
+            "() => Array.from(document.querySelectorAll('.ss-navlinks a'))"
+            ".map(a => a.textContent.trim())")
+        assert order_after != order_before, "the menu order did not change"
+        assert order_after[1] == order_before[0], \
+            f"expected the first item to move down: {order_before} -> {order_after}"
+
+    def t_a_submenu_renders_and_survives():
+        """A submenu has to be real markup in the published page, not an
+        editor affordance that vanishes on publish."""
+        page.evaluate("() => {"
+                      "  const plan = window.Editor.plan;"
+                      "  const second = plan.pages[1];"
+                      "  if (!second) return;"
+                      "  plan.nav = plan.nav || plan.pages.map(p =>"
+                      "    ({ pageId: p.id, label: '', visible: true, children: [] }));"
+                      "  plan.nav[0].children = [{ pageId: second.id, label: 'More' }];"
+                      "  window.Editor.render(); window.Editor.onChange('nav'); }")
+        page.wait_for_timeout(500)
+        assert page.locator(".ss-submenu a").count() > 0, "no submenu was rendered"
+        assert page.locator(".ss-navitem.has-sub").count() > 0, \
+            "the parent is not marked as having a submenu"
+
+    def t_deleting_a_page_drops_it_from_the_menu():
+        """A saved menu that points at a deleted page must not render a dead
+        link - that is exactly the bug that shipped once already with page
+        keys."""
+        page.evaluate("() => {"
+                      "  const plan = window.Editor.plan;"
+                      "  const victim = plan.pages[1];"
+                      "  plan.nav = plan.pages.map(p => ({ pageId: p.id, label: '',"
+                      "    visible: true, children: [] }));"
+                      "  plan.nav[0].children = [{ pageId: victim.id, label: 'Doomed' }];"
+                      "  window.Editor.render(); }")
+        page.wait_for_timeout(300)
+        assert page.locator(".ss-submenu a").count() > 0, "setup failed"
+
+        page.evaluate("() => {"
+                      "  const plan = window.Editor.plan;"
+                      "  plan.pages.splice(1, 1);"
+                      "  window.Editor.render(); }")
+        page.wait_for_timeout(400)
+        texts = page.evaluate(
+            "() => Array.from(document.querySelectorAll('.ss-navlinks a'))"
+            ".map(a => a.getAttribute('href'))")
+        assert not any(t == "#" + (page.evaluate("() => window.Editor.plan.pages[0].id") or "")
+                       for t in texts), f"a dead menu link survived: {texts}"
+        assert page.locator(".ss-submenu a").count() == 0, \
+            "the submenu still points at a page that no longer exists"
+
+    check("menu panel lists every page", t_menu_panel_lists_every_page)
+    check("renaming a menu item changes the nav", t_renaming_a_menu_item_changes_the_nav)
+    check("a page can be taken out of the menu", t_a_page_can_be_taken_out_of_the_menu)
+    check("menu items can be reordered", t_menu_items_can_be_reordered)
+    check("a submenu renders", t_a_submenu_renders_and_survives)
+    check("deleting a page drops it from the menu", t_deleting_a_page_drops_it_from_the_menu)
     check("footer text is editable", t_footer_is_editable)
     check("device preview switches between phone, tablet and desktop", t_device_preview_switches)
 

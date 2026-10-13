@@ -1148,6 +1148,56 @@ textarea { resize: vertical; min-height: 96px; }
 .field input[type="range"] { width: 100%; height: 24px; }
 .field output { font-size: .72rem; color: var(--ink-2); }
 
+/* ---------- the menu panel ---------- */
+.menu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.menu-row {
+  padding: .4rem;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: #fff;
+}
+/* a hidden item stays in the list but is visibly struck out, because
+   "hidden" is a state you may want to undo rather than something to
+   reconstruct from memory */
+.menu-row.is-hidden { opacity: .55; background: var(--paper); }
+.menu-row.is-hidden .menu-row-main input { text-decoration: line-through; }
+.menu-row-main { display: flex; align-items: center; gap: .3rem; }
+.menu-row-main input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: .4rem .5rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  font: inherit;
+  font-size: .85rem;
+}
+.menu-sublist {
+  list-style: none;
+  margin: .35rem 0 0;
+  padding: 0 0 0 .7rem;
+  border-left: 2px solid var(--hairline);
+  display: grid;
+  gap: .3rem;
+}
+.menu-sub { display: flex; align-items: center; gap: .3rem; }
+.menu-sub input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: .35rem .45rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  font: inherit;
+  font-size: .82rem;
+}
+.menu-add { margin: .45rem 0 0; }
+
+@media (pointer: coarse) {
+  .menu-row-main .icon-btn,
+  .menu-sub .icon-btn { width: 44px; height: 44px; }
+  .menu-row-main input[type="text"],
+  .menu-sub input[type="text"] { min-height: 44px; }
+}
+
 /* Brand colours: a swatch to click, a hex to paste. The hex field is not a
    convenience - pasting #B04A26 out of a brand guide is what people do, and
    a bare colour input makes that impossible. */

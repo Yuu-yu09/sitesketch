@@ -214,6 +214,10 @@
         if (!shell.classList.contains("panel-closed") && panelMode === "footer") closePanel();
         else openPanel("footer");
       });
+      document.getElementById("menuBtn").addEventListener("click", function () {
+        if (!shell.classList.contains("panel-closed") && panelMode === "menu") closePanel();
+        else openPanel("menu");
+      });
       document.getElementById("panelClose").addEventListener("click", closePanel);
 
       /* the left rail collapses too, so the page can use the whole screen */
@@ -312,7 +316,7 @@
       var panelBody = document.getElementById("panelBody");
       var panelTitle = document.getElementById("panelTitle");
       var shell = document.getElementById("shell");
-      var PANEL_TITLES = { styles: "Design", block: "This section", footer: "Footer" };
+      var PANEL_TITLES = { styles: "Design", block: "This section", footer: "Footer", menu: "Menu" };
 
       function openPanel(mode) {
         panelMode = mode;
@@ -320,13 +324,15 @@
         panelTitle.textContent = PANEL_TITLES[mode] || "Design";
         document.getElementById("stylesBtn").setAttribute("aria-pressed", String(mode === "styles"));
         document.getElementById("footerBtn").setAttribute("aria-pressed", String(mode === "footer"));
+        document.getElementById("menuBtn").setAttribute("aria-pressed", String(mode === "menu"));
         renderPanel();
       }
 
       function closePanel() {
         shell.classList.add("panel-closed");
-        document.getElementById("stylesBtn").setAttribute("aria-pressed", String(false));
-        document.getElementById("footerBtn").setAttribute("aria-pressed", String(false));
+        ["stylesBtn", "footerBtn", "menuBtn"].forEach(function (id) {
+          document.getElementById(id).setAttribute("aria-pressed", String(false));
+        });
       }
 
       function renderPanel() {
@@ -335,6 +341,7 @@
           panelTitle.textContent = "Photo";
           EditorUI.photoPanel(panelBody, photoTarget && photoTarget.sectionId, photoTarget && photoTarget.index);
         } else if (panelMode === "footer") EditorUI.footerPanel(panelBody);
+        else if (panelMode === "menu") EditorUI.menuPanel(panelBody);
         else if (panelMode === "block") EditorUI.blockPanel(panelBody);
         else EditorUI.stylesPanel(panelBody);
       }

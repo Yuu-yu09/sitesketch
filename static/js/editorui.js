@@ -545,6 +545,218 @@
   /* Editing the footer is the same idea as editing a block: click the
      text and type. Social link URLs cannot be typed inline, so they get
      real inputs here. */
+  /* The menu, edited as its own list rather than derived from the pages.
+
+     Rename, reorder, hide, and nest one level. That is the whole set: a
+     second level of nesting is where menus start becoming unmaintainable,
+     and nobody's small business site needs it.
+
+     An empty label means "use the page's own name", so renaming a page in
+     the rail still updates the menu without anyone touching this panel. */
+EditorUI.menuPanel = function (host) {
+    var Editor = window.Editor;
+    var plan = Editor.plan;
+    var SSr = window.SS;
+
+    /* Write the full menu back, so a page that was never in it stays out. */
+    function write() {
+      plan.nav = items;
+      Editor.render();
+      if (Editor.onChange) Editor.onChange("nav");
+    }
+
+    /* Structural changes rebuild the panel; typing does not.
+       commit() re-rendering the list would pull focus out of the input on
+       every keystroke, which makes the field unusable. write() persists
+       without touching the panel. */
+    function commit() {
+      write();
+      EditorUI.menuPanel(host);
+    }
+
+    function current() {
+      var items = SSr.navItems(plan).map(function (i) {
+        return {
+          pageId: i.pageId, label: i.label, visible: i.visible,
+          children: (i.children || []).map(function (c) {
+            return { pageId: c.pageId, label: c.label };
+          })
+        };
+      });
+      return items;
+    }
+
+    var items = current();
+    var pages = plan.pages || [];
+
+    function pageName(id) {
+      var p = pages.filter(function (x) { return x.id === id; })[0];
+      return p ? p.name : "(deleted page)";
+    }
+
+    /* Pages not yet in the menu, so they can be added. */
+    var inMenu = {};
+    items.forEach(function (i) {
+      inMenu[i.pageId] = true;
+      (i.children || []).forEach(function (c) { inMenu[c.pageId] = true; });
+    });
+    var spare = pages.filter(function (p) { return !inMenu[p.id]; });
+
+    function childRows(item) {
+      return (item.children || []).map(function (c, ci) {
+        return '<li class="menu-sub">' +
+          '<input type="text" data-nav-child="' + item.pageId + ':' + ci +
+            '" value="' + SSr.esc(c.label) + '" placeholder="' +
+            SSr.esc(pageName(c.pageId)) + '" aria-label="Submenu label">' +
+          '<button type="button" class="icon-btn" data-nav-child-up="' +
+            item.pageId + ":" + ci + '" aria-label="Move up">' +
+            '<i class="bi bi-arrow-up" aria-hidden="true"></i></button>' +
+          '<button type="button" class="icon-btn danger" data-nav-child-rm="' +
+            item.pageId + ":" + ci + '" aria-label="Remove from submenu">' +
+            '<i class="bi bi-x-lg" aria-hidden="true"></i></button>' +
+        "</li>";
+      }).join("");
+    }
+
+    var rows = items.map(function (item, i) {
+      return '<li class="menu-row' + (item.visible ? "" : " is-hidden") + '">' +
+        '<div class="menu-row-main">' +
+          '<button type="button" class="icon-btn" data-nav-up="' + i +
+            '" aria-label="Move up" title="Move up"' +
+            (i === 0 ? " disabled" : "") + ">" +
+            '<i class="bi bi-arrow-up" aria-hidden="true"></i></button>' +
+          '<button type="button" class="icon-btn" data-nav-down="' + i +
+            '" aria-label="Move down" title="Move down"' +
+            (i === items.length - 1 ? " disabled" : "") + ">" +
+            '<i class="bi bi-arrow-down" aria-hidden="true"></i></button>' +
+          '<input type="text" data-nav-label="' + i + '" value="' +
+            SSr.esc(item.label) + '" placeholder="' + SSr.esc(pageName(item.pageId)) +
+            '" aria-label="Menu label for ' + SSr.esc(pageName(item.pageId)) + '">' +
+          '<button type="button" class="icon-btn" data-nav-toggle="' + i +
+            '" aria-pressed="' + (item.visible ? "true" : "false") +
+            '" title="' + (item.visible ? "Hide from menu" : "Show in menu") +
+            '" aria-label="' + (item.visible ? "Hide from menu" : "Show in menu") + '">' +
+            '<i class="bi bi-eye' + (item.visible ? "" : "-slash") +
+            '" aria-hidden="true"></i></button>' +
+        "</div>" +
+        (item.children && item.children.length
+          ? '<ul class="menu-sublist">' + childRows(item) + "</ul>" : "") +
+        (spare.length
+          ? '<label class="field menu-add"><span>Under this</span>' +
+            '<select data-nav-add="' + i + '">' +
+              '<option value="">Add a page…</option>' +
+              spare.map(function (p) {
+                return '<option value="' + p.id + '">' + SSr.esc(p.name) + "</option>";
+              }).join("") +
+            "</select></label>"
+          : "") +
+      "</li>";
+    }).join("");
+
+    host.innerHTML =
+      '<div class="panel-section">' +
+        "<h3>Menu</h3>" +
+        '<p class="hint">What visitors see along the top. Leave a label empty to use the page name.</p>' +
+        (items.length
+          ? '<ul class="menu-list">' + rows + "</ul>"
+          : '<p class="hint">No pages yet.</p>') +
+        (spare.length
+          ? '<label class="field"><span>Add to the menu</span>' +
+            '<select id="navAddTop">' +
+              '<option value="">Choose a page…</option>' +
+              spare.map(function (p) {
+                return '<option value="' + p.id + '">' + SSr.esc(p.name) + "</option>";
+              }).join("") +
+            "</select></label>"
+          : "") +
+      "</div>";
+
+    /* ---- wiring ---- */
+
+    var labelInput = function (ev) { return ev.target.closest("[data-nav-label]"); };
+
+    host.addEventListener("input", function (ev) {
+      var t = ev.target;
+      var lab = t.closest("[data-nav-label]");
+      if (lab) {
+        items[Number(lab.getAttribute("data-nav-label"))].label = t.value;
+        /* write(), not commit(): the panel must survive the keystroke or the
+           field loses focus after one character. This is also what actually
+           persists the menu - editing a label on a menu that was only ever
+           derived from the pages had nowhere to go. */
+        write();
+        return;
+      }
+      var child = t.closest("[data-nav-child]");
+      if (child) {
+        var bits = child.getAttribute("data-nav-child").split(":");
+        var owner = items.filter(function (x) { return x.pageId === bits[0]; })[0];
+        if (owner) owner.children[Number(bits[1])].label = t.value;
+        write();
+      }
+    });
+
+    host.addEventListener("change", function (ev) {
+      var t = ev.target;
+      var addTop = t.closest("#navAddTop");
+      if (addTop && addTop.value) {
+        items.push({ pageId: addTop.value, label: "", visible: true, children: [] });
+        commit();
+        return;
+      }
+      var addSub = t.closest("[data-nav-add]");
+      if (addSub && addSub.value) {
+        var idx = Number(addSub.getAttribute("data-nav-add"));
+        items[idx].children = items[idx].children || [];
+        items[idx].children.push({ pageId: addSub.value, label: "" });
+        commit();
+      }
+    });
+
+    host.addEventListener("click", function (ev) {
+      var t = ev.target;
+      function act(attr, fn) {
+        var b = t.closest("[" + attr + "]");
+        if (!b) return false;
+        fn(Number(b.getAttribute(attr)));
+        return true;
+      }
+      if (act("data-nav-up", function (i) {
+        if (i <= 0) return;
+        var tmp = items[i - 1]; items[i - 1] = items[i]; items[i] = tmp;
+        commit();
+      })) return;
+      if (act("data-nav-down", function (i) {
+        if (i >= items.length - 1) return;
+        var tmp = items[i + 1]; items[i + 1] = items[i]; items[i] = tmp;
+        commit();
+      })) return;
+      if (act("data-nav-toggle", function (i) {
+        items[i].visible = !items[i].visible;
+        commit();
+      })) return;
+      /* Child buttons carry a "pageId:index" key rather than a plain number,
+         so they are handled outside act(). */
+      var rm = t.closest("[data-nav-child-rm]");
+      var up = t.closest("[data-nav-child-up]");
+      if (rm || up) {
+        var el = rm || up;
+        var bits = el.getAttribute(rm ? "data-nav-child-rm" : "data-nav-child-up").split(":");
+        var owner = items.filter(function (x) { return x.pageId === bits[0]; })[0];
+        if (owner) {
+          var ci = Number(bits[1]);
+          if (rm) owner.children.splice(ci, 1);
+          else {
+            var moved = owner.children.splice(ci, 1)[0];
+            owner.children.splice(ci - 1, 0, moved);
+          }
+          commit();
+        }
+        return;
+      }
+    });
+  };
+
   EditorUI.footerPanel = function (host) {
     var Editor = window.Editor;
     host.hidden = false;

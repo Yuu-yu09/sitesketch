@@ -155,6 +155,54 @@
 .ss-navlinks a { text-decoration: none; color: var(--muted); font-size: calc(.95rem * var(--type-scale, 1)); }
 .ss-navlinks a:hover { color: var(--text); }
 
+/* ---------- submenus ----------
+   A dropdown needs the parent to be its own box so the panel can sit under
+   the link rather than under the whole bar. */
+.ss-navitem { position: relative; display: flex; align-items: center; }
+.ss-submenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  display: none;
+  min-width: 180px;
+  padding: .4rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.ss-navitem.has-sub:hover > .ss-submenu,
+.ss-navitem.has-sub:focus-within > .ss-submenu { display: grid; }
+
+.ss-submenu a {
+  display: block;
+  padding: .5rem .6rem;
+  border-radius: 6px;
+  white-space: nowrap;
+  color: var(--text);
+}
+.ss-submenu a:hover { background: var(--soft); color: var(--text); }
+
+/* A hover-only menu is unusable on a phone, where there is no hover and the
+   first tap just follows the parent link. Below this width the submenu is
+   always shown, in flow, under its parent. */
+@media (max-width: 720px) {
+  .ss-navlinks { flex-wrap: wrap; gap: .6rem 1rem; }
+  .ss-navitem.has-sub { flex-wrap: wrap; }
+  .ss-submenu {
+    position: static;
+    display: grid;
+    box-shadow: none;
+    border: 0;
+    border-left: 2px solid var(--line);
+    border-radius: 0;
+    padding: 0 0 0 .7rem;
+    width: 100%;
+  }
+  .ss-submenu a { padding: .45rem 0; }
+}
+
 /* ---------- sections ----------
    Every block reads optional --sec-* overrides that the block settings
    panel writes. They all fall back to the site tokens, so a section with
