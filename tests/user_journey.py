@@ -34,6 +34,7 @@ from playwright.sync_api import expect, sync_playwright
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3000"
 PASSWORD = "chicken-karewa1"          # satisfies the password policy
 SLOW = 150_000                        # the AI step, generously
+EDIT_TEXT = "Edited by the journey test"
 results: list[tuple[str, bool, str]] = []
 
 
@@ -153,11 +154,30 @@ def run(page, log):
     def t_edit_text_inline():
         target = page.locator(".ss-sec [data-edit]").first
         target.click()
-        target.fill("Edited by the journey test")
+        target.fill(EDIT_TEXT)
         page.keyboard.press("Escape")
         page.wait_for_timeout(2000)              # let the autosave land
-        assert target.inner_text().strip() == "Edited by the journey test", \
-            f"the edit did not stick: {target.inner_text()!r}"
+
+        # The behaviour is "the edit reached the plan", so assert that, on
+        # the plan, exactly.
+        #
+        # Do NOT compare against inner_text() case-sensitively. inner_text
+        # returns *rendered* text, and several layouts set
+        # text-transform: uppercase, so a correctly-stored edit comes back
+        # as "EDITED BY THE JOURNEY TEST". That made this check fail about
+        # three runs in four, reporting "the edit did not stick" when it had
+        # stuck perfectly - a failure message that pointed away from the
+        # cause. Which element happens to be first, and so whether it is
+        # uppercased, varies with the layout the AI or the fallback picked.
+        stored = page.evaluate(
+            "(t) => { var s = window.Editor.plan.pages[0].sections[0];"
+            " return s.title === t || s.subtitle === t ||"
+            " JSON.stringify(s).indexOf(t) !== -1; }", EDIT_TEXT)
+        assert stored, "the edit never reached the plan"
+
+        shown = target.inner_text().strip()
+        assert shown.lower() == EDIT_TEXT.lower(), \
+            f"the edit is not on the page: {shown!r}"
         log("typed into the page itself")
 
     def t_the_edit_survives_a_reload():
@@ -165,7 +185,7 @@ def run(page, log):
         page.reload(wait_until="domcontentloaded")
         page.wait_for_selector(".ss-sec", timeout=SLOW)
         page.wait_for_timeout(1500)
-        assert "Edited by the journey test" in page.inner_text("body"), \
+        assert EDIT_TEXT.lower() in page.inner_text("body").lower(), \
             "the edit was lost on reload, so it was never saved"
 
     def t_nobody_was_asked_to_sign_in_again():
@@ -214,7 +234,7 @@ def run(page, log):
             p = other.new_page()
             p.goto(f"{BASE}/site/{slug}", wait_until="domcontentloaded")
             p.wait_for_timeout(400)
-            assert "Edited by the journey test" in p.inner_text("body"), \
+            assert EDIT_TEXT.lower() in p.inner_text("body").lower(), \
                 "the edit made in the builder is not on the published site"
         finally:
             other.close()

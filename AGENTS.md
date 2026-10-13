@@ -59,6 +59,20 @@ could never open. The count was right; the feature was broken.
 **If an assertion could pass while the feature is broken, rewrite it.** Hover
 the thing. Read the computed style. Check the value the user sees.
 
+**And the corollary, which cost three runs in four: `inner_text()` returns
+*rendered* text.** Several layouts set `text-transform: uppercase`, so
+comparing it case-sensitively against a string you typed fails while the edit
+worked perfectly. It reported *"the edit did not stick"* and sent the hunt
+after a race condition in `editor.js` that did not exist — the repro passed
+five times out of five.
+
+Which element is first, and so whether it is uppercased, varies with the
+layout the AI or the fallback happens to pick. That is what made it look
+intermittent rather than consistently broken.
+
+Assert the stored value for "did it save", and compare rendered text
+case-insensitively for "is it visible".
+
 ### 4. Measure, do not eyeball
 
 Every expensive bug found in this project was found by measuring:
