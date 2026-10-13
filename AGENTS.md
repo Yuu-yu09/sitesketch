@@ -12,7 +12,7 @@ pushed and only then found broken.
 .\.venv\Scripts\python.exe tests\run_all.py           # everything
 ```
 
-`run_all.py` runs eight gates and exits non-zero if any fails:
+`run_all.py` runs nine gates and exits non-zero if any fails:
 
 | # | Gate | Catches |
 |---|---|---|
@@ -20,10 +20,15 @@ pushed and only then found broken.
 | 2 | ESLint | shadows, undefined names, dead code |
 | 3 | JS scope check | out-of-scope `ctx` in `site.js` |
 | 4 | test ordering | a `check()` registered above its `def()` |
-| 5 | browser suite | the real UI, driven through Playwright |
-| 6 | user journey | one new user, nothing to a live site |
-| 7 | e2e suite | API level, including the AI endpoints |
-| 8 | responsive audit | phone / tablet / desktop, site and builder |
+| 5 | secret scan | credential-shaped strings in the tree or commit messages |
+| 6 | browser suite | the real UI, driven through Playwright |
+| 7 | user journey | one new user, nothing to a live site |
+| 8 | e2e suite | API level, including the AI endpoints |
+| 9 | responsive audit | phone / tablet / desktop, site and builder |
+
+Keep this table in step with `run_all.py`. It had already drifted once — the
+secret scan was added and the count was never updated, so the document
+described eight gates for a program that ran nine.
 
 Run the suites **one at a time**. They share a server and an IP address, and
 register/login are rate limited, so running them in parallel produces failures
