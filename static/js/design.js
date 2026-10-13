@@ -311,7 +311,14 @@
   D.cssVars = function (spec) {
     var c = D.resolvePalette(spec);
     var f = D.resolveFont(spec);
-    var u = spec.spaceUnit || SPACES[(spec.tokens || {}).space] || 1;
+    var t = spec.tokens || {};
+    var u = spec.spaceUnit || SPACES[t.space] || 1;
+    /* The type scale. Emitted unconditionally with a "no change" default
+       so there is one source of truth, matching the fallbacks in
+       generated.css. generated.css multiplies every font-size by
+       --type-scale, every line-height by --lh and offsets every
+       letter-spacing by --ls, so these three reach the entire site. */
+    var ty = t.type || {};
     return [
       "--bg:" + c.bg,
       "--surface:" + c.surface,
@@ -321,13 +328,16 @@
       "--accent-ink:" + c.accentInk,
       "--line:" + c.line,
       "--soft:" + c.soft,
-      "--radius:" + (spec.tokens.radius || "8px"),
+      "--radius:" + (t.radius || "8px"),
       "--font-display: '" + f.display.f + "', system-ui, sans-serif",
       "--font-body: '" + f.body.f + "', system-ui, sans-serif",
+      "--type-scale:" + (ty.scale == null ? 1 : ty.scale),
+      "--lh:" + (ty.lh == null ? 1 : ty.lh),
+      "--ls:" + ((ty.ls == null ? 0 : ty.ls) + "em"),
       "--pad:" + (64 * u) + "px",
       "--gap:" + (28 * u) + "px",
-      "--shadow:" + (spec.tokens.shadow === "flat" ? "none"
-        : spec.tokens.shadow === "crisp" ? "4px 4px 0 rgba(0,0,0,.9)".replace("rgba(0,0,0,.9)", "color-mix(in srgb, var(--text) 90%, transparent)")
+      "--shadow:" + (t.shadow === "flat" ? "none"
+        : t.shadow === "crisp" ? "4px 4px 0 rgba(0,0,0,.9)".replace("rgba(0,0,0,.9)", "color-mix(in srgb, var(--text) 90%, transparent)")
         : "0 12px 32px rgba(0,0,0,.10)")
     ].join(";");
   };

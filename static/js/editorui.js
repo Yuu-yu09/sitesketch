@@ -924,6 +924,20 @@
                 SS.esc(font.name) + "</option>";
             }).join("") +
           "</select></label>" +
+        /* Three sliders rather than nine dropdowns. Every size on the page
+           is a calc() against --type-scale, so this one control is the
+           whole type scale - and there is no way to set the heading size
+           without also changing the small print. */
+        typeSlider("scale", "Text size", 0.85, 1.3, 0.01,
+          function (v) { return Math.round(v * 100) + "%"; },
+          spec.tokens.type && spec.tokens.type.scale) +
+        typeSlider("lh", "Line spacing", 0.85, 1.5, 0.01,
+          function (v) { return v.toFixed(2); },
+          spec.tokens.type && spec.tokens.type.lh) +
+        typeSlider("ls", "Letter spacing", -0.02, 0.12, 0.005,
+          function (v) { return (v > 0 ? "+" : "") + (v * 1000).toFixed(0) + "/1000em"; },
+          spec.tokens.type && spec.tokens.type.ls) +
+        '<button class="btn btn-block btn-ghost" id="typeReset">Reset type size</button>' +
       "</div>" +
       '<div class="panel-section">' +
         "<h3>Layout</h3>" +
@@ -957,6 +971,61 @@
     if (paletteName && current) paletteName.textContent = current.name;
 
     host.querySelector("#swatchHost").appendChild(paletteSwatches(plan, refresh));
+
+    /* One slider row for a type-scale token.
+
+       `current` is undefined until someone touches it, which is not the
+       same as zero: text size defaults to 1 (100%), line spacing to 1 and
+       letter spacing to 0em. Reading a slider as 0 because nobody has
+       touched it yet would silently shrink every site to nothing. */
+    function typeSlider(key, label, min, max, step, format, current) {
+      var defaults = { scale: 1, lh: 1, ls: 0 };
+      var value = current == null ? defaults[key] : current;
+      var id = "type_" + key;
+      return '<label class="field" for="' + id + '">' +
+        "<span>" + label +
+          ' <output id="' + id + '_out">' + format(value) + "</output></span>" +
+        '<input type="range" id="' + id + '" min="' + min + '" max="' + max +
+          '" step="' + step + '" value="' + value + '">' +
+      "</label>";
+    }
+
+    function bindTypeSlider(key, id) {
+      var input = host.querySelector("#" + id);
+      var out = host.querySelector("#" + id + "_out");
+      if (!input) return;
+      var spec2 = window.Editor.spec();
+      var ty = spec2.tokens.type || (spec2.tokens.type = {});
+      var format = key === "scale"
+        ? function (v) { return Math.round(v * 100) + "%"; }
+        : key === "lh"
+          ? function (v) { return v.toFixed(2); }
+          : function (v) { return (v > 0 ? "+" : "") + (v * 1000).toFixed(0) + "/1000em"; };
+      input.addEventListener("input", function () {
+        var v = parseFloat(this.value);
+        ty[key] = v;
+        if (out) out.textContent = format(v);
+        refresh();
+      });
+      /* The control lives outside the rendered page, so it is not wiped
+         by a repaint. Only the panel needs rebuilding, and only when the
+         value actually lands somewhere new. */
+      if (out) out.textContent = format(parseFloat(input.value));
+    }
+
+    bindTypeSlider("scale", "type_scale");
+    bindTypeSlider("lh", "type_lh");
+    bindTypeSlider("ls", "type_ls");
+
+    var typeReset = host.querySelector("#typeReset");
+    if (typeReset) {
+      typeReset.addEventListener("click", function () {
+        var s = window.Editor.spec();
+        delete s.tokens.type;
+        refresh();
+        window.EditorUI.stylesPanel(host);
+      });
+    }
 
     host.querySelector("#fontPick").addEventListener("change", function () {
       window.Editor.setToken("font", this.value); refresh();

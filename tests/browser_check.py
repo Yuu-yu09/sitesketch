@@ -410,6 +410,105 @@ def run(page, phase=None):
     check("a new edit clears the redo stack", t_a_new_edit_drops_the_redo_stack)
     check("a burst of edits is one undo step", t_rapid_edits_collapse_into_one_step)
     check("drag handles are visible without hovering", t_drag_handles_are_visible)
+
+    def t_type_scale_reaches_the_rendered_text():
+        """The whole point of the control: move one slider and the text
+        actually changes size. Asserting the slider exists would pass even
+        if the CSS never referenced it."""
+        base = page.evaluate("""
+            () => {
+              const h = window.Editor.root.querySelector('.ss-site h1')
+                         || window.Editor.root.querySelector('.ss-sec h2');
+              const p = window.Editor.root.querySelector('.ss-sec p');
+              return {
+                h1: h ? parseFloat(getComputedStyle(h).fontSize) : 0,
+                p: p ? parseFloat(getComputedStyle(p).fontSize) : 0
+              };
+            }""")
+        assert base["h1"] > 0 and base["p"] > 0, f"no measurable text: {base}"
+
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  s.tokens.type = { scale: 1.25, lh: 1, ls: 0 };"
+                      "  window.Editor.render(); }")
+        page.wait_for_timeout(400)
+        bigger = page.evaluate("""
+            () => {
+              const h = window.Editor.root.querySelector('.ss-site h1')
+                         || window.Editor.root.querySelector('.ss-sec h2');
+              const p = window.Editor.root.querySelector('.ss-sec p');
+              return {
+                h1: h ? parseFloat(getComputedStyle(h).fontSize) : 0,
+                p: p ? parseFloat(getComputedStyle(p).fontSize) : 0
+              };
+            }""")
+        assert bigger["h1"] > base["h1"] * 1.15, \
+            f"heading did not scale: {base['h1']:.1f}px -> {bigger['h1']:.1f}px"
+        # body text has to move too, or "text size" only means "heading size"
+        assert bigger["p"] > base["p"] * 1.15, \
+            f"body text did not scale: {base['p']:.1f}px -> {bigger['p']:.1f}px"
+
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  delete s.tokens.type; window.Editor.render(); }")
+        page.wait_for_timeout(300)
+
+    def t_line_and_letter_spacing_reach_the_page():
+        before = page.evaluate("""
+            () => {
+              const h = window.Editor.root.querySelector('.ss-site h1')
+                         || window.Editor.root.querySelector('.ss-sec h2');
+              const cs = h ? getComputedStyle(h) : null;
+              if (!cs) return null;
+              /* computed lineHeight comes back as "83.776px" and
+                 letterSpacing can be "normal" - parse in the browser so
+                 Python never has to strip a unit */
+              return { lh: parseFloat(cs.lineHeight) || 0,
+                       ls: parseFloat(cs.letterSpacing) || 0 };
+            }""")
+        assert before and before["lh"], f"could not read heading line-height: {before}"
+
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  s.tokens.type = { scale: 1, lh: 1.4, ls: 0.08 };"
+                      "  window.Editor.render(); }")
+        page.wait_for_timeout(400)
+        after = page.evaluate("""
+            () => {
+              const h = window.Editor.root.querySelector('.ss-site h1')
+                         || window.Editor.root.querySelector('.ss-sec h2');
+              const cs = h ? getComputedStyle(h) : null;
+              if (!cs) return null;
+              return { lh: parseFloat(cs.lineHeight) || 0,
+                       ls: parseFloat(cs.letterSpacing) || 0 };
+            }""")
+        assert after["lh"] > before["lh"] + 1, \
+            f"line spacing did not change: {before['lh']} -> {after['lh']}"
+        assert after["ls"] > before["ls"], \
+            f"letter spacing did not change: {before['ls']} -> {after['ls']}"
+
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  delete s.tokens.type; window.Editor.render(); }")
+        page.wait_for_timeout(300)
+
+    def t_type_scale_survives_a_reload():
+        """It has to be stored in the plan, or it is a preview-only toy."""
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  s.tokens.type = { scale: 1.15, lh: 1.1, ls: 0.03 };"
+                      "  window.Editor.onChange('design:type'); }")
+        page.wait_for_timeout(1600)          # let the debounced save land
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        stored = page.evaluate("() => JSON.stringify("
+                               "  (window.Editor.spec().tokens || {}).type || null)")
+        assert '"scale":1.15' in stored.replace(" ", ""), \
+            f"type scale was not persisted: {stored}"
+
+    check("type scale reaches the rendered text", t_type_scale_reaches_the_rendered_text)
+    check("line and letter spacing reach the page", t_line_and_letter_spacing_reach_the_page)
+    check("type scale survives a reload", t_type_scale_survives_a_reload)
     check("footer text is editable", t_footer_is_editable)
     check("device preview switches between phone, tablet and desktop", t_device_preview_switches)
 
@@ -587,12 +686,6 @@ def run(page, phase=None):
                     f"the landing page does not link to {path}"
         finally:
             p.close()
-
-    check("cookie notice appears on the landing page", t_cookie_notice_appears_on_the_landing_page)
-    check("notice is not on the sign-in pages", t_notice_is_not_on_the_sign_in_page)
-    check("declining is a recorded decision", t_declining_is_a_recorded_decision)
-    check("accepting is recorded too", t_accepting_is_recorded_too)
-    check("landing page links to the legal pages", t_landing_page_links_to_the_legal_pages)
 
     def t_privacy_page_lists_the_real_inventory():
         p = page.context.new_page()

@@ -12,6 +12,15 @@
    ============================================================ */
 
 .ss-site {
+  /* Type scale. Every font-size, line-height and letter-spacing in this
+     file is a calc() against one of these three, so the Design panel can
+     move the whole site's typography from a single control. The defaults
+     here are the values that mean "no change" - design.js overrides them
+     only when someone actually picks something. */
+  --type-scale: 1;
+  --lh: 1;
+  --ls: 0em;
+
   /* fallbacks so the page still reads if a token is missing */
   --bg: #ffffff;
   --surface: #ffffff;
@@ -29,8 +38,8 @@
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body, system-ui, sans-serif);
-  font-size: 17px;
-  line-height: 1.6;
+  font-size: calc(17px * var(--type-scale, 1));
+  line-height: calc(1.6 * var(--lh, 1));
   min-height: 100%;
   overflow-x: hidden;
 }
@@ -46,15 +55,15 @@
 .ss-site h1, .ss-site h2, .ss-site h3 {
   font-family: var(--font-display, system-ui, sans-serif);
   font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  line-height: calc(1.1 * var(--lh, 1));
+  letter-spacing: calc(-0.02em + var(--ls, 0em));
   margin: 0 0 .45em;
   color: var(--text);
   text-wrap: balance;
 }
-.ss-site h1 { font-size: clamp(2.1rem, 5.2vw, 3.4rem); }
-.ss-site h2 { font-size: clamp(1.6rem, 3.4vw, 2.4rem); }
-.ss-site h3 { font-size: 1.12rem; line-height: 1.3; }
+.ss-site h1 { font-size: calc(clamp(2.1rem, 5.2vw, 3.4rem) * var(--type-scale, 1)); }
+.ss-site h2 { font-size: calc(clamp(1.6rem, 3.4vw, 2.4rem) * var(--type-scale, 1)); }
+.ss-site h3 { font-size: calc(1.12rem * var(--type-scale, 1)); line-height: calc(1.3 * var(--lh, 1)); }
 .ss-site p { margin: 0 0 1em; color: var(--muted); max-width: 62ch; }
 .ss-site ul { margin: 0; padding: 0; list-style: none; }
 .ss-site img { max-width: 100%; display: block; border-radius: var(--radius); background: var(--soft); }
@@ -110,12 +119,12 @@
 .ss-brand {
   font-family: var(--font-display, system-ui, sans-serif);
   font-weight: 700;
-  font-size: 1.12rem;
+  font-size: calc(1.12rem * var(--type-scale, 1));
   text-decoration: none;
   color: var(--text);
 }
 .ss-navlinks { display: flex; gap: 1.4rem; }
-.ss-navlinks a { text-decoration: none; color: var(--muted); font-size: .95rem; }
+.ss-navlinks a { text-decoration: none; color: var(--muted); font-size: calc(.95rem * var(--type-scale, 1)); }
 .ss-navlinks a:hover { color: var(--text); }
 
 /* ---------- sections ----------
@@ -151,8 +160,8 @@
 .ss-sec--center { text-align: center; }
 .ss-eyebrow {
   font-family: var(--font-display, system-ui, sans-serif);
-  font-size: .74rem;
-  letter-spacing: .16em;
+  font-size: calc(.74rem * var(--type-scale, 1));
+  letter-spacing: calc(.16em + var(--ls, 0em));
   text-transform: uppercase;
   color: var(--accent);
   margin: 0 0 .7rem;
@@ -211,7 +220,7 @@
 }
 .ss-card img { margin-bottom: 1rem; }
 .ss-card h3 { margin-bottom: .3rem; }
-.ss-card p { margin: 0; font-size: .95rem; }
+.ss-card p { margin: 0; font-size: calc(.95rem * var(--type-scale, 1)); }
 /* asymmetric lead card - avoids the "three equal boxes" look */
 .v-grid .ss-card:first-child {
   grid-column: span 2;
@@ -236,7 +245,7 @@
 }
 .ss-rows > .ss-row:first-child { border-top: 1px solid var(--line); }
 .ss-row h3 { margin: 0; }
-.ss-row p { margin: .2rem 0 0; font-size: .95rem; }
+.ss-row p { margin: .2rem 0 0; font-size: calc(.95rem * var(--type-scale, 1)); }
 .ss-row-price { font-family: var(--font-display, sans-serif); font-weight: 700; white-space: nowrap; }
 
 /* horizontal shelf */
@@ -261,7 +270,7 @@
   border-bottom: 1px dashed var(--line);
 }
 .ss-menu b { font-weight: 600; grid-column: 1; }
-.ss-menu span { grid-column: 1; color: var(--muted); font-size: .92rem; }
+.ss-menu span { grid-column: 1; color: var(--muted); font-size: calc(.92rem * var(--type-scale, 1)); }
 .ss-menu .ss-row-price { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-weight: 700; }
 @media (max-width: 720px) { .ss-menu { columns: 1; } }
 
@@ -367,15 +376,15 @@
 }
 .ss-site .ss-tile .ss-img--empty::after {
   content: "Add a photo";
-  font-size: .8rem;
+  font-size: calc(.8rem * var(--type-scale, 1));
   color: var(--muted);
-  letter-spacing: .02em;
+  letter-spacing: calc(.02em + var(--ls, 0em));
 }
 .ss-site .ss-tile:hover .ss-img--empty { border-color: var(--accent); }
 .ss-site .ss-tile:hover .ss-img--empty::after { color: var(--accent); }
 .ss-tile figcaption {
   padding: .5rem .6rem;
-  font-size: .82rem;
+  font-size: calc(.82rem * var(--type-scale, 1));
   color: var(--muted);
   background: var(--surface);
   border-top: 1px solid var(--line);
@@ -393,12 +402,12 @@
   border-radius: var(--radius);
   background: transparent;
   color: var(--muted);
-  font-size: .85rem;
+  font-size: calc(.85rem * var(--type-scale, 1));
   cursor: pointer;
   transition: border-color .15s ease, color .15s ease;
 }
 .ss-tile-add:hover { border-color: var(--accent); color: var(--accent); }
-.ss-tile-add i { font-size: 1.3rem; }
+.ss-tile-add i { font-size: calc(1.3rem * var(--type-scale, 1)); }
 
 @media (max-width: 720px) {
   .ss-wall { grid-template-columns: repeat(2, 1fr); }
@@ -422,13 +431,13 @@
 /* quote blocks */
 .v-big .ss-quote {
   font-family: var(--font-display, sans-serif);
-  font-size: clamp(1.4rem, 2.6vw, 2rem);
-  line-height: 1.35;
+  font-size: calc(clamp(1.4rem, 2.6vw, 2rem) * var(--type-scale, 1));
+  line-height: calc(1.35 * var(--lh, 1));
   max-width: 22ch;
   margin: 1.2rem auto 0;
 }
-.v-big .ss-cite { display: block; margin-top: 1rem; color: var(--muted); font-size: .95rem; }
-.v-big .ss-grid .ss-card blockquote { margin: 0 0 .8rem; font-size: 1.02rem; }
+.v-big .ss-cite { display: block; margin-top: 1rem; color: var(--muted); font-size: calc(.95rem * var(--type-scale, 1)); }
+.v-big .ss-grid .ss-card blockquote { margin: 0 0 .8rem; font-size: calc(1.02rem * var(--type-scale, 1)); }
 
 /* hours */
 .ss-hours { display: grid; grid-template-columns: auto auto; gap: .5rem 2rem; margin-top: 1.4rem; }
@@ -445,8 +454,8 @@
   position: absolute;
   right: 0;
   top: 0;
-  font-size: 1.3rem;
-  line-height: 1;
+  font-size: calc(1.3rem * var(--type-scale, 1));
+  line-height: calc(1 * var(--lh, 1));
   color: var(--accent);
 }
 .ss-faq details[open] summary::after { content: "\2212"; }
@@ -459,7 +468,7 @@
 /* forms */
 .ss-form { display: grid; gap: .9rem; margin-top: 1.4rem; max-width: 520px; }
 .v-center .ss-form { margin-inline: auto; }
-.ss-form label { font-size: .88rem; font-weight: 600; display: block; margin-bottom: .3rem; }
+.ss-form label { font-size: calc(.88rem * var(--type-scale, 1)); font-weight: 600; display: block; margin-bottom: .3rem; }
 .ss-form input, .ss-form textarea {
   width: 100%;
   padding: .7rem .85rem;
@@ -497,8 +506,8 @@
 /* about - editorial quote variant */
 .v-quote .ss-quote {
   font-family: var(--font-display, sans-serif);
-  font-size: clamp(1.3rem, 2.4vw, 1.9rem);
-  line-height: 1.35;
+  font-size: calc(clamp(1.3rem, 2.4vw, 1.9rem) * var(--type-scale, 1));
+  line-height: calc(1.35 * var(--lh, 1));
   border-left: 4px solid var(--accent);
   padding-left: 1.4rem;
   margin: 0 0 1.6rem;
@@ -507,7 +516,7 @@
 
 /* blog */
 .v-featured .ss-post:first-child { margin-bottom: 2.4rem; }
-.ss-post-meta { color: var(--muted); font-size: .85rem; margin-bottom: .5rem; }
+.ss-post-meta { color: var(--muted); font-size: calc(.85rem * var(--type-scale, 1)); margin-bottom: .5rem; }
 .ss-post h2 a, .ss-post h3 a { text-decoration: none; }
 .ss-post img { margin-bottom: 1rem; }
 
@@ -532,11 +541,11 @@
   grid-template-columns: var(--foot-cols, 1.4fr 1fr 1fr);
   gap: 2rem;
 }
-.ss-foot-col h3 { font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 .7rem; }
+.ss-foot-col h3 { font-size: calc(.8rem * var(--type-scale, 1)); letter-spacing: calc(.12em + var(--ls, 0em)); text-transform: uppercase; color: var(--muted); margin: 0 0 .7rem; }
 .ss-foot-links { display: grid; gap: .5rem; }
 .ss-foot-links a { color: var(--muted); text-decoration: none; }
 .ss-foot-links a:hover { color: var(--sec-accent, var(--text)); }
-.ss-foot-note { color: var(--muted); font-size: .9rem; }
+.ss-foot-note { color: var(--muted); font-size: calc(.9rem * var(--type-scale, 1)); }
 .ss-foot-bottom {
   margin-top: 2rem;
   padding-top: 1.1rem;
@@ -575,7 +584,7 @@
   inset: auto 0 0 0;
   padding: .4rem;
   text-align: center;
-  font-size: .78rem;
+  font-size: calc(.78rem * var(--type-scale, 1));
   font-weight: 600;
   background: rgba(0, 0, 0, .62);
   color: #fff;
@@ -592,7 +601,7 @@
   background: var(--accent);
   color: var(--accent-ink);
   font: 600 .7rem/1 var(--font-display, sans-serif);
-  letter-spacing: .08em;
+  letter-spacing: calc(.08em + var(--ls, 0em));
   text-transform: uppercase;
   padding: .35rem .6rem;
   border-radius: 4px 4px 0 0;
