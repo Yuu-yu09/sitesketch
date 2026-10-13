@@ -112,6 +112,31 @@ dependency, and the skip branch prints a loud warning.
 If a suite has not been re-run since a change, say so. Reporting numbers
 from a stale build is worse than reporting nothing — it happened twice here.
 
+### 11. An unrecorded dependency is a step that silently does not happen
+
+Three times, one root cause:
+
+- ESLint installed with `--no-save`, no `package.json`. The lint gate skipped
+  itself and reported as passing.
+- `playwright` missing from `requirements.txt`. `pip install` succeeded and
+  then three of the four suites could not run at all.
+- `.python-version` (3.13) disagrees with the header in `requirements.txt`
+  (3.11+) and with the local interpreter (3.14.7), so production and local
+  can differ for reasons nobody can see.
+
+**After touching any dependency, prove a fresh environment builds:**
+
+```powershell
+Remove-Item -Recurse -Force .venv
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe tests\run_all.py --quick
+```
+
+None of these three were visible from inside a working environment. All three
+surfaced only when something forced a rebuild from scratch.
+
 ---
 
 ## Architecture worth knowing before you change it
