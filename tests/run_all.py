@@ -114,6 +114,8 @@ def main() -> int:
                                        [str(PYTHON), "tests/check_js_scopes.py"])),
         ("test ordering", lambda: run("check_test_registrations",
                                       [str(PYTHON), "tests/check_test_registrations.py"])),
+        ("secret scan", lambda: run("scan_history_for_secrets",
+                                    [str(PYTHON), "tests/scan_history_for_secrets.py"])),
     ]
 
     if not server_is_up():
