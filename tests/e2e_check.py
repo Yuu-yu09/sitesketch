@@ -22,7 +22,7 @@ BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:3000").rstrip("/
 results = []
 
 
-def call(method, path, body=None, token=None, expect=None):
+def call(method, path, body=None, token=None, expect=None, timeout=60):
     req = urllib.request.Request(f"{BASE}{path}", method=method)
     req.add_header("Content-Type", "application/json")
     if token:
@@ -30,7 +30,7 @@ def call(method, path, body=None, token=None, expect=None):
     data = json.dumps(body).encode() if body is not None else None
     started = time.time()
     try:
-        with urllib.request.urlopen(req, data, timeout=60) as resp:
+        with urllib.request.urlopen(req, data, timeout=timeout) as resp:
             raw = resp.read().decode()
             status = resp.status
     except urllib.error.HTTPError as exc:
@@ -834,13 +834,25 @@ def t_no_demo_door():
 
 
 # ------------------------------------------------------------------- ai
+# AI endpoints get their own, longer budget.
+#
+# Everything else in this file answers in well under a second and a 60s ceiling
+# is generous. The AI endpoints are different: /api/plan tries Gemini twice
+# (20s + 45s) before falling back to our own copy library, so a slow provider
+# legitimately puts it near 76s. Testing that at the default 60s produced three
+# failures that looked like broken code and were actually the test giving up
+# while the server was still working.
+AI_TIMEOUT = 150
+
+
 def t_ai_design():
     sections = [{"id": "s1", "type": "hero", "title": "x"},
                 {"id": "s2", "type": "menu", "title": "x"},
                 {"id": "s3", "type": "contact", "title": "x"}]
     status, data, ms = call("POST", "/api/design",
                             {"siteName": "E2E Bakehouse", "type": "restaurant", "goal": "show-menu",
-                             "description": "a test bakery", "sections": sections}, expect=200)
+                             "description": "a test bakery", "sections": sections},
+                            expect=200, timeout=AI_TIMEOUT)
     assert data["tokens"]["palette"], data
     assert data["tokens"]["font"], data
     assert data["name"], data
@@ -864,7 +876,7 @@ def t_ai_plan_types_a_course_site_correctly():
     """
     status, data, ms = call("POST", "/api/plan",
                             {"description": "a course website for full stack web programming"},
-                            expect=200)
+                            expect=200, timeout=AI_TIMEOUT)
     assert data["type"] == "school", f"course site typed as {data['type']!r}, expected 'school'"
     assert data["siteName"], data
     assert data["headline"], data
@@ -872,17 +884,18 @@ def t_ai_plan_types_a_course_site_correctly():
     assert written, data
     assert "menu" not in written and "hours" not in written, \
         f"restaurant sections leaked into a course site: {sorted(written)}"
-    return f"{ms:.0f}ms {data['type']}/{data['goal']} {data['siteName']!r} {sorted(written)}"
+    return f"{ms:.0f}ms {data['source']} {data['type']}/{data['goal']} {data['siteName']!r} {sorted(written)}"
 
 
 def t_ai_plan_classifies_other_types():
     """A restaurant brief still gets a restaurant site."""
     status, data, ms = call("POST", "/api/plan",
-                            {"description": "a menu website for my ramen shop"}, expect=200)
+                            {"description": "a menu website for my ramen shop"},
+                            expect=200, timeout=AI_TIMEOUT)
     assert data["type"] == "restaurant", f"ramen shop typed as {data['type']!r}"
     written = {s["type"] for s in data.get("sections", [])}
     assert "menu" in written, f"no menu section for a restaurant: {sorted(written)}"
-    return f"{ms:.0f}ms {data['type']} {sorted(written)}"
+    return f"{ms:.0f}ms {data['source']} {data['type']} {sorted(written)}"
 
 
 def t_ai_plan_rejects_a_stub_description():
