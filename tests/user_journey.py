@@ -26,6 +26,7 @@ from __future__ import annotations
 import re
 import sys
 import time
+import urllib.request
 import uuid
 
 from playwright.sync_api import expect, sync_playwright
@@ -34,6 +35,25 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3000"
 PASSWORD = "chicken-karewa1"          # satisfies the password policy
 SLOW = 150_000                        # the AI step, generously
 results: list[tuple[str, bool, str]] = []
+
+
+def reset_limits() -> bool:
+    """Clear the per-IP register/login limit before signing up.
+
+    Register is 5 per hour per address and every suite shares one address, so
+    without this the journey spends budget the earlier runs left behind. It
+    failed 16 of 22 checks once, starting at registration and cascading - which
+    reads exactly like a broken app and is not one.
+
+    Returns False when the endpoint is absent (production), which is fine:
+    the limit simply applies as normal there.
+    """
+    try:
+        request = urllib.request.Request(f"{BASE}/api/dev/reset-limits", method="POST")
+        with urllib.request.urlopen(request, timeout=10):
+            return True
+    except Exception:                                   # noqa: BLE001
+        return False
 
 
 def check(name: str, fn) -> None:
@@ -53,6 +73,9 @@ def run(page, log):
     who = f"journey{uuid.uuid4().hex[:6]}"
     email = f"{who}@example.com"
     slug = "journey-" + uuid.uuid4().hex[:8]
+
+    if not reset_limits():
+        log("note: rate-limit reset unavailable, sign-up may hit the shared limit")
 
     # ---------------------------------------------------------------- land
     def t_landing_page_loads():
