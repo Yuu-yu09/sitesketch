@@ -742,12 +742,45 @@ def run(page, phase=None):
                 and h.startswith("#")]
         assert not dead, f"dead menu links survived: {dead}"
 
+    def t_menu_panel_does_not_accumulate_listeners():
+        """The panel is rebuilt after every structural edit. If its handlers
+        are re-registered each time they pile up on the same element, and the
+        symptom is invisible in the saved menu: the newest closure writes
+        last, so the result stays correct.
+
+        Measured before the fix: four edits then one keystroke caused 47 full
+        page re-renders. It is a performance bug wearing the costume of
+        nothing being wrong."""
+        page.click("#menuBtn")
+        page.wait_for_timeout(300)
+        page.evaluate("""() => {
+            window.__renders = 0;
+            const orig = window.Editor.render;
+            window.Editor.render = function () {
+                window.__renders++; return orig.apply(this, arguments);
+            };
+        }""")
+        for _ in range(4):
+            page.locator('.menu-row [data-nav-toggle]').first.click()
+            page.wait_for_timeout(200)
+
+        before = page.evaluate("() => window.__renders")
+        page.locator('.menu-row input[data-nav-label]').first.fill("Typed")
+        page.wait_for_timeout(500)
+        after = page.evaluate("() => window.__renders")
+
+        renders = after - before
+        assert renders <= 3, \
+            f"one keystroke caused {renders} page re-renders - the panel is " \
+            "registering its handlers again on every rebuild"
+
     check("menu panel lists every page", t_menu_panel_lists_every_page)
     check("renaming a menu item changes the nav", t_renaming_a_menu_item_changes_the_nav)
     check("a page can be taken out of the menu", t_a_page_can_be_taken_out_of_the_menu)
     check("menu items can be reordered", t_menu_items_can_be_reordered)
     check("a submenu renders", t_a_submenu_renders_and_survives)
     check("deleting a page drops it from the menu", t_deleting_a_page_drops_it_from_the_menu)
+    check("menu panel does not accumulate listeners", t_menu_panel_does_not_accumulate_listeners)
     check("footer text is editable", t_footer_is_editable)
     check("device preview switches between phone, tablet and desktop", t_device_preview_switches)
 

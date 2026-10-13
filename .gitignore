@@ -19,6 +19,9 @@ backups/*
 
 # Editors / OS
 .vscode/
+
+# Node tooling: reinstallable from package.json, never committed.
+node_modules/
 .DS_Store
 Thumbs.db
 

@@ -558,9 +558,32 @@ EditorUI.menuPanel = function (host) {
     var plan = Editor.plan;
     var SSr = window.SS;
 
+    /* The menu as a writable list, read fresh from the plan.
+
+       Handlers used to close over an `items` array captured when the panel
+       was built. The panel is rebuilt on every structural edit, and each
+       rebuild added another set of listeners to the same persistent host
+       element, so they accumulated: measured at 47 full page re-renders for
+       a single keystroke after four edits. The saved menu still came out
+       right, because the newest closure wrote last, which is exactly why it
+       would have survived being looked at.
+
+       Reading the list at event time instead means a stale closure cannot
+       hold stale data, and the listeners below are installed once. */
+    function items() {
+      return SSr.navItems(plan).map(function (i) {
+        return {
+          pageId: i.pageId, label: i.label, visible: i.visible,
+          children: (i.children || []).map(function (c) {
+            return { pageId: c.pageId, label: c.label };
+          })
+        };
+      });
+    }
+
     /* Write the full menu back, so a page that was never in it stays out. */
-    function write() {
-      plan.nav = items;
+    function write(list) {
+      plan.nav = list;
       Editor.render();
       if (Editor.onChange) Editor.onChange("nav");
     }
@@ -569,24 +592,12 @@ EditorUI.menuPanel = function (host) {
        commit() re-rendering the list would pull focus out of the input on
        every keystroke, which makes the field unusable. write() persists
        without touching the panel. */
-    function commit() {
-      write();
+    function commit(list) {
+      write(list);
       EditorUI.menuPanel(host);
     }
 
-    function current() {
-      var items = SSr.navItems(plan).map(function (i) {
-        return {
-          pageId: i.pageId, label: i.label, visible: i.visible,
-          children: (i.children || []).map(function (c) {
-            return { pageId: c.pageId, label: c.label };
-          })
-        };
-      });
-      return items;
-    }
-
-    var items = current();
+    var list = items();
     var pages = plan.pages || [];
 
     function pageName(id) {
@@ -596,7 +607,7 @@ EditorUI.menuPanel = function (host) {
 
     /* Pages not yet in the menu, so they can be added. */
     var inMenu = {};
-    items.forEach(function (i) {
+    list.forEach(function (i) {
       inMenu[i.pageId] = true;
       (i.children || []).forEach(function (c) { inMenu[c.pageId] = true; });
     });
@@ -618,7 +629,7 @@ EditorUI.menuPanel = function (host) {
       }).join("");
     }
 
-    var rows = items.map(function (item, i) {
+    var rows = list.map(function (item, i) {
       return '<li class="menu-row' + (item.visible ? "" : " is-hidden") + '">' +
         '<div class="menu-row-main">' +
           '<button type="button" class="icon-btn" data-nav-up="' + i +
@@ -627,7 +638,7 @@ EditorUI.menuPanel = function (host) {
             '<i class="bi bi-arrow-up" aria-hidden="true"></i></button>' +
           '<button type="button" class="icon-btn" data-nav-down="' + i +
             '" aria-label="Move down" title="Move down"' +
-            (i === items.length - 1 ? " disabled" : "") + ">" +
+            (i === list.length - 1 ? " disabled" : "") + ">" +
             '<i class="bi bi-arrow-down" aria-hidden="true"></i></button>' +
           '<input type="text" data-nav-label="' + i + '" value="' +
             SSr.esc(item.label) + '" placeholder="' + SSr.esc(pageName(item.pageId)) +
@@ -657,7 +668,7 @@ EditorUI.menuPanel = function (host) {
       '<div class="panel-section">' +
         "<h3>Menu</h3>" +
         '<p class="hint">What visitors see along the top. Leave a label empty to use the page name.</p>' +
-        (items.length
+        (list.length
           ? '<ul class="menu-list">' + rows + "</ul>"
           : '<p class="hint">No pages yet.</p>') +
         (spare.length
@@ -673,88 +684,110 @@ EditorUI.menuPanel = function (host) {
 
     /* ---- wiring ---- */
 
-    var labelInput = function (ev) { return ev.target.closest("[data-nav-label]"); };
+    /* Delegated once, not on every rebuild.
 
-    host.addEventListener("input", function (ev) {
-      var t = ev.target;
-      var lab = t.closest("[data-nav-label]");
-      if (lab) {
-        items[Number(lab.getAttribute("data-nav-label"))].label = t.value;
-        /* write(), not commit(): the panel must survive the keystroke or the
-           field loses focus after one character. This is also what actually
-           persists the menu - editing a label on a menu that was only ever
-           derived from the pages had nowhere to go. */
-        write();
-        return;
-      }
-      var child = t.closest("[data-nav-child]");
-      if (child) {
-        var bits = child.getAttribute("data-nav-child").split(":");
-        var owner = items.filter(function (x) { return x.pageId === bits[0]; })[0];
-        if (owner) owner.children[Number(bits[1])].label = t.value;
-        write();
-      }
-    });
+       The panel is rebuilt after every structural edit, and these used to be
+       re-registered each time on the same host element, so they piled up:
+       four edits then one keystroke produced 47 full page re-renders. The
+       menu still saved correctly because the newest closure wrote last,
+       which is precisely why looking at the output would never show it.
 
-    host.addEventListener("change", function (ev) {
-      var t = ev.target;
-      var addTop = t.closest("#navAddTop");
-      if (addTop && addTop.value) {
-        items.push({ pageId: addTop.value, label: "", visible: true, children: [] });
-        commit();
-        return;
-      }
-      var addSub = t.closest("[data-nav-add]");
-      if (addSub && addSub.value) {
-        var idx = Number(addSub.getAttribute("data-nav-add"));
-        items[idx].children = items[idx].children || [];
-        items[idx].children.push({ pageId: addSub.value, label: "" });
-        commit();
-      }
-    });
+       Each handler reads the list fresh, so a closure cannot hold stale
+       state, and the host flag keeps exactly one set installed. */
+    if (!host.__menuWired) {
+      host.__menuWired = true;
 
-    host.addEventListener("click", function (ev) {
-      var t = ev.target;
-      function act(attr, fn) {
-        var b = t.closest("[" + attr + "]");
-        if (!b) return false;
-        fn(Number(b.getAttribute(attr)));
-        return true;
-      }
-      if (act("data-nav-up", function (i) {
-        if (i <= 0) return;
-        var tmp = items[i - 1]; items[i - 1] = items[i]; items[i] = tmp;
-        commit();
-      })) return;
-      if (act("data-nav-down", function (i) {
-        if (i >= items.length - 1) return;
-        var tmp = items[i + 1]; items[i + 1] = items[i]; items[i] = tmp;
-        commit();
-      })) return;
-      if (act("data-nav-toggle", function (i) {
-        items[i].visible = !items[i].visible;
-        commit();
-      })) return;
-      /* Child buttons carry a "pageId:index" key rather than a plain number,
-         so they are handled outside act(). */
-      var rm = t.closest("[data-nav-child-rm]");
-      var up = t.closest("[data-nav-child-up]");
-      if (rm || up) {
-        var el = rm || up;
-        var bits = el.getAttribute(rm ? "data-nav-child-rm" : "data-nav-child-up").split(":");
-        var owner = items.filter(function (x) { return x.pageId === bits[0]; })[0];
-        if (owner) {
-          var ci = Number(bits[1]);
-          if (rm) owner.children.splice(ci, 1);
-          else {
-            var moved = owner.children.splice(ci, 1)[0];
-            owner.children.splice(ci - 1, 0, moved);
-          }
-          commit();
+      host.addEventListener("input", function (ev) {
+        var t = ev.target;
+        var Editor2 = window.Editor;
+        var list = items();
+        var lab = t.closest("[data-nav-label]");
+        if (lab) {
+          var row = list[Number(lab.getAttribute("data-nav-label"))];
+          if (!row) return;
+          row.label = t.value;
+          /* write(), not commit(): the panel must survive the keystroke or
+             the field loses focus after one character. This is also what
+             actually persists the menu - editing a label on a menu that had
+             only ever been derived from the pages had nowhere to go. */
+          write(list);
+          return;
         }
-        return;
-      }
-    });
+        var child = t.closest("[data-nav-child]");
+        if (child) {
+          var bits = child.getAttribute("data-nav-child").split(":");
+          var owner = list.filter(function (x) { return x.pageId === bits[0]; })[0];
+          if (owner && owner.children[Number(bits[1])]) {
+            owner.children[Number(bits[1])].label = t.value;
+            write(list);
+          }
+        }
+      });
+
+      host.addEventListener("change", function (ev) {
+        var t = ev.target;
+        var list = items();
+        var addTop = t.closest("#navAddTop");
+        if (addTop && addTop.value) {
+          list.push({ pageId: addTop.value, label: "", visible: true, children: [] });
+          commit(list);
+          return;
+        }
+        var addSub = t.closest("[data-nav-add]");
+        if (addSub && addSub.value) {
+          var idx = Number(addSub.getAttribute("data-nav-add"));
+          if (!list[idx]) return;
+          list[idx].children = list[idx].children || [];
+          list[idx].children.push({ pageId: addSub.value, label: "" });
+          commit(list);
+        }
+      });
+
+      host.addEventListener("click", function (ev) {
+        var t = ev.target;
+        var list = items();
+        function act(attr, fn) {
+          var b = t.closest("[" + attr + "]");
+          if (!b) return false;
+          fn(Number(b.getAttribute(attr)));
+          return true;
+        }
+        if (act("data-nav-up", function (i) {
+          if (i <= 0) return;
+          var tmp = list[i - 1]; list[i - 1] = list[i]; list[i] = tmp;
+          commit(list);
+        })) return;
+        if (act("data-nav-down", function (i) {
+          if (i >= list.length - 1) return;
+          var tmp = list[i + 1]; list[i + 1] = list[i]; list[i] = tmp;
+          commit(list);
+        })) return;
+        if (act("data-nav-toggle", function (i) {
+          if (!list[i]) return;
+          list[i].visible = !list[i].visible;
+          commit(list);
+        })) return;
+        /* Child buttons carry a "pageId:index" key rather than a plain
+           number, so they are handled outside act(). */
+        var rm = t.closest("[data-nav-child-rm]");
+        var up = t.closest("[data-nav-child-up]");
+        if (rm || up) {
+          var bits = (rm || up).getAttribute(
+            rm ? "data-nav-child-rm" : "data-nav-child-up").split(":");
+          var owner = list.filter(function (x) { return x.pageId === bits[0]; })[0];
+          if (owner) {
+            var ci = Number(bits[1]);
+            if (rm) owner.children.splice(ci, 1);
+            else {
+              var moved = owner.children.splice(ci, 1)[0];
+              owner.children.splice(ci - 1, 0, moved);
+            }
+            commit(list);
+          }
+          return;
+        }
+      });
+    }
   };
 
   EditorUI.footerPanel = function (host) {
