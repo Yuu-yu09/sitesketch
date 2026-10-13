@@ -85,10 +85,6 @@
     return spec;
   };
 
-  function specFor(plan, section, spec) {
-    return spec || SS.specFor(plan);
-  }
-
   function variantOf(plan, section, spec) {
     var chosen = spec.sections && spec.sections[section.id] && spec.sections[section.id].variant;
     if (chosen) return chosen;
@@ -732,7 +728,6 @@
      inline like every other block, using the same data-edit hooks, so
      users can type into it and set real URLs on the social links. */
   function footerData(plan) {
-    var meta = plan.meta || {};
     var f = plan.footer || {};
     return {
       tagline: f.tagline !== undefined ? f.tagline : "Made with SiteSketch.",

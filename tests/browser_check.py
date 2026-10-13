@@ -751,8 +751,14 @@ def run(page, phase=None):
         Measured before the fix: four edits then one keystroke caused 47 full
         page re-renders. It is a performance bug wearing the costume of
         nothing being wrong."""
-        page.click("#menuBtn")
+        # menuBtn is a toggle: clicking it while the panel is already open closes
+        # it. An earlier check left it open, so clicking blindly would have
+        # shut it and then timed out looking for rows that were gone.
+        if page.locator("#menuBtn").get_attribute("aria-pressed") != "true":
+            page.click("#menuBtn")
         page.wait_for_timeout(300)
+        assert page.locator("#menuBtn").get_attribute("aria-pressed") == "true", \
+            "could not open the menu panel"
         page.evaluate("""() => {
             window.__renders = 0;
             const orig = window.Editor.render;

@@ -72,11 +72,6 @@
       document.getElementById("next2").addEventListener("click", function () { renderRecs(); goStep(3); });
 
       /* ---------- step 3: recommendations ---------- */
-      function ensurePlan() {
-        if (!state.plan) state.plan = makeStarterPlan();
-        return state.plan;
-      }
-
       function makeStarterPlan() {
         return {
           meta: { type: state.type, goal: state.goal, theme: "modern", siteName: state.siteName || "" },

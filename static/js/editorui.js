@@ -239,7 +239,6 @@
      photographs or in front of them, any size, any colour, any position.
      Nothing here is a preset layout, it is a set of parts to arrange. */
   function decorPanel(section) {
-    var Editor = window.Editor;
     var list = Array.isArray(section.decor) ? section.decor : [];
 
     var rows = list.map(function (d, i) {
@@ -399,7 +398,6 @@
 
     var shape = (window.SS.PHOTO_SHAPES || []).indexOf(item.shape) === -1 ? "rect" : item.shape;
     var frame = item.frame || {};
-    var hasFrame = (frame.width && frame.width !== "0px") || (frame.color && frame.color !== "transparent");
 
     var shapeButtons = (window.SS.PHOTO_SHAPES || []).map(function (key) {
       var label = window.SS.PHOTO_SHAPE_LABEL[key] || key;
@@ -597,7 +595,7 @@ EditorUI.menuPanel = function (host) {
       EditorUI.menuPanel(host);
     }
 
-    var list = items();
+    var built = items();
     var pages = plan.pages || [];
 
     function pageName(id) {
@@ -607,7 +605,7 @@ EditorUI.menuPanel = function (host) {
 
     /* Pages not yet in the menu, so they can be added. */
     var inMenu = {};
-    list.forEach(function (i) {
+    built.forEach(function (i) {
       inMenu[i.pageId] = true;
       (i.children || []).forEach(function (c) { inMenu[c.pageId] = true; });
     });
@@ -629,7 +627,7 @@ EditorUI.menuPanel = function (host) {
       }).join("");
     }
 
-    var rows = list.map(function (item, i) {
+    var rows = built.map(function (item, i) {
       return '<li class="menu-row' + (item.visible ? "" : " is-hidden") + '">' +
         '<div class="menu-row-main">' +
           '<button type="button" class="icon-btn" data-nav-up="' + i +
@@ -638,7 +636,7 @@ EditorUI.menuPanel = function (host) {
             '<i class="bi bi-arrow-up" aria-hidden="true"></i></button>' +
           '<button type="button" class="icon-btn" data-nav-down="' + i +
             '" aria-label="Move down" title="Move down"' +
-            (i === list.length - 1 ? " disabled" : "") + ">" +
+            (i === built.length - 1 ? " disabled" : "") + ">" +
             '<i class="bi bi-arrow-down" aria-hidden="true"></i></button>' +
           '<input type="text" data-nav-label="' + i + '" value="' +
             SSr.esc(item.label) + '" placeholder="' + SSr.esc(pageName(item.pageId)) +
@@ -668,7 +666,7 @@ EditorUI.menuPanel = function (host) {
       '<div class="panel-section">' +
         "<h3>Menu</h3>" +
         '<p class="hint">What visitors see along the top. Leave a label empty to use the page name.</p>' +
-        (list.length
+        (built.length
           ? '<ul class="menu-list">' + rows + "</ul>"
           : '<p class="hint">No pages yet.</p>') +
         (spare.length
@@ -699,7 +697,6 @@ EditorUI.menuPanel = function (host) {
 
       host.addEventListener("input", function (ev) {
         var t = ev.target;
-        var Editor2 = window.Editor;
         var list = items();
         var lab = t.closest("[data-nav-label]");
         if (lab) {
@@ -800,12 +797,9 @@ EditorUI.menuPanel = function (host) {
     var style = f.style || {};
 
     function refresh() { EditorUI.footerPanel(host); }
-    function set(key, value) {
-      if (value === null || value === "" || value === undefined) delete f[key];
-      else f[key] = value;
-      Editor.render();
-      if (Editor.onChange) Editor.onChange("footer:" + key);
-    }
+    /* Only setStyle survives from the original pair: set() was never called
+       here, and leaving dead helpers next to live ones is how the next
+       person edits the wrong one. */
     function setStyle(key, value) {
       f.style = f.style || {};
       if (value === null || value === "") delete f.style[key];

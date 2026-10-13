@@ -75,7 +75,15 @@ export default [
     },
     rules: {
       "no-shadow": "error",
-      "no-unused-vars": ["error", { args: "none", varsIgnorePattern: "^_" }],
+      /* caughtErrors: "none" because `catch (e) { /* ignore *\/ }` is used
+         deliberately throughout - a named binding with a comment saying why
+         is clearer than optional catch binding, and reporting 19 of those
+         every run is how a useful rule gets switched off. */
+      "no-unused-vars": ["error", {
+        args: "none",
+        caughtErrors: "none",
+        varsIgnorePattern: "^_",
+      }],
       "no-undef": "error",
       eqeqeq: ["error", "always", { null: "ignore" }],
       "no-constant-condition": ["error", { checkLoops: false }],

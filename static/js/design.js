@@ -218,9 +218,6 @@
      legible against text, and line has to be visible without shouting.
      Asking for them invites five bad decisions. */
 
-  var INK = "#16181D";
-  var PAPER = "#FFFFFF";
-
   function hex(v) {
     return /^#[0-9a-f]{6}$/i.test(String(v || "")) ? String(v).toUpperCase() : null;
   }
