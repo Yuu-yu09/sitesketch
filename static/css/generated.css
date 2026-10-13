@@ -122,6 +122,34 @@
   font-size: calc(1.12rem * var(--type-scale, 1));
   text-decoration: none;
   color: var(--text);
+  /* padding rather than a coarse-pointer-only rule: the anchor was only as
+     tall as its text, which is 23px even for a mouse */
+  padding: .45rem 0;
+}
+
+/* ---------- touch targets for the generated site ----------
+   These live here rather than in app.css on purpose. builder.html loads
+   app.css first and generated.css second, so a rule in app.css loses to a
+   same-specificity rule here - which is why the first attempt at these
+   silently did nothing. */
+@media (pointer: coarse) {
+  /* both of these are anchors whose box was only as tall as their text:
+     23-29px for the two links that matter most on the page */
+  .ss-brand,
+  .ss-navlinks a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* the four photo-tile controls, 26x26 each */
+  .ss-tile-tools button { width: 44px; height: 44px; font-size: 1rem; }
+  /* footer columns: link text with no padding, so a 27px row */
+  .ss-foot-col a,
+  .ss-foot a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
 }
 .ss-navlinks { display: flex; gap: 1.4rem; }
 .ss-navlinks a { text-decoration: none; color: var(--muted); font-size: calc(.95rem * var(--type-scale, 1)); }
@@ -384,7 +412,8 @@
 .ss-site .ss-tile:hover .ss-img--empty::after { color: var(--accent); }
 .ss-tile figcaption {
   padding: .5rem .6rem;
-  font-size: calc(.82rem * var(--type-scale, 1));
+  /* measured at 13.1px under the editor, under the readable floor */
+  font-size: calc(.9rem * var(--type-scale, 1));
   color: var(--muted);
   background: var(--surface);
   border-top: 1px solid var(--line);

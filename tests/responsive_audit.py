@@ -27,21 +27,31 @@ from playwright.sync_api import sync_playwright
 BASE = "http://127.0.0.1:3000"
 PASSWORD = "chicken-karewa1"
 
+# (label, width, height, touch?)
+#
+# The touch flag matters. A 390px viewport driven by a mouse is not a phone -
+# it is a narrow window - so judging phone layouts with pointer:fine produces
+# both false alarms and false confidence. The app answers differently to
+# (pointer: coarse), so the audit has to ask the same question.
 SIZES = [
-    ("phone", 390, 844),
-    ("phone-small", 320, 568),      # the narrowest phone still in use
-    ("tablet", 820, 1180),
-    ("laptop", 1280, 800),
-    ("desktop", 1680, 1050),
+    ("phone", 390, 844, True),
+    ("phone-small", 320, 568, True),      # the narrowest phone still in use
+    ("tablet", 820, 1180, True),
+    ("laptop", 1280, 800, False),
+    ("desktop", 1680, 1050, False),
 ]
 
-# 44px is the accepted minimum for a comfortable touch target.
-MIN_TAP = 44.0
+# 44px is Apple's comfortable touch target. WCAG 2.2 AA asks for 24x24, which
+# is the right bar for a mouse-driven desktop and would fail every icon
+# button in the builder for no good reason.
+MIN_TAP_TOUCH = 44.0
+MIN_TAP_MOUSE = 24.0
 MIN_BODY_PX = 14.0
 
 # The probe runs inside the page. Returns raw findings; the caller judges them.
 PROBE = """
-() => {
+(minTapArg) => {
+  const minTap = minTapArg || 44;
   const doc = document.documentElement;
   const out = {
     scrollWidth: doc.scrollWidth,
@@ -81,7 +91,7 @@ PROBE = """
 
     // interactive things a finger has to hit
     if (el.matches('a, button, input, select, textarea, [role="button"]')) {
-      if (box.height > 0 && box.height < 44 && box.width > 0) {
+      if (box.height > 0 && box.height < minTap && box.width > 0) {
         out.smallTargets.push({ el: label(el), h: Math.round(box.height), w: Math.round(box.width) });
       }
     }
@@ -121,14 +131,32 @@ def api(method: str, path: str, body=None, token=None):
         raise SystemExit(f"{method} {path} -> {exc.code}: {exc.read()[:200]}") from exc
 
 
-def make_project() -> tuple[str, str]:
+def reset_limits() -> None:
+    """Clear the per-IP register/login limit.
+
+    This audit registers a fresh account on every run and it is run often,
+    so it hits the 5-registrations-per-hour ceiling long before anyone is
+    actually doing anything wrong. The endpoint 404s in production, so this
+    is development-only and silently does nothing if it is absent.
+    """
+    try:
+        req = urllib.request.Request(f"{BASE}/api/dev/reset-limits", method="POST")
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except urllib.error.HTTPError:
+        pass
+
+
+def make_project() -> tuple[str, str, dict]:
     """A project with enough content to be worth measuring: every block
     family, several list items, and long text that might not wrap."""
+    reset_limits()
     tag = uuid.uuid4().hex[:6]
     reg = api("POST", "/api/auth/register",
               {"username": "resp_" + tag, "email": f"resp_{tag}@example.com",
                "password": PASSWORD})
     token = reg["token"]
+    user = reg.get("user") or {"username": "resp_" + tag, "email": f"resp_{tag}@example.com"}
 
     proj = api("POST", "/api/projects",
                {"name": "Responsive Audit", "type": "business", "goal": "get-contact"},
@@ -167,57 +195,107 @@ def make_project() -> tuple[str, str]:
         "footer": {"note": "A footer note that is long enough to be worth checking."},
     }
     api("PUT", f"/api/projects/{proj['id']}", {"plan_json": plan}, token)
-    return proj["id"], token
+    return proj["id"], token, user
+
+
+# The builder calls API.requireAuth() and redirects to sign-in without these,
+# so the browser context has to be told who it is. Same keys api.js uses.
+SEED_AUTH = """
+(state) => {
+  localStorage.setItem('sitesketch_token_v1', state.token);
+  localStorage.setItem('sitesketch_user_v1', JSON.stringify(state.user));
+}
+"""
+
+
+def publish(pid: str, token: str) -> str:
+    """Publish through the real endpoint so the audit measures what a
+    visitor actually gets.
+
+    The endpoint answers with the updated project row rather than an
+    {ok, url} envelope, so the slug comes back on it.
+    """
+    slug = "resp-" + uuid.uuid4().hex[:8]
+    res = api("POST", f"/api/projects/{pid}/publish", {"slug": slug}, token)
+    if not res.get("is_published") or not res.get("slug"):
+        raise SystemExit(f"publish failed: {str(res)[:300]}")
+    return f"/site/{res['slug']}"
+
+
+def audit(browser, label: str, url: str, width: int, height: int, seed, touch: bool):
+    """Measure one page at one size."""
+    ctx = browser.new_context(
+        viewport={"width": width, "height": height},
+        has_touch=touch,
+        is_mobile=touch,
+    )
+    page = ctx.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e).splitlines()[0][:100]))
+
+    if seed:
+        page.goto(f"{BASE}/index.html", wait_until="domcontentloaded")
+        page.evaluate(SEED_AUTH, seed)
+    page.goto(BASE + url if url.startswith("/") else url, wait_until="domcontentloaded")
+    page.wait_for_timeout(900)
+    found = page.evaluate(PROBE, MIN_TAP_TOUCH if touch else MIN_TAP_MOUSE)
+    ctx.close()
+
+    overflow = found["scrollWidth"] > found["clientWidth"] + 1
+    bad = overflow or found["overflowing"] or found["smallTargets"] or found["tinyText"] or errors
+    return found, overflow, bad, errors
+
+
+def report(label: str, width: int, height: int, found, overflow, bad, errors, touch: bool) -> None:
+    mark = "FAIL" if bad else "ok  "
+    how = "touch" if touch else "mouse"
+    print(f"[{mark}] {label:12s} {width}x{height} ({how})")
+    if overflow:
+        print(f"         scrolls sideways: {found['scrollWidth']}px of content "
+              f"in {found['clientWidth']}px")
+    for item in found["overflowing"]:
+        print(f"         past the edge: {item['el']} (right {item['right']} > {item['vw']})")
+    for item in found["smallTargets"]:
+        print(f"         small target: {item['el']} ({item['w']}x{item['h']})")
+    for item in found["tinyText"]:
+        print(f"         tiny text: {item['el']} ({item['px']}px)")
+    for err in errors[:3]:
+        print(f"         JS error: {err}")
 
 
 def main() -> int:
-    pid, token = make_project()
-    print(f"auditing project {pid}\n")
+    pid, token, user = make_project()
+    slug = publish(pid, token)
+    seed = {"token": token, "user": user}
+    print(f"auditing project {pid}, published at {slug}\n")
 
     problems = 0
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        for label, width, height in SIZES:
-            ctx = browser.new_context(viewport={"width": width, "height": height})
-            page = ctx.new_page()
-            errors: list[str] = []
-            page.on("pageerror", lambda e: errors.append(str(e).splitlines()[0][:100]))
 
-            # the generated site itself, not the editor chrome around it
-            page.goto(f"{BASE}/builder.html?id={pid}",
-                      wait_until="domcontentloaded")
-            page.wait_for_selector(".ss-sec", timeout=30000)
-            page.wait_for_timeout(900)
-            found = page.evaluate(PROBE)
-
-            overflow = found["scrollWidth"] > found["clientWidth"] + 1
-            bad = (overflow or found["overflowing"] or found["smallTargets"]
-                   or found["tinyText"] or errors)
-
-            mark = "FAIL" if bad else "ok  "
-            print(f"[{mark}] {label:12s} {width}x{height}")
-            if overflow:
-                print(f"         page scrolls sideways: "
-                      f"{found['scrollWidth']}px of content in {found['clientWidth']}px")
-            for item in found["overflowing"]:
-                print(f"         past the edge: {item['el']} "
-                      f"(right {item['right']} > {item['vw']})")
-            for item in found["smallTargets"]:
-                print(f"         small target: {item['el']} ({item['w']}x{item['h']})")
-            for item in found["tinyText"]:
-                print(f"         tiny text: {item['el']} ({item['px']}px)")
-            for err in errors[:3]:
-                print(f"         JS error: {err}")
-
+        # The generated site first. This is the deliverable: it is what a
+        # visitor loads, and it carries none of the editor's furniture.
+        print("--- the published site ---")
+        for label, width, height, touch in SIZES:
+            found, overflow, bad, errors = audit(
+                browser, label, slug, width, height, None, touch)
+            report(label, width, height, found, overflow, bad, errors, touch)
             problems += 1 if bad else 0
-            ctx.close()
+
+        # The editor, separately. It is a desktop-first tool and its chrome
+        # is allowed to be denser, but it still must not scroll sideways on
+        # a phone, and its controls still have to be reachable by a thumb.
+        print("\n--- the builder ---")
+        for label, width, height, touch in SIZES:
+            found, overflow, bad, errors = audit(
+                browser, label, f"/builder.html?id={pid}", width, height, seed, touch)
+            report(label, width, height, found, overflow, bad, errors, touch)
+            problems += 1 if bad else 0
+
         browser.close()
 
     print()
-    if problems:
-        print(f"{problems} of {len(SIZES)} sizes have something to fix")
-    else:
-        print(f"all {len(SIZES)} sizes clean")
+    print(f"{problems} of {len(SIZES) * 2} measurements have something to fix")
     return 1 if problems else 0
 
 

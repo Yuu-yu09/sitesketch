@@ -700,6 +700,10 @@ textarea { resize: vertical; min-height: 96px; }
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  /* wraps rather than pushing the toolbar off the side of the screen.
+     Measured at 390px the controls needed 790px, so a phone user could not
+     reach Publish at all. */
+  flex-wrap: wrap;
   padding: .7rem 1rem;
   border-bottom: 1.5px solid var(--ink);
   background: var(--paper);
@@ -780,7 +784,10 @@ textarea { resize: vertical; min-height: 96px; }
 }
 .rail-title {
   font-family: var(--font-mono);
-  font-size: .68rem;
+  /* measured at 10.9px, which is unreadable on a desktop screen too - this
+     is not a phone-only problem, so it is raised everywhere rather than
+     only under (pointer: coarse) */
+  font-size: .875rem;
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -949,6 +956,126 @@ textarea { resize: vertical; min-height: 96px; }
 @media (max-width: 560px) {
   .device-switch { display: none; }
 }
+
+/* ---------- the builder on a small screen ----------
+   Measured, not guessed. At 390px the toolbar needed 790px of width and the
+   page scrolled sideways with Publish off the right edge; at 820px it still
+   overflowed at 900px. The controls now wrap, and the ones that duplicate
+   something already on screen step out of the way.
+
+   Touch targets are handled further down, under (pointer: coarse), so that a
+   desktop with a mouse keeps the denser layout it was designed with. */
+
+/* The site name is the first thing in the row once there is no room for
+   three columns. */
+@media (max-width: 760px) {
+  .builder-top { gap: .5rem .7rem; }
+  .builder-top-mid { order: 3; flex: 1 1 100%; }
+  .builder-top-right { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
+  .site-name-input { width: 100%; }
+  .save-state { order: 4; }
+}
+
+@media (max-width: 900px) {
+  /* the device preview needs real estate to be worth anything, and it was
+     one of the first things to push the bar off-screen */
+  .device-switch { display: none; }
+}
+
+/* ---------- touch targets ----------
+   30x28 undo and redo buttons are fine for a mouse and wrong for a thumb.
+   Enlarging them for coarse pointers only keeps the desktop layout intact
+   while making the editor usable on a phone. */
+@media (pointer: coarse) {
+  .history-switch .icon-btn,
+  .device-switch .device-btn,
+  .icon-btn.chrome-toggle {
+    width: 44px;
+    height: 44px;
+    font-size: 1.1rem;
+  }
+  /* the design panel's close button and palette swatches, 32-39px */
+  body .builder-panel .icon-btn,
+  body .panel-bar .icon-btn,
+  body .swatch {
+    width: 44px;
+    height: 44px;
+  }
+  .builder-top .btn,
+  .builder-panel .btn-sm,
+  .tab {
+    min-height: 44px;
+  }
+  /* the drag handles were 26x26 - the main way a block gets moved, and
+     about the size of a grain of rice on a phone.
+     `button.` is deliberate: the plain .sec-grip rule sits further down
+     this file, and at equal specificity the later one wins, so this had no
+     effect until it was made more specific. */
+  button.sec-grip,
+  button.ss-tile-grip,
+  button.ss-tile-style,
+  button.ss-tile-del,
+  button.ss-tile-size,
+  button.ss-tile-add {
+    width: 44px;
+    height: 44px;
+  }
+  /* back link and Add page */
+  .navlink, .rail-add { min-height: 44px; display: inline-flex; align-items: center; }
+
+  /* the type-scale sliders had a 16px-tall track, so the only way to nudge
+     them was to aim at a hairline.
+     `body .` is deliberate again: the base `.field input[type="range"]`
+     rule sits later in this file and wins at equal specificity. */
+  body .field input[type="range"] {
+    height: 44px;
+    background: transparent;
+  }
+  body .hint-dismiss { min-height: 44px; padding: 0 1.1rem; }
+  /* and every other control in the design panel: the brand colour pickers,
+     the hex fields, the font dropdown. These were all 30-37px, which is a
+     miss in the same panel the other touch work is about. */
+  .field input[type="color"],
+  .field input[type="text"],
+  .field select {
+    min-height: 44px;
+  }
+  .brand-inputs input[type="color"] { height: 44px; width: 44px; }
+  .brand-inputs .hex-field { padding: .6rem .5rem; }
+  .field input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--hairline);
+  }
+  .field input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 26px;
+    height: 26px;
+    margin-top: -10px;
+    border-radius: 50%;
+    background: var(--ink);
+    cursor: pointer;
+  }
+  .field input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--hairline);
+  }
+  .field input[type="range"]::-moz-range-thumb {
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--ink);
+    cursor: pointer;
+  }
+
+  /* and enough room to actually hit them */
+  .history-switch, .device-switch { gap: .25rem; padding: .25rem; }
+  .rec-item small { font-size: .95rem; }
+  .palette-group { font-size: .85rem; }
+}
 .builder-canvas > .ss-site {
   border: 1.5px solid var(--ink);
   border-radius: 10px;
@@ -1005,7 +1132,8 @@ textarea { resize: vertical; min-height: 96px; }
 
 /* block settings */
 .field { display: grid; gap: .3rem; margin-bottom: .7rem; }
-.field > span:first-child { font-size: .74rem; color: var(--ink-2); }
+/* was .74rem = 11.8px, below the readable floor even for a panel label */
+.field > span:first-child { font-size: .875rem; color: var(--ink-2); }
 .field select,
 .field input[type="text"],
 .field input[type="url"] {
@@ -1017,7 +1145,7 @@ textarea { resize: vertical; min-height: 96px; }
   font: inherit;
   font-size: .85rem;
 }
-.field input[type="range"] { width: 100%; }
+.field input[type="range"] { width: 100%; height: 24px; }
 .field output { font-size: .72rem; color: var(--ink-2); }
 
 /* Brand colours: a swatch to click, a hex to paste. The hex field is not a
@@ -1032,7 +1160,7 @@ textarea { resize: vertical; min-height: 96px; }
 }
 .brand-colours legend {
   padding: 0 .35rem;
-  font-size: .72rem;
+  font-size: .875rem;
   color: var(--ink-2);
   text-transform: uppercase;
   letter-spacing: .06em;
@@ -1748,7 +1876,9 @@ input[type="checkbox"] {
 }
 .rec-item .ri { width: 38px; height: 38px; display: grid; place-items: center; border: 1.5px solid var(--ink); border-radius: var(--radius); background: var(--paper); }
 .rec-item strong { display: block; font-size: .98rem; }
-.rec-item small { color: var(--ink-2); font-size: .84rem; }
+/* measured at 13.4px for the section-library blurbs; these are descriptions
+   people actually read while choosing a block, not decorative micro-text */
+.rec-item small { color: var(--ink-2); font-size: .92rem; }
 .checklist-box {
   border: 1.5px dashed var(--hairline);
   background: #FCFBF8;
