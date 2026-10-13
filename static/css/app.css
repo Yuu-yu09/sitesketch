@@ -1240,6 +1240,12 @@ textarea { resize: vertical; min-height: 96px; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   text-transform: uppercase;
 }
+/* A brand colour that has not been chosen yet. The swatch shows the colour
+   the site is currently using so it is a useful preview, but dimmed, so it
+   does not read as a decision the user has already made. */
+.brand-inputs input[type="color"][data-empty] {
+  opacity: .4;
+}
 /* The RGB value, shown so nobody has to open the system colour dialog to
    find out what they just set. */
 .brand-inputs .rgb-readout {
@@ -2188,5 +2194,126 @@ input[type="checkbox"] {
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ============ sign-in and sign-up touch targets ============
+
+   These two pages carried the only controls on the screen and every one
+   of them was undersized: a 17px checkbox, a 27px show-password button, a
+   29px logo link, 18-20px legal links, and a 13.1px hint line under the
+   password field.
+
+   They went unnoticed because nothing measured them. The responsive audit
+   covered the published site and the builder and nothing else, and these
+   pages are neither - they are hand-written, so no generator produces
+   them and no other check looked. Found by extending the audit to every
+   page a visitor can reach.
+
+   24px is the WCAG 2.2 AA floor and is applied at every pointer type;
+   44px is applied only where the input is a finger. */
+.field .hint { font-size: .88rem; }          /* was .82rem = 13.1px */
+
+.auth-legal a,
+.auth-alt a {
+  display: inline-block;
+  padding: .34rem .15rem;
+}
+
+/* The same undersized-link problem on the marketing pages: every nav and
+   footer link sat at 21-23px, a pixel or two under the 24px floor, and the
+   cookie banner's "read the details" was worst at 21px. Padding rather than
+   font-size, so the type stays as designed and only the target grows. */
+.topbar-nav a.navlink,
+.footer nav a,
+a.consent-manage {
+  display: inline-block;
+  padding: .34rem .15rem;
+}
+
+/* The narrowest phones in use still get the full navigation, and it does
+   not fit: at 320px the topbar ran to 334px and the whole page scrolled
+   sideways, cookie banner and all. Only the gaps and the horizontal padding
+   give way - the links themselves stay. Measured, not guessed: the audit
+   reported the topbar and the consent bar both 14px past the right edge. */
+@media (max-width: 380px) {
+  .topbar-inner {
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: .3rem;
+    padding: .55rem .75rem;
+  }
+  /* the links take their own full-width row under the logo. Squeezing them
+     onto one line with the logo made "How it works" break across two lines,
+     which is worse to look at than the row it costs. */
+  .topbar-nav {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+    gap: .35rem;
+  }
+  .topbar-nav a.navlink {
+    font-size: .82rem;
+    padding: .3rem .1rem;
+    white-space: nowrap;
+  }
+  /* the call to action was 126px wide here and pushed the row to 333px,
+     13px past a 320px screen */
+  .topbar-nav .btn {
+    padding: .5rem .65rem;
+    font-size: .88rem;
+    white-space: nowrap;
+  }
+  /* The two section links are in-page anchors, and both are repeated in the
+     footer. Dropping them here is what makes the row fit rather than merely
+     shrinking until nothing is legible. "Sign in" and the call to action
+     stay, because there is nowhere else to reach them from. */
+  .topbar-nav a.navlink[href^="#"] { display: none; }
+  .consent-bar { padding: .7rem .75rem; }
+}
+
+.remember {
+  min-height: 24px;
+}
+
+.remember input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+
+@media (pointer: coarse) {
+  .brand { min-height: 44px; }
+
+  /* 46, not 44: a control laid out with min-height lands exactly on 44 and
+     a sub-pixel of rounding reads as a miss. */
+  .topbar-nav a.navlink,
+  .topbar-nav .btn,
+  .btn.btn-sm,
+  .hero-ctas .btn { min-height: 46px; }
+
+  .auth-legal a,
+  .auth-alt a,
+  .topbar-nav a.navlink,
+  .footer nav a,
+  a.consent-manage {
+    min-height: 46px;
+    padding: .62rem .2rem;
+  }
+
+  .remember { min-height: 44px; }
+  .remember input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* the show/hide password button was 27px wide - the smallest thing on
+     the page, and one people use every time they mistype a password */
+  .pw-toggle {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
   }
 }

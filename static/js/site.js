@@ -202,20 +202,36 @@
       "</div></section>";
   };
 
+  /* Placeholder guidance belongs in the editor, not on a published page.
+
+     A visitor reading "Replace this with your own story." on a live site is
+     looking at instructions meant for the person building it. These strings
+     were rendered by the renderer rather than stored in the plan, so no
+     amount of editing the content would ever have removed them - found by
+     screenshotting a published page and reading that sentence on it. The
+     hint stays in the builder, which is where it earns its keep.
+
+     Returns raw text, not HTML. The callers escape it, and text() escapes
+     its own argument, so escaping here as well would double it. */
+  function hint(ctx, real, placeholder) {
+    if (real) return real;
+    return ctx.editable ? placeholder : "";
+  }
+
   BLOCKS.about = function (ctx) {
     var s = ctx.section;
     if (ctx.variant === "quote") {
       return '<section class="ss-sec g-about v-quote" ' + ctx.wrapAttrs + '>' +
         '<div class="ss-wrap"><blockquote class="ss-quote" style="max-width:none">' +
         '<span' + ed("title") + ">" + esc(s.title || "") + "</span></blockquote>" + text(s.subtitle, "subtitle") +
-        '<p' + ed("body") + ">" + esc(s.body || "Replace this with your own story.") + "</p>" +
+        '<p' + ed("body") + ">" + esc(hint(ctx, s.body, "Replace this with your own story.")) + "</p>" +
         "</div></section>";
     }
     var flip = ctx.index % 2 === 1 ? " v-flip" : "";
     return '<section class="ss-sec g-about v-split' + flip + '" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><div><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       text(s.subtitle, "subtitle") +
-      '<p' + ed("body") + ">" + esc(s.body || "Tell the short version: what you do and who for.") + "</p></div>" +
+      '<p' + ed("body") + ">" + esc(hint(ctx, s.body, "Tell the short version: what you do and who for.")) + "</p></div>" +
       "<div>" + ctx.imageTag + "</div></div></section>";
   };
 
@@ -226,17 +242,22 @@
      it threw "ctx is not defined" and took the whole page down. Empty lists
      returned early, which is exactly why it looked intermittent: it only
      broke for the plans that had something to show. */
-  function cardsOf(section, path, limit, fallbackImage, crop) {
+  function cardsOf(section, path, limit, fallbackImage, crop, editable) {
     var list = items(section).slice(0, limit || 6);
     if (!list.length) return "";
     var cropFn = typeof crop === "function" ? crop : function () { return null; };
+    /* hint() wants a ctx, and there isn't one here by design. editable is
+       passed in instead, for the same reason the comment above says: reaching
+       for a ctx from out here works right up until a list actually has items
+       and then takes the page down. */
+    var fakeCtx = { editable: !!editable };
     return list.map(function (item, i) {
       return '<article class="ss-card">' +
         /* always render the slot, so every card is clickable for a
            picture even before the user chooses one */
         picture(item.img || fallbackImage, path + ":" + i + ":img", item.title, null, cropFn(path + ":" + i + ":img")) +
-        "<h3" + ed(path + ":" + i + ":title") + ">" + esc(item.title || "Title") + "</h3>" +
-        text(item.text || "A line about this.", path + ":" + i + ":text", "p") +
+        "<h3" + ed(path + ":" + i + ":title") + ">" + esc(hint(fakeCtx, item.title, "Title")) + "</h3>" +
+        text(hint(fakeCtx, item.text, "A line about this."), path + ":" + i + ":text", "p") +
         "</article>";
     }).join("");
   }
@@ -255,7 +276,7 @@
     return '<section class="ss-sec g-features v-grid" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       text(s.subtitle, "subtitle") +
-      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop) + "</div></div></section>";
+      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop, ctx.editable) + "</div></div></section>";
   };
 
   BLOCKS.products = function (ctx) {
@@ -285,7 +306,7 @@
       return '<section class="ss-sec g-menu v-grid" ' + ctx.wrapAttrs + '>' +
         '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
         text(s.subtitle, "subtitle") +
-        '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop) + "</div></div></section>";
+        '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop, ctx.editable) + "</div></div></section>";
     }
     return '<section class="ss-sec g-menu v-list" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
@@ -408,12 +429,18 @@
           /* an unfilled slot stays visibly empty instead of borrowing the
              same stock photo as every other slot, which made five blanks
              look like five copies of one picture */
-          picture(item.img, "items:" + i + ":img", item.title || "Add a photo") +
+          /* picture() escapes alt itself, so this stays raw. "Add a photo" is a
+         label for an empty slot, not a description of a photograph: a
+         filled tile with no caption was shipping alt="Add a photo", which
+         tells a screen reader user nothing at all. */
+      picture(item.img, "items:" + i + ":img", hint(ctx, item.title, "Add a photo")) +
         "</div>" +
         controls +
-        (item.text || size !== "s"
+        /* the caption placeholder is an editor affordance; on a live page
+           an uncaptioned photo gets no empty figcaption box */
+        (item.text || (ctx.editable && size !== "s")
           ? '<figcaption><span' + ed("items:" + i + ":text") + ">" +
-            esc(item.text || "Add a caption") + "</span></figcaption>"
+            esc(hint(ctx, item.text, "Add a caption")) + "</span></figcaption>"
           : "") +
         "</figure>";
     }).join("");
@@ -462,7 +489,7 @@
     return '<section class="ss-sec g-team v-grid" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       text(s.subtitle, "subtitle") +
-      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop) + "</div></div></section>";
+      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop, ctx.editable) + "</div></div></section>";
   };
 
   BLOCKS.blog = function (ctx) {
@@ -984,6 +1011,21 @@
     var css = options.css || "";
     var pages = plan.pages || [];
     if (!pages.length) return { pages: {}, home: "" };
+
+    /* The stylesheet is a required argument, not an optional one.
+
+       A published site is one self-contained document that runs zero
+       JavaScript, so a page compiled without CSS is stored unstyled and
+       stays that way until someone republishes by hand. Emitting it
+       silently is the worst outcome available: it looks like it worked.
+
+       Found by screenshotting a published site that had been compiled by a
+       script passing no css, and seeing Times New Roman and blue
+       underlines where a design should have been. */
+    if (!css) {
+      throw new Error("compileSite needs the site stylesheet: a published " +
+                      "page has no JavaScript to load one later");
+    }
 
     var spec = SS.specFor(plan);
     var fonts = window.DESIGN ? DESIGN.fontLink(spec) : "";

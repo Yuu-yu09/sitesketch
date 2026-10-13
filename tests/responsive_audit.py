@@ -41,6 +41,11 @@ SIZES = [
     ("desktop", 1680, 1050, False),
 ]
 
+# Every visitor meets these before they have an account. They are measured
+# at every size for the same reason the published site is: nothing else
+# here produces them, so nothing else would ever notice them breaking.
+PUBLIC_PAGES = ["/index.html", "/login.html", "/register.html"]
+
 # 44px is Apple's comfortable touch target. WCAG 2.2 AA asks for 24x24, which
 # is the right bar for a mouse-driven desktop and would fail every icon
 # button in the builder for no good reason.
@@ -91,13 +96,33 @@ PROBE = """
 
     // interactive things a finger has to hit
     if (el.matches('a, button, input, select, textarea, [role="button"]')) {
-      if (box.height > 0 && box.height < minTap && box.width > 0) {
-        out.smallTargets.push({ el: label(el), h: Math.round(box.height), w: Math.round(box.width) });
+      // A checkbox or radio is not measured by its box. WCAG target size
+      // is the whole tappable region, and for these that is the label
+      // wrapped around them: the "Keep me signed in" row is 44px tall and
+      // tapping anywhere on the text toggles the box. Judging the 20px
+      // square on its own flags a target nobody actually has difficulty
+      // hitting, and the obvious "fix" - a 44px checkbox - would look
+      // absurd. The label is only used when it is genuinely larger.
+      let h = box.height;
+      if (el.matches('input[type="checkbox"], input[type="radio"]')) {
+        const lab = el.closest('label');
+        if (lab) h = Math.max(h, lab.getBoundingClientRect().height);
+      }
+      if (h > 0 && h < minTap && box.width > 0) {
+        out.smallTargets.push({ el: label(el), h: Math.round(h), w: Math.round(box.width) });
       }
     }
 
     // body copy that has become unreadable
-    if (el.children.length === 0 && (el.textContent || '').trim().length > 12) {
+    //
+    // aria-hidden is excluded, and not as a convenience. An element the
+    // screen reader will not announce is not body copy: on the landing page
+    // the 11.5px "chips" are a picture of a website header, and the
+    // browser font minimum does not apply to something decorative. That
+    // distinction is the only honest way to exempt them - an exemption
+    // keyed on class name would quietly stop measuring the real page.
+    if (el.children.length === 0 && (el.textContent || '').trim().length > 12
+        && !el.closest('[aria-hidden="true"]')) {
       const size = parseFloat(cs.fontSize);
       if (size && size < 14) {
         out.tinyText.push({ el: label(el), px: Math.round(size * 10) / 10 });
@@ -208,15 +233,44 @@ SEED_AUTH = """
 """
 
 
-def publish(pid: str, token: str) -> str:
+def publish(browser, pid: str, token: str, user: dict) -> str:
     """Publish through the real endpoint so the audit measures what a
     visitor actually gets.
 
-    The endpoint answers with the updated project row rather than an
-    {ok, url} envelope, so the slug comes back on it.
+    That takes the compiled pages with it, which only a browser can
+    produce, so the builder is opened and asked to compile - the same call
+    the Publish button makes.
+
+    This function used to send nothing but a slug. The endpoint accepted it,
+    stored no pages, and the public route served its "this site isn't
+    published" page - so the whole published-site half of this audit was
+    measuring a 404 and reporting it clean at every width. Found by
+    screenshotting what it had been auditing. The endpoint now refuses a
+    publish with no pages, which is what exposed it.
     """
     slug = "resp-" + uuid.uuid4().hex[:8]
-    res = api("POST", f"/api/projects/{pid}/publish", {"slug": slug}, token)
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    try:
+        # The builder redirects to sign-in without a token, and localStorage
+        # cannot be written before the origin is loaded - so land somewhere
+        # harmless first, seed, then go to the builder.
+        page.goto(f"{BASE}/index.html", wait_until="domcontentloaded")
+        page.evaluate(SEED_AUTH, {"token": token, "user": user})
+        page.goto(f"{BASE}/builder.html?id={pid}", wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=60000)
+        page.wait_for_timeout(1200)
+        built = page.evaluate("""async () => {
+            const css = await (await fetch('static/css/generated.css')).text();
+            return window.SS.compileSite(window.Editor.plan, { pageBase: '', css: css });
+        }""")
+    finally:
+        ctx.close()
+
+    if not built.get("pages"):
+        raise SystemExit("nothing compiled, cannot audit a page that does not exist")
+    res = api("POST", f"/api/projects/{pid}/publish",
+              {"slug": slug, "pages": built["pages"], "home": built.get("home")}, token)
     if not res.get("is_published") or not res.get("slug"):
         raise SystemExit(f"publish failed: {str(res)[:300]}")
     return f"/site/{res['slug']}"
@@ -265,8 +319,11 @@ def report(label: str, width: int, height: int, found, overflow, bad, errors, to
 
 def main() -> int:
     pid, token, user = make_project()
-    slug = publish(pid, token)
     seed = {"token": token, "user": user}
+    with sync_playwright() as pw0:
+        browser0 = pw0.chromium.launch()
+        slug = publish(browser0, pid, token, user)
+        browser0.close()
     print(f"auditing project {pid}, published at {slug}\n")
 
     problems = 0
@@ -292,10 +349,25 @@ def main() -> int:
             report(label, width, height, found, overflow, bad, errors, touch)
             problems += 1 if bad else 0
 
+        # The pages every visitor meets before they have an account. These
+        # are hand-written marketing and sign-in screens rather than
+        # generated ones, which is exactly why they were missed: nothing
+        # else in this file produces them, so nothing measured them. The
+        # landing page is the first thing anyone sees.
+        print("\n--- the public pages ---")
+        for path, name in [("/index.html", "landing"), ("/login.html", "login"),
+                           ("/register.html", "register")]:
+            for label, width, height, touch in SIZES:
+                found, overflow, bad, errors = audit(
+                    browser, f"{name}/{label}", f"{BASE}{path}", width, height, None, touch)
+                report(f"{name}/{label}", width, height, found, overflow, bad, errors, touch)
+                problems += 1 if bad else 0
+
         browser.close()
 
+    total = len(SIZES) * (2 + len(PUBLIC_PAGES))
     print()
-    print(f"{problems} of {len(SIZES) * 2} measurements have something to fix")
+    print(f"{problems} of {total} measurements have something to fix")
     return 1 if problems else 0
 
 

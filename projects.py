@@ -55,7 +55,11 @@ def clean_published_pages(raw, home_hint: str = "") -> tuple[dict, str, str | No
     because published_pages is jsonb and jsonb does not preserve key order.
     """
     if raw is None:
-        return {}, "", None
+        # Not "no error": a request with no compiled pages at all would
+        # otherwise set is_published = true and serve a site that 404s.
+        # An empty object is already refused below; a missing key means the
+        # same thing and has to be refused the same way.
+        return {}, "", "There were no pages to publish"
     if not isinstance(raw, dict):
         return {}, "", "Compiled pages must be an object of page id to HTML"
 

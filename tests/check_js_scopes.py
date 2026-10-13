@@ -28,9 +28,40 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FILES = sorted((ROOT / "static" / "js").glob("*.js"))
 
-# "ctx" used as a value: ctx.something, ctx(...), ctx[...], ctx as an argument.
-USES_CTX = re.compile(r"(?<![\w.$])ctx\s*[\.\[,)]")
+# "ctx" as a standalone identifier: ctx.something, ctx(...), ctx[...], ctx as an
+# argument, and just "= ctx".
+#
+# The trailing lookahead matters more than it looks. An earlier version
+# required a . [ , or ) after the name, so `fakeCtx = ctx;` passed clean -
+# the simplest possible way to reach an out-of-scope ctx, in the very file
+# this gate exists to guard. Not followed by a word character, so fakeCtx
+# and ctxMap do not match; not preceded by one, or a dot, so this.ctx does
+# not either.
+USES_CTX = re.compile(r"(?<![\w.$])ctx(?![\w$])")
 FUNC = re.compile(r"^(\s*)function (\w+)\(([^)]*)\)\s*\{", re.M)
+
+BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+LINE_COMMENT = re.compile(r"//[^\n]*")
+
+
+def strip_comments(src: str) -> str:
+    """Remove comments before looking for identifiers, keeping line numbers.
+
+    A prose sentence explaining that a function deliberately does *not* take
+    a ctx is not a use of one, and matching it means a comment can raise a
+    false alarm and, by habituation, train people to ignore the gate. This
+    was not theoretical: the note added to cardsOf while fixing exactly this
+    bug tripped the check that guards it.
+
+    Each comment is replaced by as many newlines as it contained, so a line
+    number reported against the cleaned source still points at the right
+    line of the file. Only text is removed, so this cannot hide a real
+    reference - a use has to be outside a comment to be code at all.
+    """
+    def blank(match: re.Match) -> str:
+        return "\n" * match.group(0).count("\n")
+
+    return LINE_COMMENT.sub(blank, BLOCK_COMMENT.sub(blank, src))
 
 
 def body_of(src: str, open_brace: int) -> str:
@@ -52,7 +83,8 @@ def main() -> int:
     checked = 0
 
     for path in FILES:
-        src = path.read_text(encoding="utf-8")
+        raw = path.read_text(encoding="utf-8")
+        src = strip_comments(raw)
         for match in FUNC.finditer(src):
             name, params = match.group(2), match.group(3)
             body = body_of(src, match.end() - 1)
@@ -66,7 +98,7 @@ def main() -> int:
             if "ctx" in takes or declares:
                 continue
 
-            line = src[:match.start()].count("\n") + 1
+            line = raw[:match.start()].count("\n") + 1
             problems.append(
                 f"{path.relative_to(ROOT)}:{line}  {name}({params}) "
                 f"uses ctx but neither takes it nor declares it")

@@ -24,7 +24,7 @@ pushed and only then found broken.
 | 6 | browser suite | the real UI, driven through Playwright |
 | 7 | user journey | one new user, nothing to a live site |
 | 8 | e2e suite | API level, including the AI endpoints |
-| 9 | responsive audit | phone / tablet / desktop, site and builder |
+| 9 | responsive audit | 5 surfaces x 5 widths: published site, builder, landing, login, register |
 
 Keep this table in step with `run_all.py`. It had already drifted once — the
 secret scan was added and the count was never updated, so the document
@@ -155,6 +155,56 @@ python -m venv .venv
 
 None of these three were visible from inside a working environment. All three
 surfaced only when something forced a rebuild from scratch.
+
+### 12. A gate that measures nothing also passes
+
+Rule 9 covers a gate that fails open. This is the quieter version: a gate
+that ran, measured the wrong thing, and reported green for months.
+
+The responsive audit published its test project by sending nothing but a
+slug. The endpoint accepted that, stored no pages, and the public route
+served its "this site isn't published" page. So gate 9 spent its life
+measuring **a 404** — and reporting the published site clean at five
+widths. The builder half was real; the published half was theatre.
+
+It was only visible because a screenshot script happened to publish the same
+way and someone read the image.
+
+**When a check passes, confirm it is looking at the thing it names.** Open
+what it opened. The cheapest version of this: assert the page under test
+has the content the check expects to find, before trusting any measurement
+of it. `compileSite` now refuses to build without a stylesheet, and the
+endpoint refuses to publish without pages, so both failures are loud instead
+of silent.
+
+The same audit also covered only two of five surfaces. The landing, login and
+register pages are hand-written, so no generator produces them and no other
+check looked — and the landing page scrolled sideways at 320px the whole
+time. **A surface nothing generates is a surface nothing tests.** When a
+check covers "the site and the builder", ask what else exists.
+
+### 13. Look at the output
+
+Every design decision in this project was made from DOM measurements
+without anyone seeing the result, until Playwright screenshots made looking
+possible. Every significant bug in the list above that could have been seen
+was seen that way within an hour:
+
+- a published page rendered unstyled, because a caller omitted the CSS
+- a live page reading *"Replace this with your own story."* — editor
+  guidance emitted by the renderer, so editing the content never removed it
+- a photo shipping `alt="Add a photo"`
+- three brand swatches showing solid black beside empty fields
+- the landing page scrolling sideways at 320px
+
+`browser.screenshot` needs a visible desktop window and there is none here.
+**Playwright runs headless and captures the same pixels.** Use
+`tests/capture_all_screens.py`.
+
+One trap in that script worth remembering: the Design / Menu / Footer
+toolbar buttons are **toggles**. Clicking one that is already open closes
+it, so a screenshot pass can photograph the wrong panel. Ask `aria-pressed`
+rather than clicking blindly.
 
 ---
 

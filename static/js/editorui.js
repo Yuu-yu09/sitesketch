@@ -664,7 +664,9 @@ EditorUI.menuPanel = function (host) {
 
     host.innerHTML =
       '<div class="panel-section">' +
-        "<h3>Menu</h3>" +
+        /* No <h3>Menu</h3> here: the panel header already says Menu, and
+           this section was the only one in the panel, so the word appeared
+           twice within three lines of the top. */
         '<p class="hint">What visitors see along the top. Leave a label empty to use the page name.</p>' +
         (built.length
           ? '<ul class="menu-list">' + rows + "</ul>"
@@ -821,7 +823,7 @@ EditorUI.menuPanel = function (host) {
 
     host.innerHTML =
       '<div class="panel-section">' +
-        "<h3>Footer</h3>" +
+        /* as with the Menu panel: the header above already names it */
         '<p class="hint">Click any text in the footer on the page to edit it.</p>' +
         '<label class="field"><span>Columns</span>' +
           '<select id="footCols">' +
@@ -1158,15 +1160,23 @@ EditorUI.menuPanel = function (host) {
 
        The RGB readout is shown beside the swatch rather than left inside
        the browser's dialog: you should not have to open a system window to
-       find out what colour you just set. */
-    function brandColour(key, label, current) {
+       find out what colour you just set.
+
+       An unset brand colour shows the colour the site is actually using
+       right now, not black. Three solid black swatches beside empty text
+       fields said "black", when the honest answer is "whatever the palette
+       chose" - seen in a screenshot of the Design panel. The swatch is
+       dimmed while unset so it still reads as not-yet-chosen. */
+    function brandColour(key, label, current, effective) {
       var id = "colour_" + key;
       var value = window.DESIGN ? DESIGN.parseColour(current) : null;
       var rgbText = value ? "rgb(" + DESIGN.toRGB(value) + ")" : "";
+      var shown = value || normHex(effective) || "#000000";
       return '<div class="brand-row">' +
         '<label class="field" for="' + id + '_hex"><span>' + label + "</span>" +
           '<span class="brand-inputs">' +
-            '<input type="color" id="' + id + '" value="' + (value || "#000000") + '"' +
+            '<input type="color" id="' + id + '" value="' + shown + '"' +
+              (value ? "" : ' data-empty="1"') +
               ' aria-label="Choose ' + label.toLowerCase() + '">' +
             '<input type="text" id="' + id + '_hex" class="hex-field" value="' +
               (value || "") + '"' +
@@ -1191,9 +1201,12 @@ EditorUI.menuPanel = function (host) {
            other three readable. */
         '<fieldset class="brand-colours">' +
           '<legend>Your brand colours</legend>' +
-          brandColour("accent", "Accent", spec.tokens.colour && spec.tokens.colour.accent) +
-          brandColour("bg", "Background", spec.tokens.colour && spec.tokens.colour.bg) +
-          brandColour("text", "Text", spec.tokens.colour && spec.tokens.colour.text) +
+          brandColour("accent", "Accent", spec.tokens.colour && spec.tokens.colour.accent,
+                       paletteColor(spec, "accent")) +
+          brandColour("bg", "Background", spec.tokens.colour && spec.tokens.colour.bg,
+                       paletteColor(spec, "bg")) +
+          brandColour("text", "Text", spec.tokens.colour && spec.tokens.colour.text,
+                      paletteColor(spec, "text")) +
           '<button class="btn btn-block btn-ghost btn-sm" id="colourReset">Clear brand colours</button>' +
         "</fieldset>" +
       "</div>" +
@@ -1281,6 +1294,7 @@ EditorUI.menuPanel = function (host) {
 
       picker.addEventListener("input", function () {
         hex.value = this.value.toUpperCase();
+        this.removeAttribute("data-empty");
         showRGB(this.value);
         write(this.value.toUpperCase());
       });
@@ -1299,6 +1313,7 @@ EditorUI.menuPanel = function (host) {
         }
         picker.value = v;
         this.value = v.toUpperCase();
+        picker.removeAttribute("data-empty");
         /* typing rgb() must update the readout too, not just dragging the
            swatch - otherwise the value is right and the display lies */
         showRGB(v);

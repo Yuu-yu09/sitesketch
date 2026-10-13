@@ -602,6 +602,57 @@ def run(page, phase=None):
                       "  delete s.tokens.colour; window.Editor.onChange('design:colour'); }")
         page.wait_for_timeout(1200)
 
+    def t_published_copy_carries_no_editor_instructions():
+        """A visitor must never read instructions meant for the builder.
+
+        These strings were rendered by the renderer rather than stored in
+        the plan, so no amount of editing the content removed them: a
+        published page showed "Replace this with your own story." and a
+        photo with no caption shipped alt="Add a photo". Both were found
+        by screenshotting a live page, not by any earlier test.
+
+        Asserted against the compiled non-editable output, because that is
+        the thing that gets stored and served.
+        """
+        # a plan with every optional field empty is the worst case: that is
+        # exactly when the placeholders used to appear
+        stripped = page.evaluate("""() => {
+            const plan = JSON.parse(JSON.stringify(window.Editor.plan));
+            for (const pg of plan.pages) {
+                for (const s of pg.sections || []) {
+                    delete s.subtitle;
+                    delete s.body;
+                    delete s.items;
+                    delete s.crops;
+                }
+            }
+            window.__stripped = plan;
+            return window.SS.compileSite(plan, { pageBase: '', css: '/*t*/' });
+        }""")
+        assert stripped["pages"], "nothing compiled"
+
+        # everything a reader could see, or that an assistive tech reads out
+        visible = ""
+        for html in stripped["pages"].values():
+            visible += html.lower()
+        for phrase in ("replace this with your own story",
+                       "tell the short version",
+                       "a line about this",
+                       "add a caption",
+                       "add a photo"):
+            assert phrase not in visible, \
+                f"published page still shows editor copy: {phrase!r}"
+
+        # the same stripped plan, rendered for the builder, still guides the
+        # person editing it - otherwise there is nothing to click into
+        editor_html = page.evaluate(
+            "() => window.SS.renderPage(window.__stripped, "
+            "window.Editor.plan.pages[0].id, { editable: true }).toLowerCase()")
+        assert ("add a caption" in editor_html
+                or "a line about this" in editor_html
+                or "tell the short version" in editor_html), \
+            "the builder should still show its placeholders"
+
     check("brand colours reach the page", t_brand_colours_reach_the_page)
     check("brand derives readable ink", t_brand_derives_readable_ink)
     check("a partial brand set stays coherent", t_partial_brand_set_stays_coherent)
@@ -658,6 +709,48 @@ def run(page, phase=None):
         page.click("#colourReset")
         page.wait_for_timeout(400)
 
+    def t_unset_brand_swatch_shows_the_real_colour():
+        """An unset brand colour must not look like black.
+
+        The swatch defaulted to #000000, so a Design panel with nothing
+        chosen showed three solid black squares beside three empty fields -
+        which reads as "your brand is black", not "not set yet". It should
+        preview the colour the site is actually using, dimmed.
+        """
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  delete s.tokens.colour; window.Editor.onChange('design:colour'); }")
+        page.wait_for_timeout(1200)
+        if page.get_attribute("#stylesBtn", "aria-pressed") != "true":
+            page.click("#stylesBtn")
+            page.wait_for_timeout(500)
+
+        for key in ("accent", "bg", "text"):
+            info = page.evaluate(
+                "(k) => { const i = document.querySelector('#colour_' + k);"
+                "  return { value: i.value, empty: i.dataset.empty === '1',"
+                "           opacity: getComputedStyle(i).opacity }; }", key)
+            assert info["value"].upper() != "#000000", \
+                f"{key} swatch shows black while unset"
+            assert info["empty"], f"{key} swatch is not marked unset"
+            assert float(info["opacity"]) < 1, \
+                f"{key} swatch is not dimmed, so it reads as chosen"
+
+        # setting one must un-dim it, or the state is stuck
+        page.fill("#colour_accent_hex", "#B04A26")
+        page.dispatch_event("#colour_accent_hex", "change")
+        page.wait_for_timeout(700)
+        after = page.evaluate(
+            "() => { const i = document.querySelector('#colour_accent');"
+            "  return { empty: i.dataset.empty === '1',"
+            "           opacity: getComputedStyle(i).opacity }; }")
+        assert not after["empty"], "swatch stayed marked unset after a value was set"
+        assert float(after["opacity"]) == 1, "swatch stayed dimmed after a value was set"
+
+    check("published copy carries no editor instructions",
+          t_published_copy_carries_no_editor_instructions)
+    check("an unset brand swatch shows the real colour",
+          t_unset_brand_swatch_shows_the_real_colour)
     check("brand colours survive a reload", t_brand_colours_survive_a_reload)
     def t_menu_panel_lists_every_page():
         """The menu is its own list now, not something derived from the

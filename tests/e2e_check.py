@@ -68,6 +68,18 @@ token = None
 project_id = None
 marker = f"e2e marker {uuid.uuid4().hex[:8]}"
 
+# A slug is the project's public address and it stays reserved even after
+# unpublishing, by design. A fixed "e2e-kitchen" therefore belongs to
+# whichever run got there first, and every later run gets a 409 from its
+# very first publish - which reads as an application bug and is not one.
+#
+# slug_raw still has the spaces, capitals and punctuation, so the
+# normalisation check keeps testing something real; slug_main is what the
+# server has to turn it into.
+_run = uuid.uuid4().hex[:8]
+slug_raw = f"E2E Kitchen {_run}!"
+slug_main = f"e2e-kitchen-{_run}"
+
 # Response headers from the most recent raw_call, so the security header
 # check can inspect what the server actually sends.
 HEADERS: dict[str, str] = {}
@@ -687,9 +699,11 @@ def t_other_user_cannot_read():
 
 
 def t_publish():
-    status, data, ms = call("POST", f"/api/projects/{project_id}/publish", {"slug": "E2E Kitchen!"}, token=token, expect=200)
+    status, data, ms = call("POST", f"/api/projects/{project_id}/publish",
+                         {"slug": slug_raw, "pages": _compiled()},
+                         token=token, expect=200)
     assert data["is_published"] is True, data
-    assert data["slug"] == "e2e-kitchen", f"slug not normalised: {data['slug']}"
+    assert data["slug"] == slug_main, f"slug not normalised: {data['slug']}"
     return f"{ms:.0f}ms slug={data['slug']}"
 
 
@@ -697,12 +711,14 @@ def t_unpublish():
     status, data, _ = call("POST", f"/api/projects/{project_id}/unpublish", {}, token=token, expect=200)
     assert data["is_published"] is False, data
     # slug survives unpublishing so the address stays reserved
-    assert data["slug"] == "e2e-kitchen", data
+    assert data["slug"] == slug_main, data
 
 
 def t_republish_same_slug():
-    status, data, _ = call("POST", f"/api/projects/{project_id}/publish", {"slug": "e2e-kitchen"}, token=token, expect=200)
-    assert data["slug"] == "e2e-kitchen", data
+    status, data, _ = call("POST", f"/api/projects/{project_id}/publish",
+                       {"slug": slug_main, "pages": _compiled()},
+                       token=token, expect=200)
+    assert data["slug"] == slug_main, data
 
 
 # ---------------------------------------------------------------- published site
@@ -729,7 +745,7 @@ def _compiled(marker: str = "Hello from the compiled site") -> dict:
 
 def t_publish_stores_compiled_pages():
     status, data, _ = call("POST", f"/api/projects/{project_id}/publish",
-                          {"slug": "e2e-kitchen", "pages": _compiled()},
+                          {"slug": slug_main, "pages": _compiled()},
                           token=token, expect=200)
     assert data["is_published"] is True, data
     assert data.get("published_at"), "publish did not record when it happened"
@@ -782,6 +798,40 @@ def t_unknown_slug_is_not_found():
         assert status == 404, f"{path} -> {status}"
 
 
+def t_publish_refuses_a_request_with_no_compiled_pages():
+    """A missing `pages` key and an empty `pages: {}` mean the same thing.
+
+    Only the empty object was refused. A request with no pages at all set
+    is_published = true, returned 200, and produced a site that 404s -
+    found by taking a screenshot of a published page and seeing "This site
+    isn't published" where a website should have been.
+    """
+    _, proj, _ = call("POST", "/api/projects",
+                      {"name": "No Pages", "type": "business", "goal": "get-contact"},
+                      token=token, expect=201)
+
+    # no pages key at all
+    status, data, _ = raw_call("POST", f"/api/projects/{proj['id']}/publish",
+                               {"slug": "nopages-" + uuid.uuid4().hex[:8]},
+                               token=token)
+    assert status == 400, f"a publish with no pages was accepted: {status} {data}"
+    assert "no pages" in str(data.get("error", "")).lower(), data
+
+    # an empty object, which was already refused - now for the same reason
+    status, data, _ = raw_call("POST", f"/api/projects/{proj['id']}/publish",
+                               {"slug": "nopages-" + uuid.uuid4().hex[:8],
+                                "pages": {}}, token=token)
+    assert status == 400, f"a publish with empty pages was accepted: {status} {data}"
+
+    # and the project must not be left claiming to be live
+    row = call("GET", f"/api/projects/{proj['id']}")[1]
+    assert not row.get("is_published"), row
+    assert not row.get("slug"), row
+
+    # clean up: the cleanup check counts what this account still owns
+    call("DELETE", f"/api/projects/{proj['id']}", token=token, expect=200)
+
+
 def t_publish_rejects_a_slug_already_taken():
     # registers a second account, and the register limit is per hour
     reset_limits()
@@ -796,13 +846,13 @@ def t_publish_rejects_a_slug_already_taken():
                           token=other["token"], expect=201)
 
     status, data, _ = raw_call("POST", f"/api/projects/{squatter['id']}/publish",
-                               {"slug": "e2e-kitchen", "pages": _compiled()},
+                               {"slug": slug_main, "pages": _compiled()},
                                token=other["token"])
     assert status == 409, f"expected the clash to be refused, got {status}: {data}"
     assert "taken" in str(data.get("error", "")).lower(), data
 
     # and the site that already owns the address is untouched
-    status, body = raw_text("GET", "/site/e2e-kitchen")
+    status, body = raw_text("GET", f"/site/{slug_main}")
     assert status == 200 and "Hello from the compiled site" in body, status
 
 
@@ -815,11 +865,11 @@ def t_publish_rejects_junk_pages():
 
 def t_unpublished_site_is_not_reachable():
     call("POST", f"/api/projects/{project_id}/unpublish", {}, token=token, expect=200)
-    status, _ = raw_text("GET", "/site/e2e-kitchen")
+    status, _ = raw_text("GET", f"/site/{slug_main}")
     assert status == 404, f"an unpublished site is still being served: {status}"
     # put it back so the cleanup test sees the state it expects
     call("POST", f"/api/projects/{project_id}/publish",
-         {"slug": "e2e-kitchen", "pages": _compiled()}, token=token, expect=200)
+         {"slug": slug_main, "pages": _compiled()}, token=token, expect=200)
 
 
 def t_projects_require_auth():
@@ -986,6 +1036,8 @@ for name, fn in [
     ("published site cannot run script", t_published_site_has_no_working_script),
     ("published site is public and cacheable", t_published_site_is_public_and_cached),
     ("unknown slug and page are 404", t_unknown_slug_is_not_found),
+    ("publish refuses a request with no compiled pages",
+     t_publish_refuses_a_request_with_no_compiled_pages),
     ("publish refuses a taken slug", t_publish_rejects_a_slug_already_taken),
     ("publish rejects junk pages", t_publish_rejects_junk_pages),
     ("unpublished site is unreachable", t_unpublished_site_is_not_reachable),
