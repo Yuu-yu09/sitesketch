@@ -28,6 +28,10 @@ BASE = "https://generativelanguage.googleapis.com/v1beta"
 TIMEOUT = 20          # primary attempt
 RETRY_TIMEOUT = 45    # heavier model, only if the fast one fails
 FALLBACK_MODEL = "gemini-3.8-flash"
+# Classification is a cheap question with a working keyword fallback, so it
+# gets one short attempt. Stacked behind the plan call it doubled the worst
+# case for a spinner nobody waits out.
+CLASSIFY_TIMEOUT = 8
 DESIGN_JS = pathlib.Path(__file__).parent / "static" / "js" / "design.js"
 
 
@@ -104,18 +108,23 @@ def _call(model: str, prompt: str, schema: dict, system: str | None, timeout: in
         raise GeminiError(f"unexpected response shape: {exc}") from exc
 
 
-def generate_json(prompt: str, schema: dict, system: str | None = None) -> dict:
+def generate_json(prompt: str, schema: dict, system: str | None = None,
+                  attempts: list[tuple[str, int]] | None = None) -> dict:
     """
     Structured call with one retry on a lighter model.
 
     Vercel's serverless functions occasionally lose the first Gemini request
     (cold start plus a new region), so a single timeout should not surface as
-    a broken feature. Raises GeminiError only if both attempts fail.
+    a broken feature. Raises GeminiError only if every attempt fails.
+
+    `attempts` lets a caller that can cheaply recover on its own ask for a
+    shorter budget. Picking a site type from keywords is worth a few seconds
+    and not worth a 65-second wait - see classify_site.
     """
     if not config.GEMINI_API_KEY:
         raise GeminiError("GEMINI_API_KEY is not set")
 
-    attempts = [(config.GEMINI_MODEL, TIMEOUT), (FALLBACK_MODEL, RETRY_TIMEOUT)]
+    attempts = attempts or [(config.GEMINI_MODEL, TIMEOUT), (FALLBACK_MODEL, RETRY_TIMEOUT)]
     last: Exception | None = None
     for model, timeout in attempts:
         try:
@@ -416,7 +425,15 @@ def classify_site(description: str) -> tuple[str, str]:
     interiors as its photography.
 
     Returns (type, goal). Falls back to a keyword guess, then to business.
+
+    The fallback is only reachable if this call gives up quickly, so it gets a
+    single short attempt rather than the usual 20s + 45s pair. /api/plan calls
+    this and then generate_plan, and the two budgets stacked: a cold serverless
+    region could leave someone staring at a spinner for over two minutes
+    before the keyword guess finally kicked in. Classification is a cheap
+    question with a good fallback - an answer in 40 seconds is worth nothing.
     """
+    attempts = [(config.GEMINI_MODEL, CLASSIFY_TIMEOUT)]
     description = (description or "").strip()
     if not description:
         return "business", "get-contact"
@@ -437,7 +454,7 @@ def classify_site(description: str) -> tuple[str, str]:
     )
 
     try:
-        raw = generate_json(prompt, schema, system=CLASSIFY_SYSTEM)
+        raw = generate_json(prompt, schema, system=CLASSIFY_SYSTEM, attempts=attempts)
     except GeminiError:
         return _guess_type(description)
 
