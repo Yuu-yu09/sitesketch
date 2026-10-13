@@ -18,6 +18,7 @@ import random
 import re
 
 import requests
+import threading
 
 import config
 
@@ -75,6 +76,24 @@ def variant_names() -> list[str]:
 # --------------------------------------------------------------------- plumbing
 
 def _call(model: str, prompt: str, schema: dict, system: str | None, timeout: int) -> dict:
+    """One Gemini request, bounded by a wall-clock deadline.
+
+    requests' `timeout` is a socket read timeout: it bounds how long the
+    server may be silent *between* chunks, not the request as a whole. A
+    server that holds the connection open and trickles bytes can run for many
+    times the timeout without ever tripping it. Measured here with timeout=20
+    set, a trivial "reply with ok=true" call took 161s and returned
+    successfully.
+
+    That defeats the point of the budget, and it is not hypothetical: on Vercel
+    it means the function runs until the platform kills it, and the user
+    watches a spinner for minutes.
+
+    So the request runs on a worker thread and the caller waits with a real
+    deadline. On timeout the worker is abandoned rather than cancelled -
+    Python cannot kill a thread - but it holds no lock and writes nowhere, so
+    the cost is one dangling socket per timeout.
+    """
     payload: dict = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -88,24 +107,46 @@ def _call(model: str, prompt: str, schema: dict, system: str | None, timeout: in
         payload["systemInstruction"] = {"parts": [{"text": system}]}
 
     url = f"{BASE}/models/{model}:generateContent"
-    try:
-        resp = requests.post(
-            url,
-            params={"key": config.GEMINI_API_KEY},
-            json=payload,
-            timeout=timeout,
-        )
-    except requests.RequestException as exc:
-        raise GeminiError(f"network failure: {exc}") from exc
+    outcome: dict = {}
 
-    if resp.status_code != 200:
-        raise GeminiError(f"{resp.status_code} from Gemini: {resp.text[:200]}")
+    def worker() -> None:
+        try:
+            resp = requests.post(
+                url,
+                params={"key": config.GEMINI_API_KEY},
+                json=payload,
+                # still set: bounds a genuinely dead socket, which is the
+                # common case and much cheaper than leaking threads
+                timeout=(10, timeout),
+            )
+        except requests.RequestException as exc:
+            outcome["error"] = GeminiError(f"network failure: {exc}")
+            return
+        except Exception as exc:                        # pragma: no cover
+            outcome["error"] = GeminiError(f"unexpected failure: {exc}")
+            return
 
-    try:
-        parts = resp.json()["candidates"][0]["content"]["parts"]
-        return json.loads(parts[0]["text"])
-    except (KeyError, IndexError, json.JSONDecodeError) as exc:
-        raise GeminiError(f"unexpected response shape: {exc}") from exc
+        if resp.status_code != 200:
+            outcome["error"] = GeminiError(f"{resp.status_code} from Gemini: {resp.text[:200]}")
+            return
+
+        try:
+            parts = resp.json()["candidates"][0]["content"]["parts"]
+            outcome["data"] = json.loads(parts[0]["text"])
+        except (KeyError, IndexError, json.JSONDecodeError) as exc:
+            outcome["error"] = GeminiError(f"unexpected response shape: {exc}")
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout)
+
+    if thread.is_alive():
+        raise GeminiError(f"no answer within {timeout}s")
+    if "error" in outcome:
+        raise outcome["error"]
+    if "data" not in outcome:
+        raise GeminiError("the request finished but produced nothing")
+    return outcome["data"]
 
 
 def generate_json(prompt: str, schema: dict, system: str | None = None,
