@@ -34,7 +34,76 @@
       function changed() {
         markDirty();
         pushPreview();
+        /* recorded after the write, but before the next one, so the
+           snapshot it keeps is always "where we were before this step" */
+        History.record(plan);
       }
+
+      /* ---------------- undo and redo ----------------
+         Restoring is deliberately not routed through changed(): that
+         would record the undo as a new edit and immediately make redo
+         impossible. It saves and previews, but it does not re-enter
+         history. */
+
+      function restore() {
+        /* Buffered contenteditable text belongs to the step we just
+           discarded. Left in place it is re-applied on the next render
+           and quietly overwrites what undo restored. */
+        Editor.forgetText();
+
+        /* the undone state may have fewer pages, or none of the section
+           that was selected */
+        pageIndex = Math.max(0, Math.min(pageIndex, plan.pages.length - 1));
+        var page = currentPage();
+        if (page) {
+          Editor.pageId = page.id;
+          var stillThere = Editor.selectedId &&
+            (Editor.selectedId === "footer" ||
+             page.sections.some(function (s) { return s.id === Editor.selectedId; }));
+          if (!stillThere) Editor.selectedId = null;
+        }
+
+        render();
+        markDirty();
+        pushPreview();
+        Editor.positionToolbar();
+      }
+
+      function undo() {
+        if (History.undo(plan)) {
+          restore();
+          SS.toast("Undone", "bi-arrow-counterclockwise");
+        }
+      }
+
+      function redo() {
+        if (History.redo(plan)) {
+          restore();
+          SS.toast("Redone", "bi-arrow-clockwise");
+        }
+      }
+
+      document.getElementById("undoBtn").addEventListener("click", undo);
+      document.getElementById("redoBtn").addEventListener("click", redo);
+
+      /* Ctrl+Z / Ctrl+Shift+Z, plus the Cmd variants for macOS.
+         Skipped while typing: the browser's own text undo is the right
+         one inside a contenteditable, and hijacking it there would
+         make a half-finished sentence un-undoable. */
+      document.addEventListener("keydown", function (event) {
+        var key = (event.key || "").toLowerCase();
+        if (key !== "z" && key !== "y") return;
+        if (!(event.ctrlKey || event.metaKey)) return;
+        if (Editor.editing) return;
+        if (document.activeElement && /^(input|textarea|select)$/i.test(document.activeElement.tagName)) return;
+
+        /* redo is Ctrl+Shift+Z, and Ctrl+Y for people whose keyboards
+           have no second Z worth reaching */
+        var isRedo = key === "y" || event.shiftKey;
+        if (key === "y" && !event.ctrlKey) return;
+        event.preventDefault();
+        if (isRedo) redo(); else undo();
+      });
 
       /* ---------------- pages ---------------- */
       function renderTabs() {
@@ -424,6 +493,11 @@
 
       function start(project) {
         plan = normalise(project);
+
+        /* history is seeded with the state as it was on arrival, so the
+           very first edit can be taken back */
+        History.onRestore = restore;
+        History.reset(plan);
 
         Editor.mount({
           root: canvas,

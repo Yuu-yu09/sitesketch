@@ -216,6 +216,157 @@ def run(page, phase=None):
         )
         assert "Edited in the browser test" in stored, f"edit was not saved: {stored}"
 
+    def t_undo_and_redo_buttons_start_disabled():
+        """Nothing to undo on arrival, so the buttons must say so.
+
+        If they look available but do nothing, the first thing a user
+        tries after breaking something is the one control that lies.
+
+        Runs before any other builder check, because this is only true
+        until the first edit.
+        """
+        expect(page.locator("#undoBtn")).to_be_disabled(timeout=5000)
+        expect(page.locator("#redoBtn")).to_be_disabled(timeout=5000)
+
+    def t_undo_reverses_an_edit_and_redo_puts_it_back():
+        title = page.evaluate(
+            "() => window.Editor.plan.pages[0].sections[0].title")
+        edited = "Undo test wording"
+
+        # The previous check edited the same field. Pause past the
+        # coalescing window so this is its own step - otherwise the two
+        # merge and one undo legitimately reverts both.
+        page.wait_for_timeout(900)
+
+        page.evaluate("(t) => {"
+                      "  window.Editor.writeValue(window.Editor.plan, window.Editor.pageId,"
+                      "    window.Editor.plan.pages[0].sections[0].id, 'title', t);"
+                      "  window.Editor.render();"
+                      "  window.Editor.onChange('test');"
+                      "}", edited)
+        page.wait_for_timeout(300)
+        assert page.evaluate(
+            "() => window.Editor.plan.pages[0].sections[0].title") == edited
+
+        expect(page.locator("#undoBtn")).to_be_enabled(timeout=5000)
+        page.click("#undoBtn")
+        page.wait_for_timeout(400)
+        after_undo = page.evaluate(
+            "() => window.Editor.plan.pages[0].sections[0].title")
+        assert after_undo == title, f"undo did not restore the old wording: {after_undo!r}"
+        # and the canvas agrees with the model, not just the model
+        assert edited not in (page.locator(".ss-sec").first.inner_text() or ""), \
+            "the canvas still shows the undone text"
+
+        expect(page.locator("#redoBtn")).to_be_enabled(timeout=5000)
+        page.click("#redoBtn")
+        page.wait_for_timeout(400)
+        assert page.evaluate(
+            "() => window.Editor.plan.pages[0].sections[0].title") == edited, \
+            "redo did not put the edit back"
+
+    def t_undo_is_bindable_to_the_keyboard():
+        """Ctrl+Z, because reaching for a small button after every drag is
+        not how anyone actually works.
+
+        One edit, one Ctrl+Z, back to where it started. Asserting a
+        two-step jump here would be asserting a bug.
+        """
+        page.evaluate("() => window.History.reset(window.Editor.plan)")
+        before = page.evaluate("() => window.Editor.plan.pages[0].sections[0].title")
+        page.evaluate("() => {"
+                      "  window.Editor.writeValue(window.Editor.plan, window.Editor.pageId,"
+                      "    window.Editor.plan.pages[0].sections[0].id, 'title', 'Keyboard undo');"
+                      "  window.Editor.render(); window.Editor.onChange('test'); }")
+        page.wait_for_timeout(900)          # past the coalescing window
+
+        page.click("#canvas", position={"x": 5, "y": 5})
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(400)
+        assert page.evaluate(
+            "() => window.Editor.plan.pages[0].sections[0].title") == before, \
+            "Ctrl+Z did not undo"
+
+    def t_each_separate_edit_is_its_own_step():
+        """Two deliberate actions, paused between them, are two undo
+        steps. This is the other half of the coalescing rule: coalesce
+        bursts, but never swallow a pause."""
+        page.evaluate("() => window.History.reset(window.Editor.plan)")
+        page.evaluate("() => {"
+                      "  window.Editor.writeValue(window.Editor.plan, window.Editor.pageId,"
+                      "    window.Editor.plan.pages[0].sections[0].id, 'title', 'Step one');"
+                      "  window.Editor.render(); window.Editor.onChange('test'); }")
+        page.wait_for_timeout(900)
+        page.evaluate("() => {"
+                      "  window.Editor.writeValue(window.Editor.plan, window.Editor.pageId,"
+                      "    window.Editor.plan.pages[0].sections[0].id, 'title', 'Step two');"
+                      "  window.Editor.render(); window.Editor.onChange('test'); }")
+        page.wait_for_timeout(300)
+        assert page.evaluate("() => window.History.past.length") == 2, \
+            "two paused edits should be two steps, got " \
+            f"{page.evaluate('() => window.History.past.length')}"
+
+        page.click("#canvas", position={"x": 5, "y": 5})
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(300)
+        assert page.evaluate(
+            "() => window.Editor.plan.pages[0].sections[0].title") == "Step one", \
+            "one undo should revert one step, not both"
+
+    def t_undo_restores_a_deleted_section():
+        """The destructive one. A mis-drag deleting a section has to be
+        recoverable or people stop trusting the editor."""
+        count_before = page.evaluate("() => window.Editor.plan.pages[0].sections.length")
+        first_id = page.evaluate("() => window.Editor.plan.pages[0].sections[0].id")
+
+        page.evaluate("(id) => { window.Editor.select(id); window.Editor.command('del'); }", first_id)
+        page.wait_for_timeout(300)
+        gone = page.evaluate("() => window.Editor.plan.pages[0].sections.length")
+        assert gone == count_before - 1, f"delete did not happen ({count_before} -> {gone})"
+
+        page.click("#undoBtn")
+        page.wait_for_timeout(400)
+        restored = page.evaluate("() => window.Editor.plan.pages[0].sections.length")
+        ids = page.evaluate("() => window.Editor.plan.pages[0].sections.map(s => s.id)")
+        assert restored == count_before, f"undo did not restore the section ({restored})"
+        assert first_id in ids, "the right section came back, not a different one"
+
+    def t_a_new_edit_drops_the_redo_stack():
+        """Standard behaviour, and it stops redo restoring a state that
+        never existed."""
+        page.evaluate("() => {"
+                      "  window.Editor.writeValue(window.Editor.plan, window.Editor.pageId,"
+                      "    window.Editor.plan.pages[0].sections[0].id, 'title', 'To be undone');"
+                      "  window.Editor.render(); window.Editor.onChange('test'); }")
+        page.wait_for_timeout(300)
+        page.click("#undoBtn")
+        page.wait_for_timeout(300)
+        expect(page.locator("#redoBtn")).to_be_enabled(timeout=5000)
+
+        page.evaluate("() => {"
+                      "  window.Editor.writeValue(window.Editor.plan, window.Editor.pageId,"
+                      "    window.Editor.plan.pages[0].sections[0].id, 'title', 'Something else');"
+                      "  window.Editor.render(); window.Editor.onChange('test'); }")
+        page.wait_for_timeout(300)
+        expect(page.locator("#redoBtn")).to_be_disabled(timeout=5000)
+
+    def t_rapid_edits_collapse_into_one_step():
+        """Typing fires the change callback repeatedly. If each keystroke
+        were its own undo step, Ctrl+Z would remove one character at a
+        time and feel broken."""
+        page.evaluate("() => { window.History.reset(window.Editor.plan); }")
+        page.evaluate("() => {"
+                      "  window.Editor.writeValue(window.Editor.plan, window.Editor.pageId,"
+                      "    window.Editor.plan.pages[0].sections[0].id, 'title', 'A');"
+                      "  window.Editor.render(); window.Editor.onChange('test'); }")
+        for letter in ("B", "C", "D"):
+            page.evaluate("(t) => {"
+                          "  window.Editor.writeValue(window.Editor.plan, window.Editor.pageId,"
+                          "    window.Editor.plan.pages[0].sections[0].id, 'title', t);"
+                          "  window.Editor.render(); window.Editor.onChange('test'); }", letter)
+        assert page.evaluate("() => window.History.past.length") == 1, \
+            f"a burst of edits became {page.evaluate('() => window.History.past.length')} steps"
+
     def t_drag_handles_are_visible():
         grips = page.locator(".ss-sec > .sec-grip")
         assert grips.count() > 0, "no drag handles rendered"
@@ -246,9 +397,18 @@ def run(page, phase=None):
         assert page.locator("#deviceFrame").is_hidden(), "desktop did not restore the canvas"
 
     check("builder opens from the dashboard", t_open_builder)
+    # must precede every other builder check: it is only true until the
+    # first edit, and the checks below all make one
+    check("undo/redo start disabled", t_undo_and_redo_buttons_start_disabled)
     check("design panel opens on the right", t_design_panel_opens_on_the_right)
     check("sidebars can be closed and the page expands", t_sidebars_can_be_closed)
     check("inline text editing saves", t_inline_edit_saves)
+    check("undo reverses an edit and redo puts it back", t_undo_reverses_an_edit_and_redo_puts_it_back)
+    check("undo works from the keyboard", t_undo_is_bindable_to_the_keyboard)
+    check("each paused edit is its own undo step", t_each_separate_edit_is_its_own_step)
+    check("undo restores a deleted section", t_undo_restores_a_deleted_section)
+    check("a new edit clears the redo stack", t_a_new_edit_drops_the_redo_stack)
+    check("a burst of edits is one undo step", t_rapid_edits_collapse_into_one_step)
     check("drag handles are visible without hovering", t_drag_handles_are_visible)
     check("footer text is editable", t_footer_is_editable)
     check("device preview switches between phone, tablet and desktop", t_device_preview_switches)

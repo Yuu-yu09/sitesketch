@@ -157,6 +157,17 @@
     });
   };
 
+  /* Drop the buffer wholesale.
+
+     restoreText() re-applies this on every render, which is what stops a
+     half-typed sentence vanishing mid-edit. It is also a trap for undo:
+     the buffer holds text from *before* the step being undone, so
+     re-applying it would quietly put the old wording back on top of the
+     restored one and undo would look like it half-worked. */
+  Editor.forgetText = function () {
+    Object.keys(pendingText).forEach(function (key) { delete pendingText[key]; });
+  };
+
   function cssEscape(value) {
     return String(value).replace(/["\\]/g, "\\$&");
   }

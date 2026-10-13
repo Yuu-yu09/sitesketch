@@ -873,6 +873,35 @@ textarea { resize: vertical; min-height: 96px; }
 .device-btn:hover { background: var(--paper); color: var(--ink); }
 .device-btn.is-on { background: var(--ink); color: #fff; }
 .device-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Undo/redo sits in the same visual language as the device switch, so the
+   top bar does not sprout a second unrelated control style. */
+.history-switch {
+  display: inline-flex;
+  gap: .15rem;
+  padding: .15rem;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: #fff;
+}
+.history-switch .icon-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: .95rem;
+}
+.history-switch .icon-btn:hover:not(:disabled) { background: var(--paper); color: var(--ink); }
+.history-switch .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* A disabled undo button should not look pressable, but it also should not
+   shout about being unavailable - it is simply not there yet. */
+.history-switch .icon-btn:disabled { opacity: .32; cursor: default; }
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;
