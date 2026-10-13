@@ -747,6 +747,75 @@ def run(page, phase=None):
         assert not after["empty"], "swatch stayed marked unset after a value was set"
         assert float(after["opacity"]) == 1, "swatch stayed dimmed after a value was set"
 
+    def t_builder_warns_when_the_live_site_is_behind():
+        """An edit does not reach visitors until the site is republished.
+
+        Publishing stores a finished copy of the page, because a published
+        site runs no JavaScript. That is correct, and it meant that changing
+        your brand colour, opening your live site and finding the old colour
+        there was the expected result with no warning anywhere - reported by
+        a real user.
+        """
+        stale = page.locator("#liveStale")
+
+        # this project is unpublished in the browser suite, so nothing to warn
+        assert not stale.is_visible(), \
+            "the out-of-date warning is showing for a site that was never published"
+
+        # publish it for real through the page, exactly as a person would
+        slug = "stale-" + uuid.uuid4().hex[:8]
+        page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_timeout(1500)
+        page.fill("#slug", slug)
+        page.click("#pubBtn")
+        page.wait_for_timeout(6000)
+
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        page.wait_for_timeout(1500)
+        # published and unedited since: nothing to warn about
+        assert not stale.is_visible(), \
+            "warned immediately after publishing, with no edits since"
+
+        # now make an edit and wait for autosave
+        if page.get_attribute("#stylesBtn", "aria-pressed") != "true":
+            page.click("#stylesBtn")
+            page.wait_for_timeout(500)
+        page.fill("#colour_accent_hex", "#2E7D32")
+        page.dispatch_event("#colour_accent_hex", "change")
+        page.wait_for_timeout(2500)
+
+        assert stale.is_visible(), \
+            "the live site is behind the editor and the builder did not say so"
+        assert "republish" in stale.inner_text().lower(), stale.inner_text()
+
+        # and the warning clears once the site is republished
+        page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_timeout(1500)
+        page.click("#pubBtn")
+        page.wait_for_timeout(6000)
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        page.wait_for_timeout(1500)
+        assert not stale.is_visible(), "still warning after republishing"
+
+        # Leave the project published. Taking it offline here broke every later
+        # check that loads the published address, because this test
+        # publishes last and the suite's own publish step did not recover
+        # it. The later tests republish with their own slug anyway.
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        page.wait_for_timeout(1200)
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  delete s.tokens.colour; window.Editor.onChange('design:colour'); }")
+        page.wait_for_timeout(1500)
+
     check("published copy carries no editor instructions",
           t_published_copy_carries_no_editor_instructions)
     check("an unset brand swatch shows the real colour",
@@ -1187,6 +1256,13 @@ def run(page, phase=None):
     check("preferences can be withdrawn", t_preferences_can_be_withdrawn)
     check("terms page is reachable", t_terms_page_is_reachable)
     check("login page links to the legal pages", t_login_page_offers_the_legal_links)
+
+    # Runs late on purpose. It publishes, and the checks above all load the
+    # published address and expect the project in a known state; run earlier
+    # it left them looking at a site that had moved underneath them. Four
+    # unrelated checks failed that way before this was moved.
+    check("the builder warns when the live site is behind",
+          t_builder_warns_when_the_live_site_is_behind)
 
 
 def main() -> int:

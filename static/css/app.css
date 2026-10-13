@@ -971,6 +971,11 @@ textarea { resize: vertical; min-height: 96px; }
 @media (max-width: 760px) {
   .builder-top { gap: .5rem .7rem; }
   .builder-top-mid { order: 3; flex: 1 1 100%; }
+  /* The name input takes the full row at this width, so the save state and
+     the out-of-date notice each need a row of their own. Without this the
+     three sat on one line and the toolbar ran to 453px inside a 390px
+     viewport - the responsive audit caught it the day it was added. */
+  .builder-top-mid { flex-wrap: wrap; row-gap: .4rem; }
   .builder-top-right { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
   .site-name-input { width: 100%; }
   .save-state { order: 4; }
@@ -2091,6 +2096,27 @@ input[type="checkbox"] {
 .save-state { font-family: var(--font-mono); font-size: .7rem; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-2); display: inline-flex; gap: .4rem; align-items: center; }
 .save-state .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .save-state.dirty .pip { background: var(--accent); }
+
+/* The live site is behind the editor. Amber rather than red: nothing is
+   broken and nothing is lost, the edit simply has not gone out yet. */
+.live-stale {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .3rem .55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn, #B45309) 14%, transparent);
+  color: color-mix(in srgb, var(--warn, #B45309) 78%, var(--ink));
+  font-size: .72rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.live-stale:hover { text-decoration: underline; }
+.live-stale[hidden] { display: none; }
+@media (pointer: coarse) {
+  .live-stale { min-height: 44px; padding: .5rem .7rem; }
+}
 
 /* ============ publish ============ */
 .pub-grid {

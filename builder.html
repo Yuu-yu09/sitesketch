@@ -23,6 +23,15 @@
     <div class="builder-top-mid">
       <input type="text" id="siteName" class="site-name-input" maxlength="60" aria-label="Website name">
       <span class="save-state" id="saveState"><span class="pip"></span> Saved</span>
+      <!-- Shown only while the live site is behind the editor. Publishing
+           stores a finished copy of the page, so an edit here cannot reach
+           visitors until it is republished, and nothing else in the builder
+           said so. Found by a real user changing the brand colour and
+           visiting their live site to find the old one still there. -->
+      <a class="live-stale" id="liveStale" href="#" hidden>
+        <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
+        Live site is out of date &mdash; republish
+      </a>
     </div>
 
     <div class="builder-top-right">

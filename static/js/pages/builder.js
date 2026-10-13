@@ -13,6 +13,47 @@
 
       function currentPage() { return plan.pages[pageIndex]; }
 
+      /* ---------------- live site freshness ----------------
+         Publishing stores a finished copy of the page, because a published
+         site runs no JavaScript and cannot be recompiled in the browser of
+         whoever visits it. That is the right design, but it means an edit
+         here does not reach visitors until the next publish - and the
+         builder said nothing at all about it. Someone changed their brand
+         colour, opened their live site, and found the old colour there.
+
+         So the editor says so. The comparison is updated_at against
+         published_at, both of which the API already returns. */
+      var liveStale = document.getElementById("liveStale");
+      var livePublishedAt = null;
+      var liveIsPublished = false;
+
+      function refreshLiveState(project) {
+        if (!project) return;
+        liveIsPublished = !!project.is_published;
+        livePublishedAt = project.published_at || null;
+        paintLiveState(project.updated_at);
+      }
+
+      function paintLiveState(updatedAt) {
+        if (!liveStale) return;
+        var behind = liveIsPublished && !!livePublishedAt &&
+                     updatedAt > livePublishedAt;
+        liveStale.hidden = !behind;
+        if (behind) {
+          liveStale.setAttribute("title",
+            "Your live site still shows the version from " +
+            new Date(livePublishedAt).toLocaleString() +
+            ". Republishing sends these edits to visitors.");
+        }
+      }
+
+      if (liveStale) {
+        liveStale.addEventListener("click", function (e) {
+          e.preventDefault();
+          location.href = "publish.html?id=" + plan.id;
+        });
+      }
+
       /* ---------------- saving ---------------- */
       function markDirty() {
         saveState.classList.add("dirty");
@@ -27,6 +68,9 @@
               return;
             }
             saveState.innerHTML = '<span class="pip"></span> Saved';
+            /* the save moved updated_at forward, so a published site is now
+               behind the editor */
+            if (res.project) refreshLiveState(res.project);
           });
         }, 700);
       }
@@ -500,6 +544,7 @@
 
       function start(project) {
         plan = normalise(project);
+        refreshLiveState(project);
 
         /* history is seeded with the state as it was on arrival, so the
            very first edit can be taken back */
