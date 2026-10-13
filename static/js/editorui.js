@@ -1153,18 +1153,27 @@ EditorUI.menuPanel = function (host) {
 
        The text field is not redundant. Pasting "#B04A26" out of a brand
        guide is what people actually do, and a colour input alone makes
-       that impossible. */
+       that impossible. It takes rgb() and hsl() as well, because that is
+       what Figma, a screenshot and every CSS rule hand you.
+
+       The RGB readout is shown beside the swatch rather than left inside
+       the browser's dialog: you should not have to open a system window to
+       find out what colour you just set. */
     function brandColour(key, label, current) {
       var id = "colour_" + key;
-      var value = /^#[0-9a-f]{6}$/i.test(String(current || "")) ? String(current) : "";
+      var value = window.DESIGN ? DESIGN.parseColour(current) : null;
+      var rgbText = value ? "rgb(" + DESIGN.toRGB(value) + ")" : "";
       return '<div class="brand-row">' +
         '<label class="field" for="' + id + '_hex"><span>' + label + "</span>" +
           '<span class="brand-inputs">' +
             '<input type="color" id="' + id + '" value="' + (value || "#000000") + '"' +
               ' aria-label="Choose ' + label.toLowerCase() + '">' +
-            '<input type="text" id="' + id + '_hex" class="hex-field" value="' + value + '"' +
-              ' placeholder="auto" maxlength="7 spellcheck="false' +
-              ' aria-label="' + label + ' hex value">' +
+            '<input type="text" id="' + id + '_hex" class="hex-field" value="' +
+              (value || "") + '"' +
+              ' placeholder="hex, rgb() or hsl()" maxlength="40" spellcheck="false"' +
+              ' aria-label="' + label + ' colour value">' +
+            '<output class="rgb-readout" id="' + id + '_rgb"' +
+              (rgbText ? "" : " hidden") + ">" + rgbText + "</output>" +
           "</span>" +
         "</label>" +
       "</div>";
@@ -1262,8 +1271,17 @@ EditorUI.menuPanel = function (host) {
         refresh();
       }
 
+      function showRGB(hexValue) {
+        var out = host.querySelector("#colour_" + key + "_rgb");
+        if (!out) return;
+        var text = DESIGN.toRGB(hexValue);
+        out.textContent = text ? "rgb(" + text + ")" : "";
+        out.hidden = !text;
+      }
+
       picker.addEventListener("input", function () {
         hex.value = this.value.toUpperCase();
+        showRGB(this.value);
         write(this.value.toUpperCase());
       });
 
@@ -1273,13 +1291,17 @@ EditorUI.menuPanel = function (host) {
       hex.addEventListener("change", function () {
         var raw = this.value.trim();
         if (!raw) { write(""); return; }
-        var v = raw.charAt(0) === "#" ? raw : "#" + raw;
-        if (!/^#[0-9a-f]{6}$/i.test(v)) {
-          SS.toast("Use a full colour like #B04A26", "bi-exclamation-triangle");
+        var v = window.DESIGN ? DESIGN.parseColour(raw) : null;
+        if (!v) {
+          SS.toast("Use #B04A26, rgb(176, 74, 38) or hsl(20, 62%, 42%)",
+                   "bi-exclamation-triangle");
           return;
         }
         picker.value = v;
         this.value = v.toUpperCase();
+        /* typing rgb() must update the readout too, not just dragging the
+           swatch - otherwise the value is right and the display lies */
+        showRGB(v);
         write(v.toUpperCase());
       });
     });

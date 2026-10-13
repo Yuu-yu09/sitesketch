@@ -605,6 +605,59 @@ def run(page, phase=None):
     check("brand colours reach the page", t_brand_colours_reach_the_page)
     check("brand derives readable ink", t_brand_derives_readable_ink)
     check("a partial brand set stays coherent", t_partial_brand_set_stays_coherent)
+    def t_colour_fields_accept_rgb_and_hsl():
+        """People arrive with colours in whatever format their tools hand
+        over. Figma, a brand guide screenshot and every CSS rule speak rgb()
+        and hsl(); rejecting them with "use a full colour like #B04A26" is
+        true and useless when what is in front of you is 176, 74, 38."""
+        cases = [
+            ("#B04A26", "#B04A26"),
+            ("b04a26", "#B04A26"),
+            ("#B04", "#BB0044"),
+            ("rgb(176, 74, 38)", "#B04A26"),
+            ("rgba(176, 74, 38, 0.8)", "#B04A26"),
+            ("rgb(176 74 38)", "#B04A26"),
+            # checked against python colorsys, not guessed: hls_to_rgb(20,62%,42)
+            # is #AE5529
+            ("hsl(20, 62%, 42%)", "#AE5529"),
+            ("  #B04A26  ", "#B04A26"),
+        ]
+        results = page.evaluate("""(cases) => {
+            const out = [];
+            for (const c of cases) {
+                const v = window.DESIGN.parseColour(c[0]);
+                out.push(v);
+            }
+            return out;
+        }""", cases)
+        for (raw, expected), got in zip(cases, results):
+            assert got and got.upper() == expected.upper(), \
+                f"{raw!r} parsed to {got!r}, expected {expected}"
+
+        # rubbish is still refused, rather than silently becoming black
+        for junk in ("rebeccapurple", "rgb(1,2)", "#12345", "not a colour", ""):
+            assert page.evaluate("(v) => window.DESIGN.parseColour(v)", junk) is None, \
+                f"{junk!r} should not parse"
+
+    def t_rgb_readout_shows_the_value():
+        """You should not have to open a system dialog to find out what
+        colour you just set."""
+        page.click("#stylesBtn")
+        page.wait_for_timeout(400)
+        page.fill("#colour_accent_hex", "rgb(176, 74, 38)")
+        page.dispatch_event("#colour_accent_hex", "change")
+        page.wait_for_timeout(600)
+
+        shown = page.locator("#colour_accent_rgb").inner_text()
+        assert shown == "rgb(176, 74, 38)", f"readout says {shown!r}"
+        accent = page.evaluate(
+            "() => getComputedStyle(window.Editor.root.querySelector('.ss-site'))"
+            ".getPropertyValue('--accent').trim()")
+        assert accent.upper() == "#B04A26", f"page accent is {accent}"
+
+        page.click("#colourReset")
+        page.wait_for_timeout(400)
+
     check("brand colours survive a reload", t_brand_colours_survive_a_reload)
     def t_menu_panel_lists_every_page():
         """The menu is its own list now, not something derived from the
@@ -787,6 +840,8 @@ def run(page, phase=None):
     check("a submenu renders", t_a_submenu_renders_and_survives)
     check("deleting a page drops it from the menu", t_deleting_a_page_drops_it_from_the_menu)
     check("menu panel does not accumulate listeners", t_menu_panel_does_not_accumulate_listeners)
+    check("colour fields accept rgb() and hsl()", t_colour_fields_accept_rgb_and_hsl)
+    check("the RGB readout shows the value", t_rgb_readout_shows_the_value)
     check("footer text is editable", t_footer_is_editable)
     check("device preview switches between phone, tablet and desktop", t_device_preview_switches)
 

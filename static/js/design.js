@@ -246,6 +246,90 @@
     return luminance(bg) > 0.45 ? "#14110A" : "#FFFFFF";
   };
 
+  /* Accepts the colour formats people actually arrive with.
+
+     Hex alone was not enough: design tools, Figma, screenshots of a brand
+     guide and every CSS rule in the wild hand out rgb() and hsl(), and the
+     field rejected them with "use a full colour like #B04A26" - which is
+     true and useless when the thing in front of you is 176, 74, 38.
+
+     Returns "#RRGGBB" or null. Named colours are deliberately not supported:
+     "rebeccapurple" is not something anyone types for a business accent. */
+  function parseColour(value) {
+    var raw = String(value == null ? "" : value).trim().toLowerCase();
+    if (!raw) return null;
+
+    function out(r, g, b) {
+      function h(n) {
+        var s = Math.max(0, Math.min(255, Math.round(n))).toString(16);
+        return s.length === 1 ? "0" + s : s;
+      }
+      return "#" + h(r) + h(g) + h(b);
+    }
+    function num(part, scale) {
+      var n = parseFloat(part);
+      if (isNaN(n)) return null;
+      return /%$/.test(part) ? (n / 100) * scale : n;
+    }
+
+    // #rgb and #rrggbb, with or without the hash
+    var hexish = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(raw);
+    if (hexish) {
+      var hx = hexish[1];
+      if (hx.length === 3) {
+        return "#" + hx[0] + hx[0] + hx[1] + hx[1] + hx[2] + hx[2];
+      }
+      return "#" + hx;
+    }
+
+    // rgb(176, 74, 38) / rgba(176, 74, 38, .8)
+    var rgbMatch = /^rgba?\(([^)]+)\)$/.exec(raw);
+    if (rgbMatch) {
+      var parts = rgbMatch[1].split(/[,/\s]+/).filter(function (p) { return p; });
+      if (parts.length < 3) return null;
+      var r = num(parts[0], 255), g = num(parts[1], 255), b = num(parts[2], 255);
+      if (r === null || g === null || b === null) return null;
+      return out(r, g, b);
+    }
+
+    // hsl(20, 62%, 42%) / hsla(...)
+    var hslMatch = /^hsla?\(([^)]+)\)$/.exec(raw);
+    if (hslMatch) {
+      var hp = hslMatch[1].split(/[,/\s]+/).filter(function (p) { return p; });
+      if (hp.length < 3) return null;
+      var hDeg = parseFloat(hp[0]);
+      var sPct = parseFloat(hp[1]) / 100;
+      var lPct = parseFloat(hp[2]) / 100;
+      if (isNaN(hDeg) || isNaN(sPct) || isNaN(lPct)) return null;
+      var hh = ((hDeg % 360) + 360) % 360 / 360;
+      var sat = Math.max(0, Math.min(1, sPct));
+      var lig = Math.max(0, Math.min(1, lPct));
+      var q2 = lig < 0.5 ? lig * (1 + sat) : lig + sat - lig * sat;
+      var pp = 2 * lig - q2;
+      function channel(t) {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1 / 6) return pp + (q2 - pp) * 6 * t;
+        if (t < 1 / 2) return q2;
+        if (t < 2 / 3) return pp + (q2 - pp) * (2 / 3 - t) * 6;
+        return pp;
+      }
+      return out(channel(hh + 1 / 3) * 255, channel(hh) * 255, channel(hh - 1 / 3) * 255);
+    }
+
+    return null;
+  }
+  D.parseColour = parseColour;
+
+  /* The same value the other way, for showing a colour's RGB next to its
+     swatch. */
+  D.toRGB = function (value) {
+    var hexv = parseColour(value);
+    if (!hexv) return "";
+    var n = parseInt(hexv.slice(1), 16);
+    return ((n >> 16) & 255) + ", " + ((n >> 8) & 255) + ", " + (n & 255);
+  };
+
   /* Applies spec.tokens.colour on top of the chosen palette. Anything the
      user did not set keeps the palette's value, so a partial brand set -
      just an accent, say - still produces a coherent page. */

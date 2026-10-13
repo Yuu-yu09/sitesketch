@@ -1240,6 +1240,16 @@ textarea { resize: vertical; min-height: 96px; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   text-transform: uppercase;
 }
+/* The RGB value, shown so nobody has to open the system colour dialog to
+   find out what they just set. */
+.brand-inputs .rgb-readout {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .68rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.brand-inputs .rgb-readout[hidden] { display: none; }
 .brand-colours .btn-ghost { margin-top: .2rem; }
 .colour-row { display: flex; align-items: center; gap: .4rem; }
 .colour-row input[type="color"] {
