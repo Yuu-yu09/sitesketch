@@ -78,7 +78,11 @@ def step_syntax() -> tuple[bool, str]:
 def step_eslint() -> tuple[bool, str]:
     binary = ROOT / "node_modules" / ".bin" / "eslint.cmd"
     if not binary.exists():
-        return True, "eslint not installed - skipped (npm install --no-save eslint@9)"
+        # A skipped gate that reads as a passing gate is worse than no gate.
+        # Says so loudly and tells you the one command that restores it.
+        print("   !! ESLINT NOT INSTALLED - the lint gate did not run")
+        print("      fix with:  npm install")
+        return True, "eslint not installed - lint gate SKIPPED, not passed"
     proc = subprocess.run([str(binary), "static/js"],
                           cwd=str(ROOT), capture_output=True, text=True)
     if proc.returncode == 0:

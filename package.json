@@ -1,0 +1,15 @@
+{
+  "name": "sitesketch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static frontend tooling for SiteSketch. The application itself is served straight by Flask; nothing here ships to the browser except static/js and static/css.",
+  "scripts": {
+    "lint": "eslint static/js",
+    "lint:fix": "eslint static/js --fix",
+    "check": "npm run lint"
+  },
+  "devDependencies": {
+    "eslint": "9.39.5",
+    "@eslint/js": "9.39.5"
+  }
+}
