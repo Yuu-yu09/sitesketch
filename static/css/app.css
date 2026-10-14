@@ -2131,6 +2131,22 @@ input[type="checkbox"] {
 .icon-btn:hover { border-color: var(--hairline); background: var(--paper); color: var(--ink); }
 .icon-btn.danger:hover { border-color: var(--error); color: var(--error); background: #FDF3F1; }
 
+/* The armed state of a two-step delete had no styling at all, so the first
+   click did something invisible: only a title tooltip, which takes a second
+   to appear. Reported as "you have to click multiple times for it to work" -
+   the click was registering, there was just no sign of it. Filled and
+   swapped to a tick so the second click is an obvious, deliberate act. */
+.icon-btn.is-armed,
+.icon-btn.danger.is-armed {
+  background: var(--error);
+  border-color: var(--error);
+  color: #fff;
+}
+.icon-btn.is-armed:hover { background: var(--error); color: #fff; }
+.icon-btn.is-armed .bi-trash3 { display: none; }
+.icon-btn.is-armed .bi-check-lg { display: inline-block; }
+.icon-btn .bi-check-lg { display: none; }
+
 .canvas-empty {
   text-align: center;
   border: 2px dashed var(--hairline);

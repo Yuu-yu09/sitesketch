@@ -48,7 +48,10 @@
           card.innerHTML =
             '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;">' +
               "<h2 class=\"h-sub\"><a href=\"builder.html?id=" + p.id + "\" style=\"text-decoration:none;\">" + SS.esc(p.name) + "</a></h2>" +
-              '<button class="icon-btn danger" data-del="' + p.id + '" aria-label="Delete ' + SS.esc(p.name) + '"><i class="bi bi-trash3" aria-hidden="true"></i></button>' +
+              '<button class="icon-btn danger" data-del="' + p.id + '" data-name="' + SS.esc(p.name) + '" aria-label="Delete ' + SS.esc(p.name) + '">' +
+              '<i class="bi bi-trash3" aria-hidden="true"></i>' +
+              '<i class="bi bi-check-lg" aria-hidden="true"></i>' +
+            "</button>" +
             "</div>" +
             '<div class="proj-meta">' +
               '<span class="chip">' + SS.esc(typeName(p.type)) + "</span>" +
@@ -84,9 +87,21 @@
               el.dataset.armed = "1";
               el.classList.add("is-armed");
               el.title = "Click again to confirm";
+              el.setAttribute("aria-label", "Confirm delete " +
+                (el.getAttribute("data-name") || "this plan"));
+              /* 3s was far too short and it expired silently, so anyone who
+                 read the tooltip and then clicked - which is the behaviour a
+                 two-step confirm is asking for - had their arm reset and had
+                 to start again. Now visible for 8s. */
               setTimeout(function () {
-                if (el.dataset.armed === "1") { el.dataset.armed = "0"; el.classList.remove("is-armed"); el.title = "Delete"; }
-              }, 3000);
+                if (el.dataset.armed === "1") {
+                  el.dataset.armed = "0";
+                  el.classList.remove("is-armed");
+                  el.title = "Delete";
+                  el.setAttribute("aria-label", "Delete " +
+                    (el.getAttribute("data-name") || "this plan"));
+                }
+              }, 8000);
               return;
             }
             this.dataset.armed = "0";

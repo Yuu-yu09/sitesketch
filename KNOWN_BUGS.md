@@ -556,4 +556,79 @@ The repeated clicking was happening *during* the 83-second hang, before the
 file had finished uploading, so there was nothing to pick yet. Worth
 recording because "clicking an upload does nothing" and "the upload hangs"
 look like two bugs and are one, and fixing only the second would have left
-the report feeling unanswered.
+the report feeling unanswered.## 16. Deleting a plan needs several clicks and gives no feedback — FIXED
+
+**Seen as:** "the deleting of plans is so buggy you have to click multiple
+times for it to function well."
+
+**Cause, two parts.**
+
+1. The two-step confirm armed a state with **no CSS at all** — `.is-armed`
+   appeared nowhere in the stylesheets. The first click set a `title`
+   tooltip, which takes a second to appear and is easy to miss, so the
+   click registered and nothing on screen changed. It looked like a dead
+   button.
+2. The armed state expired after **3 seconds**, silently. A two-step confirm
+   asks you to read and then click, and 3s is shorter than that, so anyone
+   who behaved as intended had their arm reset and had to start again —
+   which is precisely the "click multiple times" report.
+
+**Fix:** style `.is-armed` (filled error background, trash icon swapped for
+a tick), lengthen the window to 8s, and update the `aria-label` while armed.
+
+Measured: after one click the button computes
+`background-color: rgb(163, 46, 27)`, trash `display: none`, tick visible,
+and it is still armed at 5.4s. The second click deletes and toasts.
+
+## 17. Picking a card image destroys the section — FIXED
+
+**Seen as:** "the img you can select it but you cant change it, you cant even
+use your own uploads."
+
+**Reproduced:** build a site, add a features section, switch it to the card
+grid, click a card's picture. The picker opens with 30 library tiles; choose
+one and the picture does not change.
+
+    card img BEFORE: photo-1552566626-52f8b828a
+    modal open: True     LIBRARY tiles: 30
+    card img AFTER : photo-1552566626-52f8b828a
+    CARD IMAGE CHANGED: False
+
+**It was much worse than "does not change".** Driving the same write
+directly threw:
+
+    TypeError: items(...).map is not a function
+        at BLOCKS.menu (site.js:309)
+        at SS.renderPage -> Editor.render
+
+**Cause.** Every card and list row stores its picture under the path
+`items:<n>:img` — `cardsOf` emits `path + ":" + i + ":img"`. `resolve()` did
+not understand that shape:
+
+    var index = parseInt(parts[0], 10);            // parseInt("items") -> NaN
+    if (isNaN(index)) return { section: section, key: "items" };
+
+so it returned a bare key, and `writeValue` fell through to its final
+`else` and ran `section["items"] = url` — **replacing the whole items array
+with a URL string**. The next render called `.map` on a string and threw,
+which is what the user saw as "selecting does nothing": the page died before
+it could repaint.
+
+Worse, `setImage` ends in `Editor.onChange`, so autosave persisted the
+corrupted section. Selecting a card image was silently destructive.
+
+Section images were unaffected, which is why the feature looked like it
+worked whenever it was driven from a section rather than a card.
+
+**Fix:** `resolve()` handles `items:<n>:<field>`, and coerces a non-array
+`items` back to an array rather than trusting it.
+
+    card img AFTER : photo-1524758631624-e2822e
+    CARD IMAGE CHANGED: True     js errors: []
+
+**How it was found, because the first two attempts were bad tests.** One
+clicked the *uploads* tab on an account with no uploads and read "0 tiles"
+as a fault. Another asserted the card image changed after picking tile zero
+— which may legitimately already be that photograph, so it could never fail
+correctly. Only driving the write directly and reading the thrown error
+found it. "Cannot reproduce" is sometimes "has not reproduced yet".
