@@ -273,13 +273,28 @@
     }
 
     // #rgb and #rrggbb, with or without the hash
-    var hexish = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(raw);
+    /* 3, 4, 6 and 8 digits all reach this.
+
+       The two alpha forms are here because Chrome's colour picker has an
+       opacity slider, and once it is touched the input reports 8-digit
+       hex. The validator used to accept only 3 and 6, so a colour chosen
+       from the swatch - the most obvious way to choose one - was silently
+       thrown away with no message. Reported as "you can't properly change
+       the colours".
+
+       Alpha is discarded rather than refused. SiteSketch has no
+       transparency anywhere: brand colours, section colours and footer
+       colours are all opaque. Keeping the RGB and dropping the opacity
+       means a colour somebody deliberately chose still lands, and the only
+       thing lost is something the design system cannot express anyway. */
+    var hexish = /^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(raw);
     if (hexish) {
       var hx = hexish[1];
-      if (hx.length === 3) {
+      if (hx.length === 3 || hx.length === 4) {
+        /* #rgb / #rgba -> double each of the colour digits, drop the alpha */
         return "#" + hx[0] + hx[0] + hx[1] + hx[1] + hx[2] + hx[2];
       }
-      return "#" + hx;
+      return "#" + hx.slice(0, 6);
     }
 
     // rgb(176, 74, 38) / rgba(176, 74, 38, .8)

@@ -9,7 +9,7 @@ each fix separately, and update this file in the same commit.
 
 ---
 
-## 1. Every 404 renders as raw JSON — OPEN
+## 1. Every 404 renders as raw JSON — FIXED
 
 **Seen as:** `{"error":"not found"}` with Chrome's JSON viewer, on an ordinary
 page load.
@@ -26,9 +26,15 @@ twice logged as unreproducible. It was never about publishing.
 `/api/`; otherwise return an HTML 404 page. Same for `page_html()`, which has
 the same problem for a missing `.html`.
 
+**Done.** `_wants_json()` checks the path first, then the `Accept` header, so
+a `curl` to `/api/...` gets JSON whatever it sends and a browser navigation
+gets a page with a message and a link back. `/site/...` is untouched and keeps
+its own "This site isn't published" wording. Covered by
+`t_a_browser_gets_a_page_and_an_api_caller_gets_json`.
+
 ---
 
-## 2. Colours picked with the swatch are silently thrown away — OPEN
+## 2. Colours picked with the swatch are silently thrown away — FIXED
 
 **Seen as:** "you can't properly change the colours."
 
@@ -49,6 +55,17 @@ parseColour("#B04A26FF") -> null
 ignore alpha, because the app has no transparency model and silently
 discarding a chosen colour is worse than ignoring its opacity. Add a test
 covering every digit count, including the ones that must still be refused.
+
+**Done.** `parseColour` now takes 3, 4, 6 and 8 digits. Four- and eight-digit
+forms keep the colour and drop the alpha. Five and seven digits are still
+refused, as is everything that is not a colour at all — a looser pattern here
+would turn a typo into a black swatch. Covered by
+`t_an_eight_digit_colour_is_not_thrown_away`, which asserts through the real
+field and on to the rendered page rather than only calling the parser.
+
+*Note for whoever does bug 3:* this removes the *silent failure*, not the
+confusion. The opacity slider is still offered by the browser and still means
+nothing here, and there is still no Apply button.
 
 ---
 
@@ -113,21 +130,48 @@ rendered as a real `href`.
 
 ---
 
-## 7. Dropdowns close the instant they are clicked — NOT REPRODUCED
+## 7. Dropdowns close the instant they are clicked — FIXED
 
-**Seen as:** "when I click it, it disappears right away."
+**Seen as:** "when I click it, it disappears right away." Later detail, which
+turned this from unreproducible into obvious: **you have to long-press to open
+it, and it vanishes the moment you lift your finger.** Nothing could ever be
+selected.
 
-**Measured:** zero DOM mutations occur when `#footCols` is clicked, so the
-panel is *not* being re-rendered underneath the dropdown. The markup,
-handlers and ordering look correct.
+**Cause.** Chrome closes a native `<select>` popup the instant the element it
+is anchored to is replaced in the DOM. A document-level handler in
+`editor.js` was replacing it:
 
-**Why not confirmed:** Chrome's native `<select>` popup is drawn by the OS
-and does not exist in the DOM, so headless Playwright cannot observe it
-closing. This one needs the exact steps from the person who saw it.
+```
+editorui.js:824  EditorUI.footerPanel   rebuilds the panel's innerHTML
+builder.js:387   renderPanel
+builder.js:559   onSelectionChange
+editor.js:188    Editor.select(null)
+editor.js:670    document click handler   <-- the cause
+```
 
-**Do not "fix" this until it can be reproduced.** Two other things in this
-file looked like bugs and were not; guessing here risks breaking selects
-that work.
+That handler exists to clear the toolbar when you click away from a section.
+It bailed out only for `.ss-sec` and `.block-toolbar`, so **clicking any
+side-panel control counted as clicking away.** That ran `Editor.select(null)`,
+which fired `onSelectionChange`, which re-rendered the panel, which replaced
+the very `<select>` being opened.
+
+Why it needed a long press: on a touchscreen that is simply how a `<select>`
+opens. The `click` that fires on release then destroyed it. On a mouse it
+looked intermittent, which is why it survived the first round of testing.
+
+**Fix.** Anything the user can operate is not "away". The handler now also
+bails for `.builder-panel`, `.builder-rail`, `.builder-top`, `.modal` and
+`.toast-host`.
+
+**Verified** by node identity, not by appearance: the same `<select>` element
+is still in the document after a long press (node swaps went 1 -> 0), and the
+dropdown still commits its value. That is
+`t_panel_controls_survive_being_clicked`.
+
+*Lesson worth keeping:* this was on the list as NOT REPRODUCED because a
+normal click produced zero mutations. It was not unreproducible — it was
+reproducible only through a path nobody had tried. Asking the person who saw
+it for the gesture was worth more than another hour of guessing.
 
 ---
 

@@ -218,6 +218,12 @@ Read it before starting work. It carries entries marked **NOT REPRODUCED**,
 which are there specifically to stop someone "fixing" a non-bug — two things
 in that file looked broken and were not.
 
+It also carries a bug that *was* marked not-reproduced until the person who
+saw it was asked for the gesture they used. "The dropdown disappears when I
+click it" was unreproducible; "you have to long-press and it vanishes when
+you let go" identified it immediately. **When a report is not reproducible,
+ask what the person actually did before deciding it cannot happen.**
+
 **Report before you fix.** State the bug and the planned fix first, fix one
 at a time, commit each fix on its own, and update `KNOWN_BUGS.md` in that same
 commit. A fix that arrives without a diagnosis is how a wrong change gets a

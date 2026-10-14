@@ -656,6 +656,55 @@ def run(page, phase=None):
     check("brand colours reach the page", t_brand_colours_reach_the_page)
     check("brand derives readable ink", t_brand_derives_readable_ink)
     check("a partial brand set stays coherent", t_partial_brand_set_stays_coherent)
+    def t_an_eight_digit_colour_is_not_thrown_away():
+        """A colour chosen from the swatch must actually land.
+
+        Chrome's colour picker has an opacity slider, and once it is touched
+        the input reports 8-digit hex. parseColour accepted only 3 and 6
+        digits, so it returned null and the colour was discarded with no
+        message - the swatch, the most obvious way to pick a colour, did
+        nothing. Reported as "you can't properly change the colours".
+        """
+        cases = [
+            # what the picker sends once opacity has been touched
+            ("#B04A2680", "#B04A26"),
+            ("#B04A26FF", "#B04A26"),
+            # four-digit #rgba, alpha dropped
+            ("#B04A", "#BB0044"),
+            ("#B044", "#BB0044"),
+            # and the forms that were already working must not regress
+            ("#B04A26", "#B04A26"),
+            ("#B04", "#BB0044"),
+        ]
+        for raw, expected in cases:
+            got = page.evaluate("(v) => window.DESIGN.parseColour(v)", raw)
+            assert got and got.upper() == expected, \
+                f"{raw!r} parsed to {got!r}, expected {expected}"
+
+        # the whole path, not just the parser: through the field to the page
+        if page.get_attribute("#stylesBtn", "aria-pressed") != "true":
+            page.click("#stylesBtn")
+            page.wait_for_timeout(500)
+        page.fill("#colour_accent_hex", "#2E7D3280")
+        page.dispatch_event("#colour_accent_hex", "change")
+        page.wait_for_timeout(900)
+        accent = page.evaluate(
+            "() => getComputedStyle(window.Editor.root.querySelector('.ss-site'))"
+            ".getPropertyValue('--accent').trim()")
+        assert accent.upper() == "#2E7D32", \
+            f"an 8-digit colour did not reach the page: {accent}"
+
+        # five digits is not a colour and must still be refused
+        assert page.evaluate("(v) => window.DESIGN.parseColour(v)",
+                             "#2E7D3") is None, "5 digits parsed as a colour"
+
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  delete s.tokens.colour; window.Editor.onChange('design:colour'); }")
+        page.wait_for_timeout(1200)
+
+    check("an eight-digit colour is not thrown away",
+          t_an_eight_digit_colour_is_not_thrown_away)
     def t_colour_fields_accept_rgb_and_hsl():
         """People arrive with colours in whatever format their tools hand
         over. Figma, a brand guide screenshot and every CSS rule speak rgb()
@@ -816,6 +865,61 @@ def run(page, phase=None):
                       "  delete s.tokens.colour; window.Editor.onChange('design:colour'); }")
         page.wait_for_timeout(1500)
 
+    def t_panel_controls_survive_being_clicked():
+        """A dropdown must not be destroyed by the act of opening it.
+
+        A document-level handler cleared the section selection on any click
+        that was not on the canvas. Clicking a side-panel control therefore
+        ran onSelectionChange, which re-rendered the panel, which replaced
+        the <select> being clicked. Chrome closes the native popup the moment
+        its node is replaced, so on a touchscreen - where a dropdown only
+        opens on a long press - the list vanished the instant you lifted your
+        finger and nothing could be chosen.
+
+        The check is node identity, not appearance: the same element must
+        still be in the document afterwards.
+        """
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        page.wait_for_timeout(1200)
+        if page.get_attribute("#footerBtn", "aria-pressed") != "true":
+            page.click("#footerBtn")
+            page.wait_for_timeout(700)
+
+        # mark the node we are about to poke
+        page.evaluate("""() => {
+            const s = document.querySelector('#footCols');
+            s.setAttribute('data-identity', 'ORIGINAL');
+        }""")
+
+        for selector in ("#footCols", "#footAlign"):
+            page.evaluate("(sel) => document.querySelector(sel)"
+                          ".setAttribute('data-identity', 'ORIGINAL')", selector)
+            box = page.locator(selector).bounding_box()
+            assert box, f"{selector} has no box"
+            cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+            # a long press, which is how a touchscreen opens a dropdown
+            page.mouse.move(cx, cy)
+            page.mouse.down()
+            page.wait_for_timeout(700)
+            page.mouse.up()
+            page.wait_for_timeout(400)
+
+            assert page.locator(f'{selector}[data-identity="ORIGINAL"]').count(), \
+                f"{selector} was replaced in the DOM by being clicked, so " \
+                f"its dropdown would close the instant it opened"
+
+        # and the panel must still work afterwards
+        page.select_option("#footCols", "1fr 1fr")
+        page.wait_for_timeout(800)
+        assert page.evaluate(
+            "() => ((window.Editor.plan.footer || {}).style || {}).columns") \
+            == "1fr 1fr", \
+            "the dropdown stopped working after being clicked"
+
+    check("a panel control is not destroyed by being clicked",
+          t_panel_controls_survive_being_clicked)
     check("published copy carries no editor instructions",
           t_published_copy_carries_no_editor_instructions)
     check("an unset brand swatch shows the real colour",
