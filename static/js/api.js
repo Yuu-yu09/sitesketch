@@ -265,10 +265,18 @@
 
   /* ---------- project CRUD ---------- */
 
-  function makePlan(typeId, goalId, siteName) {
+  function makePlan(typeId, goalId, siteName, description) {
     var recs = TYPE_SECTIONS[typeId] || TYPE_SECTIONS.business;
     return {
-      meta: { type: typeId, goal: goalId, theme: "modern", siteName: siteName || "My Website" },
+      meta: {
+        type: typeId,
+        goal: goalId,
+        theme: "modern",
+        siteName: siteName || "My Website",
+        /* kept so the design can read it later; the spec is generated from
+           this, and until now the words the user typed stopped here */
+        description: description || ""
+      },
       pages: [
         {
           id: "home",
@@ -304,7 +312,8 @@
 
   /* turn the server's draft into a Plan the builder can open */
   function planFromDraft(draft) {
-    var plan = makePlan(draft.type, draft.goal, draft.siteName || "My Website");
+    var plan = makePlan(draft.type, draft.goal, draft.siteName || "My Website",
+                      draft.description || "");
     var written = draft.sections || [];
 
     plan.pages[0].sections.forEach(function (section) {

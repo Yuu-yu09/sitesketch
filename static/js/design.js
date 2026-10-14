@@ -433,6 +433,48 @@
     return next;
   };
 
+  /* Keyword-driven look. The description used to stop at the copy: the spec
+     was built from the site type alone, so every site came out of the same
+     pool and asking for a "pixelated retro web development course" gave the
+     same green as a bakery. First match wins, so put the specific ones
+     first. */
+  D.VIBE_KEYWORDS = [
+    { k: ["pixelated", "pixel art", "pixel", "8-bit", "8bit", "retro game", "arcade", "chiptune", "bitmap"],
+      palette: "citrus-dark", font: "archivoblack", radius: "0px", space: "compact", shadow: "crisp" },
+    { k: ["retro", "vintage", "nostalgic"],
+      palette: "newsprint", font: "syne", radius: "4px", space: "comfy", shadow: "flat" },
+    { k: ["minimal", "minimalist", "simple", "clean", "plain", "swiss"],
+      palette: "cobalt-cream", font: "dmsans", radius: "4px", space: "airy", shadow: "flat" },
+    { k: ["elegant", "luxury", "premium", "boutique", "fine dining", "refined"],
+      palette: "mono-rose", font: "playfair", radius: "10px", space: "airy", shadow: "soft" },
+    { k: ["bold", "vibrant", "energetic", "playful", "kids", "children", "fun"],
+      palette: "citrus-dark", font: "archivo", radius: "999px", space: "comfy", shadow: "crisp" },
+    { k: ["dark", "moody", "midnight", "noir"],
+      palette: "deep-sea", font: "sora", radius: "10px", space: "comfy", shadow: "soft" },
+    { k: ["warm", "handmade", "artisan", "rustic", "coffee", "bakery", "cafe"],
+      palette: "terracotta", font: "newsreader", radius: "10px", space: "comfy", shadow: "soft" }
+  ];
+
+  /* The vibe a description asks for, or null. Every id is checked against
+     the real library before being returned, so a typo here cannot produce a
+     spec that silently falls back to the first entry. */
+  D.vibeFor = function (description) {
+    var text = String(description || "").toLowerCase();
+    if (!text) return null;
+    for (var i = 0; i < D.VIBE_KEYWORDS.length; i++) {
+      var v = D.VIBE_KEYWORDS[i];
+      for (var j = 0; j < v.k.length; j++) {
+        if (text.indexOf(v.k[j]) === -1) continue;
+        var palette = D.paletteById ? D.paletteById(v.palette) : null;
+        var font = D.fontById ? D.fontById(v.font) : null;
+        if (!palette || palette.id !== v.palette) continue;
+        if (!font || font.id !== v.font) continue;
+        return v;
+      }
+    }
+    return null;
+  };
+
   /* generate a full design spec.
       ctx: { type, goal, description, excludeSeed } */
   D.generateSpec = function (ctx, seed) {
@@ -476,6 +518,24 @@
     /* theme lock: palette's own mode; also honor ARCHETYPE affinity:
        classic/restaurant often light editorial - kept as-is, no mid-page flips */
     spec.spaceUnit = SPACES[spec.tokens.space] || 1;
+
+    /* An explicit ask in the description wins over the type-affinity draw
+       above. Applied after the fact so nothing else about the spec changes. */
+    var vibe = D.vibeFor(ctx.description);
+    if (vibe) {
+      spec.tokens.palette = vibe.palette;
+      spec.tokens.font = vibe.font;
+      spec.tokens.radius = vibe.radius;
+      spec.tokens.space = vibe.space;
+      spec.tokens.shadow = vibe.shadow;
+      spec.spaceUnit = SPACES[vibe.space] || 1;
+      var vp = D.paletteById(vibe.palette);
+      var vf = D.fontById(vibe.font);
+      spec.name = (vp ? vp.name : vibe.palette) + " / " +
+                  (vf ? String(vf.name).split(" / ")[0] : vibe.font);
+      spec.mode = vp ? vp.mode : spec.mode;
+      spec.vibe = true;
+    }
     return spec;
   };
 

@@ -600,6 +600,10 @@ Rules:
             for row in (raw.get("sections") or [])
             if row.get("type")
         ],
+        # echoed back so the browser can build a design from the words the
+        # user actually typed. Without it the description stopped here and
+        # every site came out on the same default palette.
+        "description": str(ctx.get("description") or "")[:400],
     }
 
 
@@ -798,4 +802,8 @@ def fallback_plan(ctx: dict) -> dict:
         "headline": headlines[rng.randrange(len(headlines))],
         "tagline": f"{name}, described plainly.",
         "sections": sections,
+        # the fallback is the common path while Gemini is degraded, so it
+        # must carry the description too - otherwise the keyword-driven
+        # design only worked when the model happened to be reachable
+        "description": str(ctx.get("description") or "")[:400],
     }

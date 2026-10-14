@@ -271,6 +271,10 @@ def api_plan():
         tagline=written.get("tagline", ""),
         sections=written.get("sections", []),
         source=written.get("source", "ai"),
+        # the browser builds the design spec from this. The response is
+        # assembled field by field here, so returning it from
+        # generate_plan was not enough on its own.
+        description=description[:400],
     )
 
 
