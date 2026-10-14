@@ -1094,11 +1094,19 @@ EditorUI.footerPanel = function (host) {
           '<span class="colour-row">' +
             '<input type="color" id="footText" value="' + SS.esc(normHex(style.textColor) || paletteColor(spec, "text")) + '">' +
           "</span></label>" +
+        /* Accent is back, and it is the row that matters most: the links
+           live down here. Two ways in - the site's own palette as swatches,
+           or the free colour box beside them. Background and text alone
+           left the footer with nothing you could steer. */
+        '<label class="field"><span>Accent</span>' +
+          '<span class="colour-row">' +
+            '<input type="color" id="footAccent" value="' + SS.esc(normHex(style.accent) || paletteColor(spec, "accent")) + '">' +
+          "</span></label>" +
+        '<div class="swatch-list" id="footAccentSwatches"></div>' +
         /* No "Use theme" button. Picking the colour the footer is already
            showing clears the override instead, so the theme is still one
            click away - a separate button to explain was the confusing part,
-           not the capability. accent is gone: link colour is the brand
-           accent everywhere else, and it was the row nobody could work out. */
+           not the capability. */
       "</div>" +
 
       '<div class="panel-section">' +
@@ -1123,6 +1131,39 @@ EditorUI.footerPanel = function (host) {
     if (bgInput) bgInput.addEventListener("input", function () { setStyle("bg", this.value); });
     var textInput = host.querySelector("#footText");
     if (textInput) textInput.addEventListener("input", function () { setStyle("textColor", this.value); });
+    var accentInput = host.querySelector("#footAccent");
+    if (accentInput) accentInput.addEventListener("input", function () { setStyle("accent", this.value); });
+
+    /* The site's own palette, offered as swatches. The colour box beside
+       them stays free-form, so this is a shortcut rather than a cage - the
+       request was for both "pick an accent" and "choose whatever I like". */
+    (function () {
+      var box = host.querySelector("#footAccentSwatches");
+      if (!box) return;
+      var pal = window.DESIGN ? DESIGN.resolvePalette(spec) : null;
+      if (!pal) return;
+      var seen = {};
+      ["accent", "bg", "text"].forEach(function (key) {
+        var hex = pal[key];
+        if (!normHex(hex) || seen[hex.toLowerCase()]) return;
+        seen[hex.toLowerCase()] = true;
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "swatch";
+        b.style.background = hex;
+        b.title = "Use " + key + " — " + hex;
+        b.setAttribute("aria-label", "Use the site " + key + " colour");
+        if (normHex(style.accent) &&
+            normHex(style.accent).toLowerCase() === hex.toLowerCase()) {
+          b.classList.add("is-on");
+        }
+        b.addEventListener("click", function () {
+          setStyle("accent", hex);
+          refresh();
+        });
+        box.appendChild(b);
+      });
+    })();
 
     /* The "Use theme" button is gone, and this is what replaces it: choosing
        the colour the footer is already showing clears the override rather
@@ -1130,7 +1171,8 @@ EditorUI.footerPanel = function (host) {
        button would have left no way back to the theme at all. */
     function clearIfTheme(key) {
       return function () {
-        var shown = paletteColor(spec, key === "bg" ? "bg" : "text");
+        var palKey = key === "bg" ? "bg" : (key === "accent" ? "accent" : "text");
+        var shown = paletteColor(spec, palKey);
         if (normHex(style[key]) && normHex(style[key]).toLowerCase() === String(shown).toLowerCase()) {
           setStyle(key, null);
           refresh();
@@ -1139,6 +1181,7 @@ EditorUI.footerPanel = function (host) {
     }
     if (bgInput) bgInput.addEventListener("change", clearIfTheme("bg"));
     if (textInput) textInput.addEventListener("change", clearIfTheme("textColor"));
+    if (accentInput) accentInput.addEventListener("change", clearIfTheme("accent"));
 
     host.querySelectorAll("[data-clear]").forEach(function (button) {
       button.addEventListener("click", function () {

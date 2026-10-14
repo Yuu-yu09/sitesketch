@@ -629,7 +629,11 @@
 }
 .ss-foot-col h3 { font-size: calc(.8rem * var(--type-scale, 1)); letter-spacing: calc(.12em + var(--ls, 0em)); text-transform: uppercase; color: var(--muted); margin: 0 0 .7rem; }
 .ss-foot-links { display: grid; gap: .5rem; }
-.ss-foot-links a { color: var(--muted); text-decoration: none; }
+/* The accent only ever applied on :hover, so setting it looked like it had
+   done nothing and the links stayed grey - which on a coloured footer is
+   close to invisible. Reads the footer's own --foot-accent when the user has
+   picked one, and falls back to the old muted grey when they have not. */
+.ss-foot-links a { color: var(--foot-accent, var(--muted)); text-decoration: none; }
 .ss-foot-links a:hover { color: var(--sec-accent, var(--text)); }
 .ss-foot-note { color: var(--muted); font-size: calc(.9rem * var(--type-scale, 1)); }
 .ss-foot-bottom {

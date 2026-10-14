@@ -971,6 +971,11 @@ function navItems(plan) {
     if (f.style.bg) css.push("--sec-bg:" + f.style.bg);
     if (f.style.textColor) css.push("--sec-text:" + f.style.textColor);
     if (f.style.accent) css.push("--sec-accent:" + f.style.accent);
+    /* A separate variable, so the footer's link colour changes only when the
+       user actually picks an accent. --sec-accent is a global theme token and
+       is always defined, so reading it directly would restyle every site's
+       footer links whether or not anyone had touched the control. */
+    if (f.style.accent) css.push("--foot-accent:" + f.style.accent);
     if (f.style.align) css.push("--sec-align:" + f.style.align);
     if (f.style.columns !== undefined) css.push("--foot-cols:" + f.style.columns);
     if (!css.length) return html;
