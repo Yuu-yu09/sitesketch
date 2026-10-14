@@ -2317,6 +2317,41 @@ input[type="checkbox"] {
   }
 }
 
+/* ============ dropping a rail card onto the page ============
+   The chip follows the pointer and the line says where it will land, so the
+   position is chosen rather than guessed at. */
+.ss-dropchip {
+  position: fixed;
+  z-index: 240;
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .45rem .7rem;
+  border-radius: 999px;
+  background: var(--ink, #16283c);
+  color: #fff;
+  font-size: .8rem;
+  font-weight: 600;
+  pointer-events: none;
+  box-shadow: 0 10px 26px rgba(10, 14, 26, .3);
+}
+body.is-dropping { cursor: grabbing; }
+body.is-dropping .ss-sec { transition: transform 120ms ease; }
+
+/* the insertion line: a gap in the page with a rule in it */
+.ss-dropline {
+  height: 4px;
+  margin: 6px 0;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.is-dropping .ss-sec { transition: none; }
+}
+
 /* ============ colour picker ============
 
    Replaces the native <input type="color"> dialog as the primary route.

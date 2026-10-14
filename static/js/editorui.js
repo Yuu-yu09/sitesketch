@@ -1627,7 +1627,15 @@ EditorUI.footerPanel = function (host) {
 
   /* ------------------------------------------------------------ add section */
 
-  EditorUI.addSection = function (typeKey) {
+  /* `at` is the index to insert at. Omit it and the section goes at the end,
+     which is what clicking a rail card always did - and why a section
+     could only ever be appended, then dragged somewhere better afterwards.
+     Dropping a card on the canvas passes the index it landed on.
+
+     Everything else is unchanged on purpose: the same toast, the same
+     selection, the same onChange. History and autosave go through onChange,
+     so a dropped section is undoable exactly like a clicked one. */
+  EditorUI.addSection = function (typeKey, at) {
     var plan = window.Editor.plan;
     var page = plan.pages.filter(function (p) { return p.id === window.Editor.pageId; })[0];
     if (!page) return;
@@ -1640,7 +1648,13 @@ EditorUI.footerPanel = function (host) {
       fields: {},
       items: EditorUI.startersFor(typeKey)
     };
-    page.sections.push(section);
+    /* clamped rather than trusted: a drop index past the end, or a negative
+       one from an edge drag, would otherwise splice the section out of the
+       page entirely */
+    var index = (typeof at === "number" && isFinite(at))
+      ? Math.max(0, Math.min(at, page.sections.length))
+      : page.sections.length;
+    page.sections.splice(index, 0, section);
     window.Editor.selectedId = section.id;
     if (window.Editor.onChange) window.Editor.onChange("structure");
     SS.toast(def.name + " added", "bi-plus-circle");

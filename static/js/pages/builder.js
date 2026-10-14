@@ -231,9 +231,15 @@
           var button = document.createElement("button");
           button.type = "button";
           button.className = "rec-item palette-item";
+          /* data-key is what a drop reads to know which section was
+             dragged. Without it the card is only a button. */
+          button.dataset.key = key;
           button.innerHTML = '<span class="ri"><i class="bi ' + def.icon + '" aria-hidden="true"></i></span>' +
             "<span><strong>" + SS.esc(def.name) + "</strong><small>" + SS.esc(def.blurb) + "</small></span>";
-          button.addEventListener("click", function () { EditorUI.addSection(key); render(); });
+          /* No click handler here. wireRailDrop() delegates one over the
+             whole rail, so that a pointerdown-drag and a plain click can be
+             told apart - a click handler per card would fire after every
+             drag and add a second section. */
           host.appendChild(button);
         });
       }
@@ -316,6 +322,157 @@
       function sectionList() {
         return canvas.querySelector(".ss-site main") || canvas;
       }
+      /* Dragging a rail card onto a position in the page.
+
+         This started as a second Sortable sharing a group name with the
+         canvas, which is the obvious way to do it and did not work: the
+         instance was created with all fifteen cards in it and not one
+         mousedown anywhere on the rail produced a drag - no ghost, no
+         onChoose, and no native dragstart either. The canvas list, a few
+         lines above, drags fine. Rather than keep guessing at a library
+         that works perfectly in one place and not the other, this is done
+         with pointer events directly.
+
+         Pointer events rather than mouse events, so a finger and a pen work
+         the same as a mouse - which matters, because the responsive audit
+         measures this builder at phone widths.
+
+         Three states: armed (pointer down, under the threshold, nothing has
+         happened), dragging (past the threshold, a chip follows the pointer
+         and an insertion line marks where it would land), and cancelled
+         (Escape, or pointer up outside the canvas). */
+      var dropDrag = null;
+      /* Set when a drag ends, cleared by the click it would otherwise
+         cause. A drag that is cancelled - or one that ends back over the
+         card - still produces a click event, and without this the section
+         would be added twice: once at the drop position and once at the
+         end. */
+      var dropJustEnded = false;
+
+      function railDropIndex(clientY) {
+        var list = sectionList();
+        var boxes = Array.prototype.map.call(
+          list.querySelectorAll(".ss-sec"), function (el) {
+            return el.getBoundingClientRect();
+          });
+        for (var i = 0; i < boxes.length; i++) {
+          /* the nearer edge of each section decides which half you are in */
+          if (clientY < boxes[i].top + boxes[i].height / 2) return i;
+        }
+        return boxes.length;
+      }
+
+      function paintDropLine(index) {
+        var list = sectionList();
+        var line = list.querySelector(".ss-dropline");
+        if (!line) {
+          line = document.createElement("div");
+          line.className = "ss-dropline";
+          line.setAttribute("aria-hidden", "true");
+        }
+        var target = list.querySelectorAll(".ss-sec")[index] || null;
+        if (target) list.insertBefore(line, target);
+        else list.appendChild(line);
+      }
+
+      function clearDropLine() {
+        var line = sectionList().querySelector(".ss-dropline");
+        if (line) line.parentNode.removeChild(line);
+      }
+
+      function endRailDrag(commit) {
+        if (!dropDrag) return;
+        document.removeEventListener("pointermove", onRailDragMove);
+        document.removeEventListener("pointerup", onRailDragUp);
+        document.removeEventListener("keydown", onRailDragKey);
+        if (dropDrag.chip && dropDrag.chip.parentNode) {
+          dropDrag.chip.parentNode.removeChild(dropDrag.chip);
+        }
+        document.body.classList.remove("is-dropping");
+        clearDropLine();
+        var info = dropDrag;
+        dropDrag = null;
+        /* A press that never moved is a click, not a drag. Returning here
+           leaves the click to do its job; treating it as a drag ended it
+           added nothing and swallowed the click as well. */
+        if (!info.active) return;
+        dropJustEnded = true;
+        if (commit && info.overCanvas && info.index != null) {
+          EditorUI.addSection(info.key, info.index);
+          render();
+        }
+      }
+
+      function onRailDragMove(e) {
+        if (!dropDrag) return;
+        if (!dropDrag.active) {
+          if (Math.abs(e.clientY - dropDrag.y0) < 6 &&
+              Math.abs(e.clientX - dropDrag.x0) < 6) return;
+          dropDrag.active = true;
+          var def = API.SECTIONS[dropDrag.key] || { name: dropDrag.key, icon: "bi-plus" };
+          var chip = document.createElement("div");
+          chip.className = "ss-dropchip";
+          chip.setAttribute("aria-hidden", "true");
+          chip.innerHTML = '<i class="bi ' + SS.esc(def.icon || "bi-plus-circle") +
+            '" aria-hidden="true"></i><span>' + SS.esc(def.name) + "</span>";
+          document.body.appendChild(chip);
+          dropDrag.chip = chip;
+          document.body.classList.add("is-dropping");
+        }
+        e.preventDefault();
+        dropDrag.chip.style.left = e.clientX + 14 + "px";
+        dropDrag.chip.style.top = e.clientY + 14 + "px";
+
+        var box = canvas.getBoundingClientRect();
+        var over = e.clientX >= box.left && e.clientX <= box.right &&
+                   e.clientY >= box.top && e.clientY <= box.bottom;
+        dropDrag.overCanvas = over;
+        if (over) {
+          dropDrag.index = railDropIndex(e.clientY);
+          paintDropLine(dropDrag.index);
+        } else {
+          dropDrag.index = null;
+          clearDropLine();
+        }
+      }
+
+      function onRailDragUp() { endRailDrag(true); }
+      function onRailDragKey(e) {
+        if (e.key === "Escape") endRailDrag(false);
+      }
+
+      function wireRailDrop() {
+        var rail = document.getElementById("rail");
+        if (!rail || rail.__dropWired) return;
+        rail.__dropWired = true;
+
+        rail.addEventListener("pointerdown", function (e) {
+          if (e.button !== undefined && e.button !== 0) return;
+          var card = e.target.closest("[data-key]");
+          if (!card) return;
+          if (dropDrag) endRailDrag(false);
+          dropJustEnded = false;
+          dropDrag = {
+            key: card.dataset.key,
+            x0: e.clientX, y0: e.clientY,
+            active: false, overCanvas: false, index: null, chip: null,
+            pointerId: e.pointerId
+          };
+          document.addEventListener("pointermove", onRailDragMove);
+          document.addEventListener("pointerup", onRailDragUp);
+          document.addEventListener("keydown", onRailDragKey);
+        });
+
+        /* a click without a drag is still "add to the end" */
+        rail.addEventListener("click", function (e) {
+          var card = e.target.closest("[data-key]");
+          if (!card || dropDrag) return;
+          if (dropJustEnded) { dropJustEnded = false; return; }
+          EditorUI.addSection(card.dataset.key);
+          render();
+        });
+      }
+
       function wireSortable() {
         if (sortable) { sortable.destroy(); sortable = null; }
         if (typeof Sortable === "undefined") return;
@@ -404,6 +561,7 @@
         Editor.pageId = page.id;
         Editor.render();
         wireSortable();
+        wireRailDrop();
         renderPanel();
         pushPreview();
       }

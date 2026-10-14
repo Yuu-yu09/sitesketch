@@ -1329,6 +1329,99 @@ def run(page, phase=None):
         assert page.locator("#aiDesc").input_value(), \
             "what you typed was lost by choosing a type"
 
+    def t_a_section_can_be_dropped_where_you_want_it():
+        """Adding always appended; then you dragged it somewhere better.
+
+        A rail card now drags onto the page and lands between the sections
+        you drop it on, with an insertion line showing where first.
+
+        Built with pointer events rather than a second Sortable sharing a
+        group with the canvas. That is what this started as, and it did
+        nothing: the instance was created with all fifteen cards in it, and
+        no mousedown on the rail produced a drag at all - no ghost, no
+        onChoose, and no native dragstart either, while the canvas list a
+        few lines above dragged fine. Rather than keep guessing, the drag is
+        done directly.
+        """
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        page.wait_for_timeout(1500)
+
+        def ids():
+            return page.evaluate(
+                "() => [...document.querySelectorAll('#canvas .ss-sec')]"
+                ".map(s => s.dataset.sect)")
+
+        def available_keys():
+            return page.evaluate(
+                "() => [...document.querySelectorAll('#rail [data-key]')]"
+                ".map(n => n.dataset.key)")
+
+        def drag_first_available_to(target_y):
+            """The rail offers different sections per site type, so this
+            takes whatever is on offer rather than naming one."""
+            card = page.locator("#rail .rail-library [data-key]").first
+            card.scroll_into_view_if_needed()
+            page.wait_for_timeout(200)
+            box = card.bounding_box()
+            page.mouse.move(box["x"] + 30, box["y"] + box["height"] / 2)
+            page.mouse.down()
+            page.wait_for_timeout(120)
+            page.mouse.move(box["x"] + 120, box["y"] + 10, steps=8)
+            page.wait_for_timeout(250)
+            page.mouse.move(target_y[0], target_y[1], steps=22)
+            page.wait_for_timeout(400)
+
+        keys = available_keys()
+        assert len(keys) >= 2, f"the rail offers only {keys}"
+
+        # --- a drop lands where the line was, not at the end
+        before = ids()
+        third = page.locator("#canvas .ss-sec").nth(2).bounding_box()
+        drag_first_available_to((third["x"] + 300, third["y"] + 3))
+        assert page.locator(".ss-dropchip").count() == 1, \
+            "no chip followed the pointer"
+        assert page.locator(".ss-dropline").count() == 1, \
+            "no insertion line said where it would land"
+        page.mouse.up()
+        page.wait_for_timeout(1800)
+        after = ids()
+        assert len(after) == len(before) + 1, \
+            f"the drop added {len(after) - len(before)} sections, expected 1"
+        assert after[2] != before[2], \
+            "it landed at the end rather than where it was dropped"
+
+        # --- Escape abandons the drag and adds nothing
+        count = len(ids())
+        card = page.locator("#rail .rail-library [data-key]").first
+        card.scroll_into_view_if_needed()
+        page.wait_for_timeout(200)
+        box = card.bounding_box()
+        page.mouse.move(box["x"] + 30, box["y"] + box["height"] / 2)
+        page.mouse.down()
+        page.wait_for_timeout(120)
+        page.mouse.move(box["x"] + 150, box["y"] + 20, steps=10)
+        page.wait_for_timeout(300)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(250)
+        page.mouse.up()
+        page.wait_for_timeout(1200)
+        assert len(ids()) == count, "Escape still added a section"
+        assert page.locator(".ss-dropchip").count() == 0, \
+            "the drag chip was left behind"
+        assert page.locator(".ss-dropline").count() == 0, \
+            "the insertion line was left behind"
+
+        # --- and a plain click still means "add to the end"
+        before = ids()
+        page.locator("#rail .rail-library [data-key]").last.click()
+        page.wait_for_timeout(1500)
+        assert len(ids()) == len(before) + 1, "a plain click stopped adding"
+        assert ids()[-1] not in before, "a click no longer appends"
+
+    check("a section can be dropped where you want it",
+          t_a_section_can_be_dropped_where_you_want_it)
     check("the description box needs no detour",
           t_the_description_box_needs_no_detour)
     check("every colour control opens the picker",
