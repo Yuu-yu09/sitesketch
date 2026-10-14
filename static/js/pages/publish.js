@@ -198,8 +198,14 @@
           } else fallbackCopy(url);
         });
 
+        /* Export is not built. The button is disabled and says so in publish.html,
+           and this listener only exists for the case where it somehow fires
+           anyway - in which case the honest sentence is better than the old
+           one, which mentioned a backend and a phase and left a person
+           none the wiser about whether anything was going to happen. */
         document.getElementById("zipBtn").addEventListener("click", function () {
-          SS.toast("Prototype: ZIP export runs through the Flask backend (Phase 2)", "bi-download");
+          SS.toast("A downloadable copy is not built yet. Your site is live at the address above.",
+                   "bi-info-circle");
         });
 
         render();

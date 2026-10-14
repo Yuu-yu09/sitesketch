@@ -1203,6 +1203,44 @@ def run(page, phase=None):
         }""")
         page.wait_for_timeout(1500)
 
+    def t_export_zip_does_not_pretend_to_work():
+        """A control that cannot do what its label says is a bug.
+
+        Export ZIP was a normal-looking button wired to a toast reading
+        "Prototype: ZIP export runs through the Flask backend (Phase 2)".
+        Reported as "for zipping the file it says backend" - and it is worse
+        than having no button at all, because it looks like a working
+        control and the only answer a person gets mentions a backend and a
+        phase.
+
+        Building export properly is separate work. Until then it is disabled
+        and says so.
+        """
+        page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_timeout(1800)
+
+        btn = page.locator("#zipBtn")
+        assert btn.count() == 1, "the export button has gone entirely"
+        assert btn.is_disabled(), \
+            "export is presented as working when it is not built"
+        assert btn.get_attribute("aria-disabled") == "true", \
+            "a disabled control should still say so to assistive tech"
+
+        label = " ".join(btn.inner_text().split()).lower()
+        assert "not built" in label, \
+            f"the button does not admit it does not work: {label!r}"
+        assert page.locator("#zipNote").is_visible(), \
+            "nothing explains that export is unavailable"
+
+        # and no part of the page should still be promising a backend
+        body = " ".join(page.inner_text("body").split()).lower()
+        for claim in ("prototype", "phase 2", "flask backend"):
+            assert claim not in body, \
+                f"the page still claims {claim!r} about export"
+
+    check("export zip does not pretend to work",
+          t_export_zip_does_not_pretend_to_work)
     check("a custom menu link can be added", t_a_custom_menu_link_can_be_added)
     check("a dangerous menu address is refused", t_a_dangerous_menu_address_is_refused)
     check("a menu link survives a round trip", t_a_menu_link_survives_a_round_trip)

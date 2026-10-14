@@ -4,11 +4,42 @@ Found by real-user testing on 2026-10-14. Every entry says how it was
 reproduced, because a bug report that cannot be reproduced cannot be proven
 fixed.
 
-**Status:** 6 of 8 fixed. Remaining: **6** (Menu cannot add / no custom
-links) and **8** (Export ZIP is a stub). Both have a stated fix below.
+**Status: all 8 fixed.** Each is one commit, with its own test.
 
-Fix one at a time, commit each separately, update this file in the same
-commit.
+What real-user testing was worth, in one line: four of these were invisible
+to a passing test suite and found only by a person using the thing. The
+suite had been 9/9 green throughout.
+
+---
+
+## Lessons worth keeping
+
+**A control that cannot do what its label says is a bug.** Two of these
+were the same mistake pointing in opposite directions. Export ZIP looked
+working and answered with the word "backend". The publish page claimed
+publishing was "simulated in the browser until the Flask backend connects" -
+which was false, and made working functionality look unfinished. Half-finished
+features deserve labelling. Finished ones do not deserve an apology.
+
+**Ask what the person actually did.** Bug 7 was marked NOT REPRODUCED. "The
+dropdown disappears when I click it" was unreproducible; "you have to
+long-press and it vanishes when you let go" identified it in one exchange.
+
+**Look at the output.** Every bug here that had a visual symptom was found
+by looking at a screenshot rather than by reading code.
+
+---
+
+## Closed
+
+1. Every 404 rendered as raw JSON
+2. Colours chosen with the swatch were silently discarded
+3. The colour picker opened in the top-left corner
+4. There was no way to confirm a colour
+5. An opacity slider was offered for a model with no transparency
+6. The Menu could not add anything, and had no custom links
+7. Dropdowns closed the instant they were clicked
+8. Export ZIP was a button that did nothing
 
 ---
 
@@ -140,7 +171,7 @@ padding it, since padding a button enlarges its box but not its hit area.
 
 ---
 
-## 6. The Menu cannot add anything, and has no custom links — OPEN
+## 6. The Menu cannot add anything, and has no custom links — FIXED
 
 **Seen as:** "you can't even add, you can't even link it."
 
@@ -153,6 +184,29 @@ which is something WordPress menus allow and users expect.
 **Fix:** always render the add control. Add a **Custom link** option taking a
 label and a URL, stored alongside page-backed entries in `plan.nav`, and
 rendered as a real `href`.
+
+**Done.** The page dropdown is always rendered — disabled, with an
+explanation, when there is genuinely nothing to add, because a select that
+says so is information and an invisible one is not. A Custom link fieldset
+sits below it with its own validation.
+
+**The validation is the security-relevant part.** A menu href is the one
+place a user types a URL that goes straight into an `href` on a finished
+document served from our origin. The publish endpoint strips `<script>` and
+event handlers but cannot see inside an attribute, so `javascript:...` would
+have survived into a live page. `SS.safeHref` allows only `http`, `https`,
+`mailto` and `tel`, and normalises a bare domain to `https` because
+`sable.example.com` is what people actually type.
+
+Also added: a **delete** button on menu rows. There was none — a top-level
+item could be reordered and hidden but never removed.
+
+Three bugs of my own, all caught here: `items()` rebuilt each entry without
+its `href`, so every custom link deleted itself on the panel's next read;
+the duplicate-suppression map was marked *before* the duplicate test, so
+every page-backed entry rejected itself and the home page dropped out; and
+that map was shared with children, so a submenu pointing at a page also in
+the menu rendered empty — caught by an existing test my change broke.
 
 ---
 
@@ -201,7 +255,7 @@ it for the gesture was worth more than another hour of guessing.
 
 ---
 
-## 8. Export ZIP is a button that does nothing — OPEN
+## 8. Export ZIP is a button that does nothing — FIXED
 
 **Seen as:** clicking it says only "Prototype: ZIP export runs through the
 Flask backend (Phase 2)".
@@ -212,3 +266,20 @@ publish page that cannot do the thing its label promises.
 **Fix (immediate):** disable it and label it honestly, so nobody waits for a
 download that will never arrive. Implementing export properly is separate
 work and should be scoped as such.
+
+**Done.** Disabled, labelled "Export ZIP — not built yet", with a note that
+publishing already puts the site online. Left visible rather than removed,
+so the feature is acknowledged and building it later is turning something on
+rather than inventing it.
+
+**And the opposite mistake, found by the test written for this one.** The
+same page carried a visible line claiming publishing was *"simulated in the
+browser until the Flask backend connects"*. That is false — publishing
+writes the compiled document to the database and serves it from
+`/site/<slug>` with no session, no JavaScript and real cache headers, and
+the suite compiles, publishes and fetches it as an anonymous visitor on
+every run. Removed.
+
+The test asserts no part of the page still claims "prototype", "phase 2" or
+"flask backend". That assertion is what found the second one; I was only
+looking for the ZIP wording.
