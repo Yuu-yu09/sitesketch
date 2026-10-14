@@ -1155,6 +1155,48 @@ textarea { resize: vertical; min-height: 96px; }
 
 /* ---------- the menu panel ---------- */
 .menu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+
+/* The address of a custom menu link, editable in place. Monospace because
+   it is a URL and reading one in a proportional face is harder than it
+   needs to be. */
+.menu-href {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: .3rem .45rem;
+  border: 1px dashed var(--hairline);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: .74rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink-2);
+}
+.menu-href:focus { border-style: solid; color: var(--ink); }
+
+/* Adding a link that is not a page. Its own fieldset rather than an option
+   in the page dropdown, so the address has labelled fields and its own
+   validation - and so it does not depend on a control that cannot be
+   opened on a touchscreen. */
+.nav-custom {
+  margin-top: .9rem;
+  padding: .7rem .8rem .8rem;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  display: grid;
+  gap: .5rem;
+}
+.nav-custom legend {
+  padding: 0 .3rem;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--ink-2);
+}
+.nav-custom .hint { margin: 0; }
+
+@media (pointer: coarse) {
+  .nav-custom .btn { min-height: 44px; }
+}
 .menu-row {
   padding: .4rem;
   border: 1px solid var(--hairline);

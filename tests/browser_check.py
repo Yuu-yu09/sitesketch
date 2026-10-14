@@ -1053,6 +1053,159 @@ def run(page, phase=None):
           t_panel_controls_survive_being_clicked)
     check("published copy carries no editor instructions",
           t_published_copy_carries_no_editor_instructions)
+    def t_a_custom_menu_link_can_be_added():
+        """The Menu could not add anything once every page was in it, and
+        could not add a link that is not a page at all.
+
+        The add control was conditional on there being a spare page, so with
+        every page in the menu it disappeared from the DOM entirely -
+        measured, #navAddTop was absent - leaving nothing to click. And
+        there was no way to point a menu item at anything but a page, which
+        is not what a menu is for.
+        """
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        page.wait_for_timeout(1200)
+        if page.get_attribute("#menuBtn", "aria-pressed") != "true":
+            page.click("#menuBtn")
+            page.wait_for_timeout(700)
+
+        # the control is there whatever the state of the page list
+        assert page.locator("#navAddTop").count() == 1, \
+            "there is no way to add a page to the menu at all"
+        assert page.locator("#navCustomAdd").count() == 1, \
+            "there is no way to add a link that is not a page"
+
+        def nav_hrefs():
+            return page.evaluate(
+                "() => [...document.querySelectorAll('.ss-nav a')]"
+                ".map(a => a.getAttribute('href'))")
+
+        before = nav_hrefs()
+        page.fill("#navCustomLabel", "Instagram")
+        page.fill("#navCustomHref", "https://instagram.com/sablecoffee")
+        page.click("#navCustomAdd")
+        page.wait_for_timeout(1400)
+
+        assert "https://instagram.com/sablecoffee" in nav_hrefs(), \
+            f"the custom link did not reach the navigation: {nav_hrefs()}"
+        assert page.locator("[data-nav-href]").count() >= 1, \
+            "the custom link has no editable address in the panel"
+
+        # it must survive the panel being read again. items() rebuilt each
+        # entry without its href at first, and navItems drops entries with no
+        # usable href - so every custom link deleted itself the moment the
+        # panel looked at the list.
+        page.click("#menuBtn")
+        page.wait_for_timeout(500)
+        page.click("#menuBtn")
+        page.wait_for_timeout(900)
+        assert "https://instagram.com/sablecoffee" in nav_hrefs(), \
+            f"the custom link did not survive reopening the panel: {nav_hrefs()}"
+
+        page.locator("[data-nav-href]").first.fill("https://instagram.com/updated")
+        page.wait_for_timeout(1200)
+        assert "https://instagram.com/updated" in nav_hrefs(), \
+            f"editing the address in place did nothing: {nav_hrefs()}"
+
+        # remove it again
+        rows_before = page.locator(".menu-row").count()
+        page.locator("[data-nav-rm]").last.click()
+        page.wait_for_timeout(1200)
+        assert page.locator(".menu-row").count() == rows_before - 1, \
+            "the remove button did not remove the row"
+        assert "https://instagram.com/updated" not in nav_hrefs(), \
+            "the removed link is still in the navigation"
+
+        del before
+
+    def t_a_dangerous_menu_address_is_refused():
+        """A menu href lands in a published document as an attribute.
+
+        The publish endpoint strips <script> and event handlers, but it
+        cannot see inside an href, so "javascript:..." would survive into a
+        page served from our origin. Only the schemes a business menu
+        actually uses are allowed; anything else is not a link at all.
+        """
+        if page.get_attribute("#menuBtn", "aria-pressed") != "true":
+            page.click("#menuBtn")
+            page.wait_for_timeout(700)
+
+        before = page.locator(".menu-row").count()
+        page.fill("#navCustomLabel", "Bad")
+        page.fill("#navCustomHref", "javascript:alert(1)")
+        page.click("#navCustomAdd")
+        page.wait_for_timeout(900)
+
+        assert page.locator(".menu-row").count() == before, \
+            "a javascript: address was added to the menu"
+        assert "javascript:" not in page.evaluate(
+            "() => document.body.innerHTML").lower(), \
+            "a javascript: address reached the page"
+
+        # a bare domain is what people actually type, and is allowed
+        page.fill("#navCustomLabel", "Bookings")
+        page.fill("#navCustomHref", "sable.example.com/book")
+        page.click("#navCustomAdd")
+        page.wait_for_timeout(1400)
+        hrefs = page.evaluate(
+            "() => [...document.querySelectorAll('.ss-nav a')]"
+            ".map(a => a.getAttribute('href'))")
+        assert "https://sable.example.com/book" in hrefs, \
+            f"a scheme-less address was not normalised to https: {hrefs}"
+
+        page.locator("[data-nav-rm]").last.click()
+        page.wait_for_timeout(1200)
+
+    def t_a_menu_link_survives_a_round_trip():
+        """Custom links must still be there after a reload.
+
+        navItems drops any entry whose page no longer exists. A custom link
+        has no page, so it has to be kept on the strength of its own href -
+        otherwise it renders in the editor and vanishes on the next load.
+        """
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        page.wait_for_timeout(1200)
+        if page.get_attribute("#menuBtn", "aria-pressed") != "true":
+            page.click("#menuBtn")
+            page.wait_for_timeout(700)
+
+        page.evaluate("""() => {
+            const plan = window.Editor.plan;
+            plan.nav = [
+                { pageId: null, href: 'https://example.com/social',
+                  label: 'Social', visible: true, children: [] },
+                { pageId: null, href: 'mailto:hello@example.com',
+                  label: 'Email', visible: true, children: [] }
+            ];
+            window.Editor.onChange('nav');
+        }""")
+        page.wait_for_timeout(2000)
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        page.wait_for_timeout(1500)
+
+        hrefs = page.evaluate(
+            "() => [...document.querySelectorAll('.ss-nav a')]"
+            ".map(a => a.getAttribute('href'))")
+        assert "https://example.com/social" in hrefs, \
+            f"a custom link did not survive a reload: {hrefs}"
+        assert "mailto:hello@example.com" in hrefs, \
+            f"a mailto link did not survive a reload: {hrefs}"
+
+        # put the menu back as the rest of the suite expects it
+        page.evaluate("""() => {
+            window.Editor.plan.nav = null;
+            window.Editor.onChange('nav');
+        }""")
+        page.wait_for_timeout(1500)
+
+    check("a custom menu link can be added", t_a_custom_menu_link_can_be_added)
+    check("a dangerous menu address is refused", t_a_dangerous_menu_address_is_refused)
+    check("a menu link survives a round trip", t_a_menu_link_survives_a_round_trip)
     check("the picker opens beside the swatch", t_the_picker_opens_beside_the_swatch)
     check("the picker applies and cancels", t_the_picker_applies_and_cancels)
     check("the picker survives being clicked", t_the_picker_survives_being_clicked)

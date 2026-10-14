@@ -572,8 +572,16 @@ EditorUI.menuPanel = function (host) {
       return SSr.navItems(plan).map(function (i) {
         return {
           pageId: i.pageId, label: i.label, visible: i.visible,
+          /* href has to survive the round trip. It did not at first, and
+             the symptom was odd enough to be worth writing down: the canvas
+             navigation showed every custom link correctly, while the panel
+             showed fewer rows than the menu had, and adding one more link
+             left almost nothing. navItems drops any entry without a usable
+             href, so every custom link was being deleted by the panel's own
+             next read of the list. */
+          href: i.href || "",
           children: (i.children || []).map(function (c) {
-            return { pageId: c.pageId, label: c.label };
+            return { pageId: c.pageId, label: c.label, href: c.href || "" };
           })
         };
       });
@@ -639,8 +647,22 @@ EditorUI.menuPanel = function (host) {
             (i === built.length - 1 ? " disabled" : "") + ">" +
             '<i class="bi bi-arrow-down" aria-hidden="true"></i></button>' +
           '<input type="text" data-nav-label="' + i + '" value="' +
-            SSr.esc(item.label) + '" placeholder="' + SSr.esc(pageName(item.pageId)) +
-            '" aria-label="Menu label for ' + SSr.esc(pageName(item.pageId)) + '">' +
+            SSr.esc(item.label) + '" placeholder="' +
+            (item.href ? SSr.esc(item.href) : SSr.esc(pageName(item.pageId))) +
+            '" aria-label="Menu label for ' +
+            (item.href ? SSr.esc(item.label || "custom link")
+                       : SSr.esc(pageName(item.pageId))) + '">' +
+          (item.href
+            ? '<input type="text" class="menu-href" data-nav-href="' + i +
+              '" value="' + SSr.esc(item.href) +
+              '" aria-label="Address for ' +
+              SSr.esc(item.label || "custom link") + '">'
+            : "") +
+          '<button type="button" class="icon-btn danger" data-nav-rm="' + i +
+            '" title="Remove from menu" aria-label="Remove ' +
+            SSr.esc(item.label || item.href || pageName(item.pageId)) +
+            ' from the menu">' +
+            '<i class="bi bi-x-lg" aria-hidden="true"></i></button>' +
           '<button type="button" class="icon-btn" data-nav-toggle="' + i +
             '" aria-pressed="' + (item.visible ? "true" : "false") +
             '" title="' + (item.visible ? "Hide from menu" : "Show in menu") +
@@ -671,15 +693,44 @@ EditorUI.menuPanel = function (host) {
         (built.length
           ? '<ul class="menu-list">' + rows + "</ul>"
           : '<p class="hint">No pages yet.</p>') +
-        (spare.length
-          ? '<label class="field"><span>Add to the menu</span>' +
-            '<select id="navAddTop">' +
-              '<option value="">Choose a page…</option>' +
-              spare.map(function (p) {
-                return '<option value="' + p.id + '">' + SSr.esc(p.name) + "</option>";
-              }).join("") +
-            "</select></label>"
-          : "") +
+        /* Both of these are always rendered.
+
+           The page dropdown used to disappear entirely once every page was
+           in the menu, so there was nothing left to click - reported as
+           "you can't even add". A select with nothing selectable is worse
+           than no select, so when there are no spare pages it stays and
+           says why.
+
+           Custom links are a separate small form rather than an option in
+           that dropdown, for two reasons. A menu is the one place a user
+           types a URL that goes straight into an href on a published
+           document, so it wants its own labelled fields and its own
+           validation rather than one more choice in a list. And putting it
+           in the dropdown would mean the only way to add an Instagram link
+           is the control that cannot be opened on a touchscreen - the bug
+           fixed in commit 967f9a9. */
+        '<label class="field"><span>Add a page</span>' +
+          '<select id="navAddTop"' + (spare.length ? "" : " disabled") + ">" +
+            '<option value="">' +
+              (spare.length ? "Choose a page…" : "Every page is already in the menu") +
+            "</option>" +
+            spare.map(function (p) {
+              return '<option value="' + p.id + '">' + SSr.esc(p.name) + "</option>";
+            }).join("") +
+          "</select></label>" +
+        '<fieldset class="nav-custom">' +
+          "<legend>Add a link</legend>" +
+          '<label class="field"><span>Label</span>' +
+            '<input type="text" id="navCustomLabel" maxlength="60" ' +
+              'placeholder="Instagram" aria-label="Custom link label"></label>' +
+          '<label class="field"><span>Address</span>' +
+            '<input type="text" id="navCustomHref" maxlength="300" ' +
+              'placeholder="https://instagram.com/yourshop" ' +
+              'aria-label="Custom link address"></label>' +
+          '<button class="btn btn-sm btn-block" id="navCustomAdd" type="button">' +
+            "Add link</button>" +
+          '<p class="hint">Any address: a website, a mailto: or a tel: number.</p>' +
+        "</fieldset>" +
       "</div>";
 
     /* ---- wiring ---- */
@@ -709,6 +760,18 @@ EditorUI.menuPanel = function (host) {
              the field loses focus after one character. This is also what
              actually persists the menu - editing a label on a menu that had
              only ever been derived from the pages had nowhere to go. */
+          write(list);
+          return;
+        }
+        /* the address of a custom link, editable in place rather than
+           delete-and-retype */
+        var hrefField = t.closest("[data-nav-href]");
+        if (hrefField) {
+          var hrow = list[Number(hrefField.getAttribute("data-nav-href"))];
+          if (!hrow) return;
+          var safe = window.SS && SS.safeHref ? SS.safeHref(t.value) : t.value;
+          if (!safe) return;
+          hrow.href = safe;
           write(list);
           return;
         }
@@ -745,6 +808,38 @@ EditorUI.menuPanel = function (host) {
       host.addEventListener("click", function (ev) {
         var t = ev.target;
         var list = items();
+
+        /* Add a custom link. The address is validated here as well as at
+           render time, because the menu is the one place a user types a URL
+           that lands in an href on a published document - and the panel is
+           long gone by the time anyone visits that site. */
+        var addCustom = t.closest("#navCustomAdd");
+        if (addCustom) {
+          var lab = (host.querySelector("#navCustomLabel").value || "").trim();
+          var addr = (host.querySelector("#navCustomHref").value || "").trim();
+          if (!addr) {
+            SS.toast("Give the link an address", "bi-exclamation-triangle");
+            host.querySelector("#navCustomHref").focus();
+            return;
+          }
+          var safe = SS.safeHref(addr);
+          if (!safe) {
+            SS.toast("Use a web address, or a mailto: or tel: link",
+                     "bi-exclamation-triangle");
+            host.querySelector("#navCustomHref").focus();
+            return;
+          }
+          if (!lab) {
+            /* Without a label the menu shows the raw URL, which is not a
+               navigation anyone can read. */
+            lab = safe.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+          }
+          list.push({ pageId: null, href: safe, label: lab, visible: true,
+                      children: [] });
+          commit(list);
+          return;
+        }
+
         function act(attr, fn) {
           var b = t.closest("[" + attr + "]");
           if (!b) return false;
@@ -764,6 +859,15 @@ EditorUI.menuPanel = function (host) {
         if (act("data-nav-toggle", function (i) {
           if (!list[i]) return;
           list[i].visible = !list[i].visible;
+          commit(list);
+        })) return;
+        /* Removing a top-level row. There was no way to do this at all: a
+           menu could be reordered and hidden but never taken out, which
+           matters most now that a row can be a custom link somebody typed
+           in by mistake. */
+        if (act("data-nav-rm", function (i) {
+          if (!list[i]) return;
+          list.splice(i, 1);
           commit(list);
         })) return;
         /* Child buttons carry a "pageId:index" key rather than a plain

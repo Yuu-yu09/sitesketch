@@ -656,33 +656,71 @@
 
      plan.nav is optional. A plan without one keeps working and renders every
      page in order, which is what every site made before this existed does. */
-  function navItems(plan) {
+  function safeHref(value) {
+  /* A published page is a finished HTML document served from our origin,
+     and the menu is the one place a user types a URL that goes straight into
+     an href attribute. Without this, "javascript:..." would survive into the
+     published document: the publish endpoint strips <script> and event
+     handlers, but it cannot see inside an attribute.
+
+     Only the schemes a business menu actually uses are allowed. Anything
+     else - including a relative-looking string with a colon in it - becomes
+     no link at all rather than a surprise. */
+  var raw = String(value == null ? "" : value).trim();
+  if (!raw) return "";
+  if (/^(https?:|mailto:|tel:)/i.test(raw)) return raw;
+  /* A plain web address with no scheme is what people actually type, so
+     "example.com" is allowed and normalised to https. */
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(\/.*)?$/i.test(raw)) {
+    return "https://" + raw;
+  }
+  return "";
+}
+
+function navItems(plan) {
     var pages = plan.pages || [];
     if (Array.isArray(plan.nav) && plan.nav.length) {
       /* Drop entries whose page has since been deleted, rather than
          rendering a link to nothing. */
       var seen = {};
-      return plan.nav
-        .filter(function (item) {
-          if (!item || !item.pageId || seen[item.pageId]) return false;
-          seen[item.pageId] = true;
-          return pages.some(function (p) { return p.id === item.pageId; });
-        })
-        .map(function (item) {
-          return {
-            pageId: item.pageId,
-            label: String(item.label || ""),
-            visible: item.visible !== false,
-            children: Array.isArray(item.children)
-              ? item.children.filter(function (c) {
-                  return c && c.pageId &&
-                    pages.some(function (p) { return p.id === c.pageId; });
-                }).map(function (c) {
-                  return { pageId: c.pageId, label: String(c.label || "") };
-                })
-              : []
-          };
-        });
+      /* An entry is kept if it points at a page that still exists, or if it is
+         a custom link - which has an href and no page at all. That second
+         case is why a user can link to their Instagram rather than being
+         limited to the pages SiteSketch happens to have generated. */
+      function keeps(item, seenMap) {
+        if (!item) return false;
+        /* A custom link is kept on its own account - it has no page. */
+        if (item.href && safeHref(item.href)) return true;
+        if (!item.pageId) return false;
+        if (seenMap[item.pageId]) return false;
+        /* Marked seen here, after the duplicate test and not before it.
+           Doing it first made every page-backed entry reject itself as a
+           duplicate of itself, which silently dropped the home page from
+           the menu. */
+        seenMap[item.pageId] = true;
+        return pages.some(function (p) { return p.id === item.pageId; });
+      }
+      function trim(item) {
+        return {
+          pageId: item.pageId || null,
+          href: safeHref(item.href),
+          label: String(item.label || ""),
+          visible: item.visible !== false,
+          /* Children get their own duplicate map. Sharing the top-level one
+             meant a submenu entry pointing at a page that was also in the
+             menu rejected itself as a duplicate and the submenu silently
+             rendered empty. */
+          children: Array.isArray(item.children)
+            ? item.children.filter(function (c) { return keeps(c, {}); })
+                .map(trim)
+            : []
+        };
+      }
+      var out = [];
+      plan.nav.forEach(function (item) {
+        if (keeps(item, seen)) out.push(trim(item));
+      });
+      return out;
     }
     /* no saved menu yet: every page, in order, under its own name */
     return pages.map(function (p) {
@@ -690,6 +728,7 @@
     });
   }
   SS.navItems = navItems;
+  SS.safeHref = safeHref;
 
   function navHTML(plan, pageId, spec, options) {
     options = options || {};
@@ -702,9 +741,17 @@
        ever in-page anchors and are never followed. On a published site each
        page is its own document, so the same links have to be real URLs or
        the navigation is dead. pageBase is what makes them real. */
-    function hrefFor(id) {
-      if (!options.pageBase) return "#" + esc(id);
-      var key = SS.pageKey(id);
+    function hrefFor(entry) {
+      /* Accepts a nav entry or a bare page id, because the brand link in
+         the footer passes a string. A custom link carries its own href and
+         has no page at all. */
+      if (entry && typeof entry === "object") {
+        if (entry.href) return entry.href;
+        entry = entry.pageId;
+      }
+      if (!entry) return "#";
+      if (!options.pageBase) return "#" + esc(entry);
+      var key = SS.pageKey(entry);
       return key === SS.pageKey(homeId) ? options.pageBase
                                          : options.pageBase + "/" + key;
     }
@@ -715,20 +762,21 @@
       return page ? page.name : "";
     }
 
-    /* `target` rather than `pageId`: naming it pageId shadowed the current
-       page and made every link render as the current one. */
-    function link(target, label, sub) {
-      var current = target === pageId;
-      return '<a href="' + esc(hrefFor(target)) + '"' +
+    /* `entry` rather than `target`/`label` separately: a custom link has no
+       pageId to pass, so the two-argument form could not express one. */
+    function link(entry, sub) {
+      var target = entry.pageId || null;
+      var current = !!target && target === pageId;
+      return '<a href="' + esc(hrefFor(entry)) + '"' +
         (current ? ' aria-current="page" style="color:var(--text)"' : "") +
         (sub ? ' class="ss-sublink"' : "") + ">" +
-        esc(nameOf(target, label)) + "</a>";
+        esc(nameOf(target, entry.label)) + "</a>";
     }
 
     var visible = navItems(plan).filter(function (i) { return i.visible; });
     var links = visible.map(function (item) {
       var kids = item.children.map(function (c) {
-        return link(c.pageId, c.label, true);
+        return link(c, true);
       }).join("");
       /* Only wrap in a submenu container when there is something to put in
          it, so a flat menu stays flat markup. */
@@ -741,7 +789,7 @@
          never applied and the submenu could never open. */
       var cls = "ss-navitem" + (item.children.length ? " has-sub" : "");
       return '<div class="' + cls + '">' +
-        link(item.pageId, item.label, false) + sub + "</div>";
+        link(item, false) + sub + "</div>";
     }).join("");
 
     var style = spec.nav || "bar";
