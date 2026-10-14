@@ -1166,7 +1166,14 @@ EditorUI.menuPanel = function (host) {
        right now, not black. Three solid black swatches beside empty text
        fields said "black", when the honest answer is "whatever the palette
        chose" - seen in a screenshot of the Design panel. The swatch is
-       dimmed while unset so it still reads as not-yet-chosen. */
+       dimmed while unset so it still reads as not-yet-chosen.
+
+       The swatch is a button that opens SiteSketch's own picker, not an
+       <input type="color">. The native dialog opens in the top-left of the
+       screen rather than beside the swatch, has no Apply, and shows an
+       opacity slider for a design system with no transparency in it. The
+       native input is still here, visually hidden, purely so the picker can
+       offer "More colours" - the eyedropper is worth keeping. */
     function brandColour(key, label, current, effective) {
       var id = "colour_" + key;
       var value = window.DESIGN ? DESIGN.parseColour(current) : null;
@@ -1175,9 +1182,15 @@ EditorUI.menuPanel = function (host) {
       return '<div class="brand-row">' +
         '<label class="field" for="' + id + '_hex"><span>' + label + "</span>" +
           '<span class="brand-inputs">' +
-            '<input type="color" id="' + id + '" value="' + shown + '"' +
+            '<button type="button" class="colour-chip" id="' + id + '_chip"' +
+              ' style="--chip:' + shown + '"' +
+              (value ? "" : " data-empty=\"1\"") +
+              ' aria-label="Choose ' + label.toLowerCase() + ' colour">' +
+              '<span class="colour-chip-inner"></span>' +
+            "</button>" +
+            '<input type="color" class="colour-native" id="' + id + '" value="' + shown + '"' +
               (value ? "" : ' data-empty="1"') +
-              ' aria-label="Choose ' + label.toLowerCase() + '">' +
+              ' tabindex="-1" aria-hidden="true">' +
             '<input type="text" id="' + id + '_hex" class="hex-field" value="' +
               (value || "") + '"' +
               ' placeholder="hex, rgb() or hsl()" maxlength="40" spellcheck="false"' +
@@ -1267,11 +1280,17 @@ EditorUI.menuPanel = function (host) {
 
     host.querySelector("#swatchHost").appendChild(paletteSwatches(plan, refresh));
 
+    /* What the site is actually using for one brand colour right now, so an
+       unset swatch previews the live colour instead of a flat black square
+       that reads as "your brand is black". */
+    function effectiveOf(key) { return paletteColor(spec, key); }
+
     /* ---------- brand colour bindings ---------- */
     ["accent", "bg", "text"].forEach(function (key) {
       var picker = host.querySelector("#colour_" + key);
+      var chip = host.querySelector("#colour_" + key + "_chip");
       var hex = host.querySelector("#colour_" + key + "_hex");
-      if (!picker || !hex) return;
+      if (!picker || !hex || !chip) return;
 
       function write(value) {
         var spec2 = window.Editor.spec();
@@ -1284,6 +1303,28 @@ EditorUI.menuPanel = function (host) {
         refresh();
       }
 
+      /* The swatch opens our picker. This is the whole of bugs 3, 4 and 5
+         from KNOWN_BUGS.md: the native dialog lands in the top-left of the
+         screen, has no Apply, and offers an opacity slider for a design
+         system that has no transparency anywhere. */
+      chip.addEventListener("click", function () {
+        var live = (window.Editor.spec().tokens.colour || {})[key] ||
+                   normHex(effectiveOf(key));
+        SS.openColourPicker({
+          anchor: chip,
+          value: live,
+          native: picker,
+          onApply: function (hexValue) {
+            picker.value = hexValue;
+            picker.removeAttribute("data-empty");
+            hex.value = hexValue.toUpperCase();
+            chip.removeAttribute("data-empty");
+            showRGB(hexValue);
+            write(hexValue.toUpperCase());
+          }
+        });
+      });
+
       function showRGB(hexValue) {
         var out = host.querySelector("#colour_" + key + "_rgb");
         if (!out) return;
@@ -1295,6 +1336,8 @@ EditorUI.menuPanel = function (host) {
       picker.addEventListener("input", function () {
         hex.value = this.value.toUpperCase();
         this.removeAttribute("data-empty");
+        chip.removeAttribute("data-empty");
+        chip.style.setProperty("--chip", this.value);
         showRGB(this.value);
         write(this.value.toUpperCase());
       });
@@ -1314,6 +1357,8 @@ EditorUI.menuPanel = function (host) {
         picker.value = v;
         this.value = v.toUpperCase();
         picker.removeAttribute("data-empty");
+        chip.removeAttribute("data-empty");
+        chip.style.setProperty("--chip", v);
         /* typing rgb() must update the readout too, not just dragging the
            swatch - otherwise the value is right and the display lies */
         showRGB(v);

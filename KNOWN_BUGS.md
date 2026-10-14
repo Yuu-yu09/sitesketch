@@ -4,8 +4,11 @@ Found by real-user testing on 2026-10-14. Every entry says how it was
 reproduced, because a bug report that cannot be reproduced cannot be proven
 fixed.
 
-**Status:** all OPEN unless a line says otherwise. Fix one at a time, commit
-each fix separately, and update this file in the same commit.
+**Status:** 6 of 8 fixed. Remaining: **6** (Menu cannot add / no custom
+links) and **8** (Export ZIP is a stub). Both have a stated fix below.
+
+Fix one at a time, commit each separately, update this file in the same
+commit.
 
 ---
 
@@ -69,7 +72,7 @@ nothing here, and there is still no Apply button.
 
 ---
 
-## 3. The colour picker opens in the top-left corner — OPEN
+## 3. The colour picker opens in the top-left corner — FIXED
 
 **Seen as:** the picker appears far from the swatch, over the left sidebar.
 
@@ -85,9 +88,15 @@ not ours. Trying to scroll or focus the input does not move it.
 in-panel colour picker anchored to the swatch, and keep the native one as a
 secondary "more colours" option.
 
+**Done.** `static/js/picker.js`. The swatch is now a `<button>` that opens a
+picker positioned from the swatch's own box in JS — it flips above when there
+is no room below and is clamped so it can never leave the window. Measured:
+it opens 36px below the swatch. The native input stays in the DOM, hidden,
+only so the picker can offer **More colours** for the eyedropper.
+
 ---
 
-## 4. No way to confirm a colour — OPEN
+## 4. No way to confirm a colour — FIXED
 
 **Seen as:** "you can't even see a button for enter."
 
@@ -98,9 +107,13 @@ been accepted.
 **Fix:** the in-panel picker from bug 3 ends in an explicit **Apply**, with
 Cancel alongside it. This is why 3 and 4 are one piece of work.
 
+**Done.** Apply commits; Cancel discards; Enter applies and Esc closes. Both
+halves are tested, because a picker that can only commit is worse than no
+picker — there is no way back from a colour chosen by mistake.
+
 ---
 
-## 5. An opacity slider is offered for a model that has no transparency — OPEN
+## 5. An opacity slider is offered for a model that has no transparency — FIXED
 
 **Seen as:** "why is the transparency on picking a colour like that."
 
@@ -111,6 +124,19 @@ app then rejects (bug 2).
 
 **Fix:** solved by bug 3's in-panel picker, which has no alpha control, plus
 bug 2 so a pasted 8-digit value is not thrown away.
+
+**Done.** There is no alpha anywhere in `picker.js` — deliberately. The test
+asserts the picker contains no range input at all, so an opacity control
+cannot quietly reappear.
+
+---
+
+## 3b. Colour controls are 34x30 — FIXED
+
+Not reported, found by the responsive audit on the day the picker landed: the
+new chip inherited the size of the input it replaced, which is under the 44px
+touch bar. Fixed by growing the chip itself on coarse pointers rather than
+padding it, since padding a button enlarges its box but not its hit area.
 
 ---
 

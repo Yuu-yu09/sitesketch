@@ -1245,12 +1245,64 @@ textarea { resize: vertical; min-height: 96px; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   text-transform: uppercase;
 }
-/* A brand colour that has not been chosen yet. The swatch shows the colour
-   the site is currently using so it is a useful preview, but dimmed, so it
-   does not read as a decision the user has already made. */
-.brand-inputs input[type="color"][data-empty] {
-  opacity: .4;
+/* The colour swatch. A button, because it opens SiteSketch's own picker
+   rather than the browser's dialog. --chip carries the colour so the inner
+   square can paint it. */
+.colour-chip {
+  flex: 0 0 auto;
+  /* 34x30 - the same size the native input had, which is under the 44px
+     touch bar. Caught by the responsive audit the day this landed. */
+  width: 34px;
+  height: 30px;
+  padding: 3px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+  line-height: 0;
 }
+.colour-chip:hover { border-color: var(--ink-2); }
+.colour-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.colour-chip-inner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--chip, #000);
+}
+/* unset: the site is using the palette's colour, not black, so the swatch
+   shows that but dimmed - a preview, not a decision already made */
+.colour-chip[data-empty] { opacity: .45; }
+
+/* A finger needs 44px. The swatch grows to that rather than the gap around
+   it counting, because padding a button does not enlarge its hit area the
+   way it enlarges its box. */
+@media (pointer: coarse) {
+  .colour-chip { width: 44px; height: 44px; }
+}
+.colour-chip[data-empty] .colour-chip-inner {
+  background:
+    linear-gradient(135deg, transparent 46%, rgba(0, 0, 0, .35) 46%,
+                    rgba(0, 0, 0, .35) 54%, transparent 54%),
+    var(--chip, #000);
+}
+
+/* The native input stays in the DOM so the picker can offer "More colours"
+   and the eyedropper, but it is never shown or reachable. */
+.brand-inputs .colour-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  clip-path: inset(50%);
+}
+
 /* The RGB value, shown so nobody has to open the system colour dialog to
    find out what they just set. */
 .brand-inputs .rgb-readout {
@@ -2221,6 +2273,147 @@ input[type="checkbox"] {
     transition-duration: .01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ============ colour picker ============
+
+   Replaces the native <input type="color"> dialog as the primary route.
+   The native one opens in the top-left of the screen rather than beside the
+   swatch (Chrome anchors it to the viewport for an input inside a sticky
+   scroll container), offers no Apply, and shows an opacity slider for a
+   design system that has no transparency anywhere.
+
+   Fixed positioning, so it is positioned in JS from the swatch's box rather
+   than by CSS. */
+.ss-picker {
+  z-index: 220;
+  display: grid;
+  grid-template-columns: 1fr 22px;
+  grid-template-areas:
+    "sv hue"
+    "fields fields"
+    "actions actions";
+  gap: .7rem;
+  width: max-content;
+  padding: .8rem;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--card, #fff);
+  box-shadow: 0 18px 48px rgba(10, 14, 26, .28), 0 2px 8px rgba(10, 14, 26, .14);
+  font-size: .84rem;
+}
+
+.ss-picker-sv {
+  grid-area: sv;
+  position: relative;
+  width: 208px;
+  height: 208px;
+  border-radius: 8px;
+  cursor: crosshair;
+  touch-action: none;
+  /* white across, then black up: the standard saturation/value square */
+  background-image:
+    linear-gradient(to top, #000, rgba(0, 0, 0, 0)),
+    linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
+}
+
+.ss-picker-sv:focus-visible,
+.ss-picker-hue:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ss-picker-sv-dot,
+.ss-picker-hue-dot {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.ss-picker-sv-dot {
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .45);
+}
+/* a white ring disappears on a pale colour, so it inverts */
+.ss-picker-dot--dark {
+  border-color: #14110A;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .65);
+}
+
+.ss-picker-hue {
+  grid-area: hue;
+  position: relative;
+  width: 22px;
+  height: 208px;
+  border-radius: 11px;
+  cursor: ns-resize;
+  touch-action: none;
+  background: linear-gradient(
+    to bottom,
+    #f00 0%, #ff0 16.66%, #0f0 33.33%, #0ff 50%,
+    #00f 66.66%, #f0f 83.33%, #f00 100%);
+}
+
+.ss-picker-hue-dot {
+  left: 50%;
+  width: 24px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 4px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .45);
+}
+
+.ss-picker-fields {
+  grid-area: fields;
+  display: flex;
+  gap: .4rem;
+  align-items: center;
+}
+.ss-picker-field {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+}
+.ss-picker-field > span {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-2);
+}
+.ss-picker-field input {
+  width: 3.6rem;
+  padding: .3rem .35rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: .8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.ss-picker-hex { width: 6.2rem !important; text-transform: uppercase; }
+.ss-picker-field input[type="number"] { -moz-appearance: textfield; width: 3.2rem; }
+.ss-picker-field input[type="number"]::-webkit-outer-spin-button,
+.ss-picker-field input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+
+.ss-picker-actions {
+  grid-area: actions;
+  display: flex;
+  gap: .4rem;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+@media (pointer: coarse) {
+  .ss-picker-sv, .ss-picker-hue { width: 216px; }
+  .ss-picker-hue { width: 28px; }
+  .ss-picker-actions .btn { min-height: 44px; }
 }
 
 /* ============ sign-in and sign-up touch targets ============

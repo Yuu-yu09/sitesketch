@@ -766,35 +766,166 @@ def run(page, phase=None):
         which reads as "your brand is black", not "not set yet". It should
         preview the colour the site is actually using, dimmed.
         """
-        page.evaluate("() => {"
-                      "  const s = window.Editor.spec();"
-                      "  delete s.tokens.colour; window.Editor.onChange('design:colour'); }")
-        page.wait_for_timeout(1200)
         if page.get_attribute("#stylesBtn", "aria-pressed") != "true":
             page.click("#stylesBtn")
             page.wait_for_timeout(500)
 
+        # Clear via the real control rather than by poking state from the
+        # console. The button calls refresh() explicitly; setting the same
+        # value twice from outside leaves the panel showing what it already
+        # showed, which is a stale panel, not a bug in the swatch.
+        page.click("#colourReset")
+        page.wait_for_timeout(900)
+
         for key in ("accent", "bg", "text"):
+            # the chip is the visible control now: a button that opens
+            # SiteSketch's picker. The native input is still in the DOM,
+            # hidden, so it can back the "More colours" escape hatch.
             info = page.evaluate(
-                "(k) => { const i = document.querySelector('#colour_' + k);"
-                "  return { value: i.value, empty: i.dataset.empty === '1',"
-                "           opacity: getComputedStyle(i).opacity }; }", key)
-            assert info["value"].upper() != "#000000", \
-                f"{key} swatch shows black while unset"
-            assert info["empty"], f"{key} swatch is not marked unset"
+                "(k) => { const c = document.querySelector('#colour_' + k + '_chip');"
+                "  if (!c) return { missing: true };"
+                "  return { shown: c.style.getPropertyValue('--chip').trim(),"
+                "           empty: c.dataset.empty === '1',"
+                "           opacity: getComputedStyle(c).opacity }; }", key)
+            assert not info.get("missing"), f"{key} has no colour chip"
+            assert info["shown"].upper() != "#000000", \
+                f"{key} chip shows black while unset"
+            assert info["empty"], f"{key} chip is not marked unset"
             assert float(info["opacity"]) < 1, \
-                f"{key} swatch is not dimmed, so it reads as chosen"
+                f"{key} chip is not dimmed, so it reads as chosen"
 
         # setting one must un-dim it, or the state is stuck
         page.fill("#colour_accent_hex", "#B04A26")
         page.dispatch_event("#colour_accent_hex", "change")
         page.wait_for_timeout(700)
         after = page.evaluate(
-            "() => { const i = document.querySelector('#colour_accent');"
-            "  return { empty: i.dataset.empty === '1',"
-            "           opacity: getComputedStyle(i).opacity }; }")
-        assert not after["empty"], "swatch stayed marked unset after a value was set"
-        assert float(after["opacity"]) == 1, "swatch stayed dimmed after a value was set"
+            "() => { const c = document.querySelector('#colour_accent_chip');"
+            "  return { empty: c.dataset.empty === '1',"
+            "           opacity: getComputedStyle(c).opacity }; }")
+        assert not after["empty"], "chip stayed marked unset after a value was set"
+        assert float(after["opacity"]) == 1, "chip stayed dimmed after a value was set"
+
+    def t_the_picker_opens_beside_the_swatch():
+        """Not in the top-left corner of the screen.
+
+        The native colour dialog did exactly that. Measured rather than
+        assumed: the swatch sits correctly at x=1148 y=367 with no
+        transformed ancestors, but #stylesPanel is position:sticky with
+        overflow:auto and Chrome anchors the popup to the viewport for an
+        input inside one. There is no way to style, scroll or focus that into
+        place, which is why there is a picker of our own.
+        """
+        if page.get_attribute("#stylesBtn", "aria-pressed") != "true":
+            page.click("#stylesBtn")
+            page.wait_for_timeout(600)
+        page.click("#colour_accent_chip")
+        page.wait_for_timeout(500)
+
+        assert page.locator(".ss-picker").count() == 1, "the picker did not open"
+        pk = page.locator(".ss-picker").bounding_box()
+        chip = page.locator("#colour_accent_chip").bounding_box()
+
+        assert pk["y"] >= chip["y"] - 40, \
+            f"the picker opened above the swatch by {chip['y'] - pk['y']}px"
+        # vertically it must be near the swatch, not parked at the top
+        assert abs(pk["y"] - chip["y"]) < 220, \
+            f"the picker is {abs(pk['y'] - chip['y'])}px from the swatch vertically"
+        # and horizontally overlapping it, or clamped just inside the window
+        assert pk["x"] < chip["x"] + chip["width"], \
+            "the picker is not beside the swatch at all"
+        assert pk["x"] >= 0 and pk["y"] >= 0, "the picker is off-screen"
+
+        # it must offer an Apply, which the native dialog never had
+        assert page.locator(".ss-picker-apply").is_visible(), "no Apply button"
+        assert page.locator(".ss-picker-cancel").is_visible(), "no Cancel button"
+        # and no opacity control, because the design system has no transparency
+        assert page.locator(".ss-picker input[type=range]").count() == 0, \
+            "the picker offers an alpha slider for a design system that has none"
+
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(400)
+        assert page.locator(".ss-picker").count() == 0, "Escape did not close it"
+
+    def t_the_picker_applies_and_cancels():
+        """Apply commits, Cancel discards.
+
+        Both halves matter. A picker that can only commit is worse than no
+        picker, because there is no way back from a colour chosen by mistake.
+        """
+        if page.get_attribute("#stylesBtn", "aria-pressed") != "true":
+            page.click("#stylesBtn")
+            page.wait_for_timeout(600)
+
+        def accent():
+            return page.evaluate(
+                "() => getComputedStyle(window.Editor.root.querySelector('.ss-site'))"
+                ".getPropertyValue('--accent').trim().toUpperCase()")
+
+        before = accent()
+
+        # --- Apply commits, through the drag rather than the text field
+        page.click("#colour_accent_chip")
+        page.wait_for_timeout(500)
+        box = page.locator(".ss-picker-sv").bounding_box()
+        page.mouse.move(box["x"] + box["width"] * 0.85,
+                        box["y"] + box["height"] * 0.25)
+        page.mouse.down()
+        page.mouse.up()
+        page.wait_for_timeout(400)
+        dragged = page.locator(".ss-picker-hex").input_value().upper()
+        assert dragged != before, "dragging the square changed nothing"
+
+        page.click(".ss-picker-apply")
+        page.wait_for_timeout(1000)
+        assert page.locator(".ss-picker").count() == 0, "Apply left it open"
+        assert page.locator("#colour_accent_hex").input_value().upper() == dragged, \
+            "the text field did not follow the picker"
+        assert accent() == dragged, \
+            f"Apply did not reach the page: {accent()} not {dragged}"
+
+        # --- Cancel discards
+        applied = accent()
+        page.click("#colour_accent_chip")
+        page.wait_for_timeout(500)
+        page.fill(".ss-picker-hex", "#FF0000")
+        page.wait_for_timeout(300)
+        page.click(".ss-picker-cancel")
+        page.wait_for_timeout(900)
+        assert page.locator(".ss-picker").count() == 0, "Cancel left it open"
+        assert accent() == applied, \
+            f"Cancel changed the page: {accent()} not {applied}"
+        assert page.locator("#colour_accent_hex").input_value().upper() != "#FF0000", \
+            "Cancel left the typed colour behind"
+
+        page.evaluate("() => {"
+                      "  const s = window.Editor.spec();"
+                      "  delete s.tokens.colour; window.Editor.onChange('design:colour'); }")
+        page.wait_for_timeout(1200)
+
+    def t_the_picker_survives_being_clicked():
+        """Clicking inside the picker must not destroy it.
+
+        This is bug 7 all over again. The document-level "click away clears
+        the toolbar" handler rebuilds the panel on any click outside the
+        canvas, and a picker rendered outside the panel would be torn down by
+        its own first click.
+        """
+        if page.get_attribute("#stylesBtn", "aria-pressed") != "true":
+            page.click("#stylesBtn")
+            page.wait_for_timeout(600)
+        page.click("#colour_accent_chip")
+        page.wait_for_timeout(500)
+
+        # Apply and Cancel are deliberately not in this list: they are supposed to
+        # close the picker, and t_the_picker_applies_and_cancels covers them.
+        for selector in (".ss-picker-hex", ".ss-picker-r", ".ss-picker-sv"):
+            page.locator(selector).click()
+            page.wait_for_timeout(250)
+            assert page.locator(".ss-picker").count() == 1, \
+                f"the picker was destroyed by clicking {selector}"
+
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(400)
 
     def t_builder_warns_when_the_live_site_is_behind():
         """An edit does not reach visitors until the site is republished.
@@ -922,6 +1053,9 @@ def run(page, phase=None):
           t_panel_controls_survive_being_clicked)
     check("published copy carries no editor instructions",
           t_published_copy_carries_no_editor_instructions)
+    check("the picker opens beside the swatch", t_the_picker_opens_beside_the_swatch)
+    check("the picker applies and cancels", t_the_picker_applies_and_cancels)
+    check("the picker survives being clicked", t_the_picker_survives_being_clicked)
     check("an unset brand swatch shows the real colour",
           t_unset_brand_swatch_shows_the_real_colour)
     check("brand colours survive a reload", t_brand_colours_survive_a_reload)

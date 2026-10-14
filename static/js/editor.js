@@ -685,6 +685,7 @@
           event.target.closest(".builder-rail") ||
           event.target.closest(".builder-top") ||
           event.target.closest(".modal") ||
+          event.target.closest(".ss-picker") ||
           event.target.closest(".toast-host")) return;
       Editor.select(null);
     });
