@@ -1361,7 +1361,7 @@ def run(page, phase=None):
         def drag_first_available_to(target_y):
             """The rail offers different sections per site type, so this
             takes whatever is on offer rather than naming one."""
-            card = page.locator("#rail .rail-library [data-key]").first
+            card = page.locator("#rail [data-key]").first
             card.scroll_into_view_if_needed()
             page.wait_for_timeout(200)
             box = card.bounding_box()
@@ -1376,10 +1376,16 @@ def run(page, phase=None):
         keys = available_keys()
         assert len(keys) >= 2, f"the rail offers only {keys}"
 
-        # --- a drop lands where the line was, not at the end
+        # --- a drop lands where the line was, not at the end.
+        # The seeded project has two sections, so the drop target is the
+        # last one. Naming a third by index timed out for thirty seconds,
+        # which is what this test did twice before anyone checked how many
+        # sections the fixture actually has.
         before = ids()
-        third = page.locator("#canvas .ss-sec").nth(2).bounding_box()
-        drag_first_available_to((third["x"] + 300, third["y"] + 3))
+        assert len(before) >= 2, f"the fixture has {len(before)} sections"
+        last = page.locator("#canvas .ss-sec").last
+        box = last.bounding_box()
+        drag_first_available_to((box["x"] + 300, box["y"] + 3))
         assert page.locator(".ss-dropchip").count() == 1, \
             "no chip followed the pointer"
         assert page.locator(".ss-dropline").count() == 1, \
@@ -1389,12 +1395,12 @@ def run(page, phase=None):
         after = ids()
         assert len(after) == len(before) + 1, \
             f"the drop added {len(after) - len(before)} sections, expected 1"
-        assert after[2] != before[2], \
+        assert after[-2] != before[-1], \
             "it landed at the end rather than where it was dropped"
 
         # --- Escape abandons the drag and adds nothing
         count = len(ids())
-        card = page.locator("#rail .rail-library [data-key]").first
+        card = page.locator("#rail [data-key]").first
         card.scroll_into_view_if_needed()
         page.wait_for_timeout(200)
         box = card.bounding_box()
@@ -1415,7 +1421,7 @@ def run(page, phase=None):
 
         # --- and a plain click still means "add to the end"
         before = ids()
-        page.locator("#rail .rail-library [data-key]").last.click()
+        page.locator("#rail [data-key]").last.click()
         page.wait_for_timeout(1500)
         assert len(ids()) == len(before) + 1, "a plain click stopped adding"
         assert ids()[-1] not in before, "a click no longer appends"
