@@ -700,6 +700,14 @@ function navItems(plan) {
         if (!item) return false;
         /* A custom link is kept on its own account - it has no page. */
         if (item.href && safeHref(item.href)) return true;
+        /* A section anchor: it points at a block on a page, not a page. It
+           needs its own existence test, or a menu entry for a deleted
+           section would survive and link to nothing. */
+        if (item.sectionId) {
+          if (seenMap["s:" + item.sectionId]) return false;
+          seenMap["s:" + item.sectionId] = true;
+          return sectionExists(item.pageId, item.sectionId);
+        }
         if (!item.pageId) return false;
         if (seenMap[item.pageId]) return false;
         /* Marked seen here, after the duplicate test and not before it.
@@ -709,9 +717,19 @@ function navItems(plan) {
         seenMap[item.pageId] = true;
         return pages.some(function (p) { return p.id === item.pageId; });
       }
+      /* A section lives on whichever page holds it; pageId may be absent, in
+         which case the home page is meant. */
+      function sectionExists(pageId, sectionId) {
+        var host = pageId
+          ? pages.filter(function (p) { return p.id === pageId; })[0]
+          : pages[0];
+        if (!host) return false;
+        return (host.sections || []).some(function (s) { return s.id === sectionId; });
+      }
       function trim(item) {
         return {
           pageId: item.pageId || null,
+          sectionId: item.sectionId || null,
           href: safeHref(item.href),
           label: String(item.label || ""),
           visible: item.visible !== false,
@@ -731,7 +749,25 @@ function navItems(plan) {
       });
       return out;
     }
-    /* no saved menu yet: every page, in order, under its own name */
+    /* No saved menu yet.
+       A one-page site used to default to a single "Home" link pointing at
+       the page you are already on, so a six-section site had a navbar that
+       reached nothing. Default it to its own sections instead - the titles
+       are already written, and this is what a brochure one-pager is. Only
+       for a single page: with several, page links are the right answer. */
+    if (pages.length === 1) {
+      var home = pages[0];
+      var blocks = (home.sections || []).filter(function (s) { return !s.hidden; });
+      if (blocks.length > 1) {
+        return blocks.map(function (s, n) {
+          /* The first block is the top of the page; a "Home" link to it
+             would sit next to a link to the very same place. */
+          return n === 0
+            ? { pageId: home.id, label: "", visible: true, children: [] }
+            : { pageId: home.id, sectionId: s.id, label: "", visible: true, children: [] };
+        });
+      }
+    }
     return pages.map(function (p) {
       return { pageId: p.id, label: "", visible: true, children: [] };
     });
@@ -753,16 +789,32 @@ function navItems(plan) {
     function hrefFor(entry) {
       /* Accepts a nav entry or a bare page id, because the brand link in
          the footer passes a string. A custom link carries its own href and
-         has no page at all. */
+         has no page at all. A section entry carries a sectionId and points
+         at a block on a page - the fragment has to survive the page URL. */
       if (entry && typeof entry === "object") {
         if (entry.href) return entry.href;
+        if (entry.sectionId) {
+          /* In the builder the page itself is already on screen and the
+             canvas is the document, so a section link is the bare fragment.
+             Appending to a "#pageId" base produced "#home#s_123" - two
+             fragments, which resolves to nothing. */
+          if (!options.pageBase) return "#" + esc(entry.sectionId);
+          return pageUrl(entry.pageId || homeId) + "#" + esc(entry.sectionId);
+        }
         entry = entry.pageId;
       }
       if (!entry) return "#";
-      if (!options.pageBase) return "#" + esc(entry);
-      var key = SS.pageKey(entry);
+      return pageUrl(entry);
+    }
+
+    /* The real address of a page. Extracted because a section entry needs
+       it too: the fragment goes after the page, not instead of it. */
+    function pageUrl(id) {
+      if (!id) return options.pageBase || "#";
+      if (!options.pageBase) return "#" + esc(id);
+      var key = SS.pageKey(id);
       return key === SS.pageKey(homeId) ? options.pageBase
-                                         : options.pageBase + "/" + key;
+                                        : options.pageBase + "/" + key;
     }
 
     function nameOf(target, label) {
@@ -771,15 +823,33 @@ function navItems(plan) {
       return page ? page.name : "";
     }
 
+    /* A section entry is named after the section, not the page. Its title is
+       already written - that is the whole reason for defaulting to these. */
+    function labelFor(entry) {
+      if (entry.label) return entry.label;
+      if (entry.sectionId) {
+        var host = pages.filter(function (p) {
+          return p.id === (entry.pageId || homeId);
+        })[0] || pages[0];
+        var sec = host && (host.sections || []).filter(function (s) {
+          return s.id === entry.sectionId;
+        })[0];
+        if (sec && sec.title) return sec.title;
+      }
+      return nameOf(entry.pageId, entry.label);
+    }
+
     /* `entry` rather than `target`/`label` separately: a custom link has no
        pageId to pass, so the two-argument form could not express one. */
     function link(entry, sub) {
       var target = entry.pageId || null;
-      var current = !!target && target === pageId;
+      /* aria-current marks the page you are on. A section anchor is on the
+         same page, so marking it too would put "current" on every link. */
+      var current = !!target && target === pageId && !entry.sectionId;
       return '<a href="' + esc(hrefFor(entry)) + '"' +
         (current ? ' aria-current="page" style="color:var(--text)"' : "") +
         (sub ? ' class="ss-sublink"' : "") + ">" +
-        esc(nameOf(target, entry.label)) + "</a>";
+        esc(labelFor(entry)) + "</a>";
     }
 
     var visible = navItems(plan).filter(function (i) { return i.visible; });
@@ -1001,7 +1071,8 @@ function navItems(plan) {
       poolImage: poolImage,
       cardPool: cardPool,
       crop: crop,
-      wrapAttrs: ' data-sect="' + esc(section.id) + '" data-sect-label="' + esc(section.type) + '"',
+      wrapAttrs: ' id="' + esc(section.id) + '" data-sect="' + esc(section.id) +
+        '" data-sect-label="' + esc(section.type) + '"',
       editable: !!editable,
     };
 

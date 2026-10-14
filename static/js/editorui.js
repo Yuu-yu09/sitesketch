@@ -572,6 +572,11 @@ EditorUI.menuPanel = function (host) {
       return SSr.navItems(plan).map(function (i) {
         return {
           pageId: i.pageId, label: i.label, visible: i.visible,
+          /* sectionId has to survive the round trip for the same reason href
+             does: navItems rebuilds each entry, and a panel that dropped it
+             would quietly turn every section link back into a page link the
+             moment you renamed something else. */
+          sectionId: i.sectionId || "",
           /* href has to survive the round trip. It did not at first, and
              the symptom was odd enough to be worth writing down: the canvas
              navigation showed every custom link correctly, while the panel
@@ -581,7 +586,8 @@ EditorUI.menuPanel = function (host) {
              next read of the list. */
           href: i.href || "",
           children: (i.children || []).map(function (c) {
-            return { pageId: c.pageId, label: c.label, href: c.href || "" };
+            return { pageId: c.pageId, label: c.label, href: c.href || "",
+                     sectionId: c.sectionId || "" };
           })
         };
       });
@@ -619,6 +625,38 @@ EditorUI.menuPanel = function (host) {
     });
     var spare = pages.filter(function (p) { return !inMenu[p.id]; });
 
+    /* Every section on the current page, minus those already in the menu. */
+    var currentPage = pages.filter(function (p) { return p.id === Editor.pageId; })[0] || pages[0];
+    var usedSections = {};
+    built.forEach(function (i) {
+      if (i.sectionId) usedSections[i.sectionId] = true;
+      (i.children || []).forEach(function (c) {
+        if (c.sectionId) usedSections[c.sectionId] = true;
+      });
+    });
+    var spareSections = ((currentPage && currentPage.sections) || [])
+      .filter(function (s) { return !s.hidden && !usedSections[s.id]; })
+      .map(function (s) {
+        return { id: s.id, pid: currentPage.id, title: s.title || "Untitled section" };
+      });
+
+    /* every section on the page, including ones already in the menu, so a
+       row can still name itself after being added */
+    var allSections = ((currentPage && currentPage.sections) || []).map(function (s) {
+      return { id: s.id, title: s.title || "Untitled section" };
+    });
+
+    /* What a row calls itself: a section entry is named after its section,
+       and saying "Home" for six rows would be useless. */
+    function rowName(item) {
+      if (item.label) return item.label;
+      if (item.sectionId) {
+        var hit = allSections.filter(function (s) { return s.id === item.sectionId; })[0];
+        return hit ? hit.title : "Section";
+      }
+      return pageName(item.pageId);
+    }
+
     function childRows(item) {
       return (item.children || []).map(function (c, ci) {
         return '<li class="menu-sub">' +
@@ -648,10 +686,10 @@ EditorUI.menuPanel = function (host) {
             '<i class="bi bi-arrow-down" aria-hidden="true"></i></button>' +
           '<input type="text" data-nav-label="' + i + '" value="' +
             SSr.esc(item.label) + '" placeholder="' +
-            (item.href ? SSr.esc(item.href) : SSr.esc(pageName(item.pageId))) +
+            (item.href ? SSr.esc(item.href) : SSr.esc(rowName(item))) +
             '" aria-label="Menu label for ' +
             (item.href ? SSr.esc(item.label || "custom link")
-                       : SSr.esc(pageName(item.pageId))) + '">' +
+                       : SSr.esc(rowName(item))) + '">' +
           (item.href
             ? '<input type="text" class="menu-href" data-nav-href="' + i +
               '" value="' + SSr.esc(item.href) +
@@ -660,7 +698,7 @@ EditorUI.menuPanel = function (host) {
             : "") +
           '<button type="button" class="icon-btn danger" data-nav-rm="' + i +
             '" title="Remove from menu" aria-label="Remove ' +
-            SSr.esc(item.label || item.href || pageName(item.pageId)) +
+            SSr.esc(item.label || item.href || rowName(item)) +
             ' from the menu">' +
             '<i class="bi bi-x-lg" aria-hidden="true"></i></button>' +
           '<button type="button" class="icon-btn" data-nav-toggle="' + i +
@@ -678,6 +716,19 @@ EditorUI.menuPanel = function (host) {
               '<option value="">Add a page…</option>' +
               spare.map(function (p) {
                 return '<option value="' + p.id + '">' + SSr.esc(p.name) + "</option>";
+              }).join("") +
+            "</select></label>"
+          : "") +
+        /* Sections, as their own dropdown with a "sec:" prefix. Page ids and
+           section ids are both bare strings, so an unprefixed option could
+           not be told apart from a page on the way back in. */
+        (spareSections.length
+          ? '<label class="field menu-add"><span>Jump to a part</span>' +
+            '<select data-nav-add-sec="' + i + '">' +
+              '<option value="">Add a section…</option>' +
+              spareSections.map(function (s) {
+                return '<option value="sec:' + SSr.esc(s.pid) + ":" + SSr.esc(s.id) +
+                  '">' + SSr.esc(s.title) + "</option>";
               }).join("") +
             "</select></label>"
           : "") +
@@ -802,6 +853,22 @@ EditorUI.menuPanel = function (host) {
           list[idx].children = list[idx].children || [];
           list[idx].children.push({ pageId: addSub.value, label: "" });
           commit(list);
+          return;
+        }
+        /* "sec:<pageId>:<sectionId>" - split from the right, because a page
+           id can itself contain a colon and splitting on the first one
+           silently truncated it. */
+        var addSec = t.closest("[data-nav-add-sec]");
+        if (addSec && addSec.value) {
+          var raw = addSec.value.slice(4);
+          var cut = raw.lastIndexOf(":");
+          if (cut < 1) return;
+          var secPage = raw.slice(0, cut);
+          var secId = raw.slice(cut + 1);
+          list.push({ pageId: secPage, sectionId: secId,
+                     label: "", visible: true, children: [] });
+          commit(list);
+          return;
         }
       });
 
@@ -955,6 +1022,12 @@ EditorUI.footerPanel = function (host) {
     var f = plan.footer;
     var data = window.SS.footerData(plan);
     var style = f.style || {};
+    /* The swatch has to show the colour that is actually on screen. With
+       "Use theme" there is no stored value, and these two used to fall back
+       to hardcoded #ffffff and #1d4ed8 - so a footer inheriting a cream or
+       navy theme showed a white square. paletteColor() resolves the real
+       palette entry, which is what the section panel already does. */
+    var spec = Editor.spec();
 
     function refresh() { EditorUI.footerPanel(host); }
     /* Only setStyle survives from the original pair: set() was never called
@@ -1158,7 +1231,7 @@ EditorUI.footerPanel = function (host) {
         "<h3>Colours</h3>" +
         '<label class="field"><span>Background</span>' +
           '<span class="colour-row">' +
-            '<input type="color" id="blockBg" value="' + SS.esc(normHex(style.bg) || paletteColor(spec, "bg")) + '">' +
+            '<input type="color" id="blockBg" value="' + SS.esc(normHex(style.bg) || "#ffffff") + '">' +
             '<button type="button" class="btn btn-sm" data-clear="bg">Use theme</button>' +
           "</span></label>" +
         '<label class="field"><span>Text</span>' +
@@ -1168,7 +1241,7 @@ EditorUI.footerPanel = function (host) {
           "</span></label>" +
         '<label class="field"><span>Accent</span>' +
           '<span class="colour-row">' +
-            '<input type="color" id="blockAccent" value="' + SS.esc(normHex(style.accent) || paletteColor(spec, "accent")) + '">' +
+            '<input type="color" id="blockAccent" value="' + SS.esc(normHex(style.accent) || "#1d4ed8") + '">' +
             '<button type="button" class="btn btn-sm" data-clear="accent">Use theme</button>' +
           "</span></label>" +
       "</div>" +

@@ -1512,12 +1512,40 @@ def run(page, phase=None):
             f"{sorted(set(real))}"
         )
 
+    def t_a_food_site_is_not_given_office_photos():
+        """The restaurant pool included "people", which is three stock photos
+        of office workers at laptops. It became the hero image of a published
+        ramen shop. Assert on the pool contents, not on one seeded site - the
+        image is chosen by a hash of the section id, so any single run only
+        samples it."""
+        office = ["photo-1522071820081-009f0129c71c",
+                  "photo-1600880292203-757bb62b4baf",
+                  "photo-1531482615713-2afd69097998"]
+        guests = page.evaluate(
+            "() => (window.DESIGN && DESIGN.IMAGES.guests) || []")
+        assert guests, "there is no guests pool at all"
+
+        pools = page.evaluate("() => window.DESIGN.TYPE_IMAGES")
+        assert "restaurant" in pools, f"no restaurant pool: {list(pools)}"
+        assert "people" not in pools["restaurant"], \
+            f"restaurant sites are still given office photos: {pools['restaurant']}"
+
+        for bad in office:
+            assert bad not in guests, \
+                f"{bad} is an office photo sitting in the food pool"
+
+        # and the pool must not be empty of real URLs
+        assert all(g.startswith("https://") for g in guests), \
+            f"a guest photo is not a URL: {guests}"
+
     check("a section can be dropped where you want it",
           t_a_section_can_be_dropped_where_you_want_it)
     check("only one hero per page",
           t_a_second_hero_is_refused_but_others_repeat)
     check("cards do not all show the same photo",
           t_cards_do_not_all_show_the_same_photo)
+    check("a food site is not given office photos",
+          t_a_food_site_is_not_given_office_photos)
     check("the description box needs no detour",
           t_the_description_box_needs_no_detour)
     check("every colour control opens the picker",
@@ -1780,14 +1808,40 @@ def run(page, phase=None):
         assert og == title, f"og:title disagrees with the title: {og!r} vs {title!r}"
 
     def t_published_nav_points_at_real_pages():
-        """Nav links have to work on a published site, not just in the editor."""
+        """Nav links have to work on a published site, not just in the editor.
+
+        This used to assert "#" not in href - "nav link is still an in-page
+        anchor". That assertion encoded the bug: a one-page site could only
+        link to itself, so forbidding anchors forbade the only fix. A section
+        anchor is now legitimate, so what is checked instead is that every
+        fragment resolves to an element that is actually on the page."""
         hrefs = page.eval_on_selector_all(
             ".ss-navlinks a", "els => els.map(e => e.getAttribute('href'))"
         )
         assert hrefs, "published page has no nav links"
+
+        ids = set(page.eval_on_selector_all(
+            "[id]", "els => els.map(e => e.id)"))
+        sections = page.eval_on_selector_all(
+            ".ss-sec", "els => els.map(e => e.id)")
+        assert all(sections), "a published section has no id to link to"
+
         for href in hrefs:
             assert href.startswith("/site/"), f"nav link is not a real URL: {href!r}"
-            assert "#" not in href, f"nav link is still an in-page anchor: {href!r}"
+            assert href.count("#") <= 1, \
+                f"nav link has more than one fragment: {href!r}"
+            if "#" in href:
+                target = href.split("#", 1)[1]
+                assert target in ids, \
+                    f"nav link points at #{target}, which is not on the page"
+
+        # The "default menu lists sections" half of this is checked in
+        # user_journey, on a project built fresh with no saved menu. It
+        # cannot be checked here: the menu tests earlier in this same file
+        # save a menu to the shared fixture, so by this point the site has a
+        # deliberate one-page menu and the default correctly does not apply.
+        # Asserting the default here tested another test's leftovers.
+
         brand = page.get_attribute(".ss-brand", "href")
         assert brand and brand.startswith("/site/"), brand
 
@@ -1838,7 +1892,8 @@ def run(page, phase=None):
     check("published page really renders", t_published_page_really_renders)
     check("published page runs no script", t_published_page_runs_no_script)
     check("published page metadata is sane", t_published_page_metadata)
-    check("published nav points at real pages", t_published_nav_points_at_real_pages)
+    check("published nav reaches the sections",
+          t_published_nav_points_at_real_pages)
 
     def t_published_footer_links_go_somewhere():
         """The footer's Pages column used to link to href="#<page.id>" while
