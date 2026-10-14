@@ -1479,10 +1479,45 @@ def run(page, phase=None):
         assert n1 == n0 + 1, \
             f"testimonials stopped being repeatable: {n0} -> {n1}"
 
+    def t_cards_do_not_all_show_the_same_photo():
+        """Every card in a section used to fall back to one shared picture,
+        so a three-card row rendered the same photograph three times. Count
+        the distinct sources rather than eyeballing them."""
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector("#rail [data-key='features']", timeout=SLOW)
+        page.wait_for_timeout(1200)
+
+        have = page.eval_on_selector_all(
+            "#canvas .ss-sec", "els => els.map(e => e.dataset.sectLabel)")
+        if "features" not in have:
+            page.click("#rail [data-key='features']")
+            page.wait_for_timeout(1500)
+
+        # Cards only exist in the grid/row variants. Assert they are there
+        # before measuring them: an earlier version of this check found zero
+        # .ss-card elements, and "zero duplicates" would have passed while
+        # proving nothing at all.
+        srcs = page.eval_on_selector_all(
+            "#canvas .ss-card img", "els => els.map(e => e.getAttribute('src'))"
+        )
+        assert len(srcs) >= 2, \
+            f"expected a card row to measure, found {len(srcs)} images - " \
+            "the variant renders no cards, so this test cannot see the bug"
+
+        real = [s for s in srcs if s]
+        assert len(real) == len(srcs), "a card rendered without a picture"
+        assert len(set(real)) == len(real), (
+            f"{len(real)} cards share only {len(set(real))} images: "
+            f"{sorted(set(real))}"
+        )
+
     check("a section can be dropped where you want it",
           t_a_section_can_be_dropped_where_you_want_it)
     check("only one hero per page",
           t_a_second_hero_is_refused_but_others_repeat)
+    check("cards do not all show the same photo",
+          t_cards_do_not_all_show_the_same_photo)
     check("the description box needs no detour",
           t_the_description_box_needs_no_detour)
     check("every colour control opens the picker",

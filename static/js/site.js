@@ -242,7 +242,7 @@
      it threw "ctx is not defined" and took the whole page down. Empty lists
      returned early, which is exactly why it looked intermittent: it only
      broke for the plans that had something to show. */
-  function cardsOf(section, path, limit, fallbackImage, crop, editable) {
+  function cardsOf(section, path, limit, fallbackImage, crop, editable, pool) {
     var list = items(section).slice(0, limit || 6);
     if (!list.length) return "";
     var cropFn = typeof crop === "function" ? crop : function () { return null; };
@@ -251,11 +251,20 @@
        for a ctx from out here works right up until a list actually has items
        and then takes the page down. */
     var fakeCtx = { editable: !!editable };
+    /* One fallback per card, not one for the whole section. Three menu items
+       all rendered the same photograph - measured on a live publish, all
+       three pointing at photo-1552566626. Stepping by the card index means
+       the pictures differ, and an item that has its own photo still wins. */
+    function cardImage(item, i) {
+      if (item.img) return item.img;
+      if (pool && pool.length) return pool[i % pool.length];
+      return fallbackImage;
+    }
     return list.map(function (item, i) {
       return '<article class="ss-card">' +
         /* always render the slot, so every card is clickable for a
            picture even before the user chooses one */
-        picture(item.img || fallbackImage, path + ":" + i + ":img", item.title, null, cropFn(path + ":" + i + ":img")) +
+        picture(cardImage(item, i), path + ":" + i + ":img", item.title, null, cropFn(path + ":" + i + ":img")) +
         "<h3" + ed(path + ":" + i + ":title") + ">" + esc(hint(fakeCtx, item.title, "Title")) + "</h3>" +
         text(hint(fakeCtx, item.text, "A line about this."), path + ":" + i + ":text", "p") +
         "</article>";
@@ -276,7 +285,7 @@
     return '<section class="ss-sec g-features v-grid" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       text(s.subtitle, "subtitle") +
-      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop, ctx.editable) + "</div></div></section>";
+      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop, ctx.editable, ctx.cardPool) + "</div></div></section>";
   };
 
   BLOCKS.products = function (ctx) {
@@ -306,7 +315,7 @@
       return '<section class="ss-sec g-menu v-grid" ' + ctx.wrapAttrs + '>' +
         '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
         text(s.subtitle, "subtitle") +
-        '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop, ctx.editable) + "</div></div></section>";
+        '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop, ctx.editable, ctx.cardPool) + "</div></div></section>";
     }
     return '<section class="ss-sec g-menu v-list" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
@@ -489,7 +498,7 @@
     return '<section class="ss-sec g-team v-grid" ' + ctx.wrapAttrs + '>' +
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       text(s.subtitle, "subtitle") +
-      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop, ctx.editable) + "</div></div></section>";
+      '<div class="ss-grid">' + cardsOf(s, "items", 6, ctx.poolImage, ctx.crop, ctx.editable, ctx.cardPool) + "</div></div></section>";
   };
 
   BLOCKS.blog = function (ctx) {
@@ -972,6 +981,13 @@ function navItems(plan) {
     var pools = window.DESIGN ? DESIGN.TYPE_IMAGES[(plan.meta || {}).type] || DESIGN.TYPE_IMAGES.business : [];
     var poolKey = pools.length ? pools[index % pools.length] : null;
     var poolImage = window.DESIGN ? ((DESIGN.IMAGES[poolKey] || [])[index % 3] || "") : "";
+    /* A per-card spread of pictures, so cards inside one section do not all
+       come out identical. Built from the same pool, offset by the section's
+       own index so two sections do not start on the same photo either. */
+    var poolList = window.DESIGN ? (DESIGN.IMAGES[poolKey] || []) : [];
+    var cardPool = poolList.length
+      ? poolList.map(function (_, k) { return poolList[(index + k) % poolList.length]; })
+      : [];
 
     /* the section's own crop, if the user has set one */
     function crop(slot) { return cropOf(plan, pageId, section.id, slot); }
@@ -983,6 +999,7 @@ function navItems(plan) {
       image: image,
       imageTag: picture(image, "img", section.title, null, crop("img")),
       poolImage: poolImage,
+      cardPool: cardPool,
       crop: crop,
       wrapAttrs: ' data-sect="' + esc(section.id) + '" data-sect-label="' + esc(section.type) + '"',
       editable: !!editable,

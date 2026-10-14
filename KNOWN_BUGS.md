@@ -385,3 +385,41 @@ clicking testimonials still goes 4 → 5.
 **Scope note.** This does not prevent a hero being *moved* rather than added
 — that is deliberate reordering, not a mistake, and blocking it would break
 drag-to-position.
+
+## 12. Every card in a section shows the same photo — FIXED
+
+**Seen as:** a ramen site publishing three menu cards — "House special",
+"Seasonal plate", "House classic" — all three loading one identical file.
+
+    House special  ─┐
+    Seasonal plate  ├─ photo-1552566626-52f8b828add9
+    House classic  ─┘
+
+**Reproduced:** publish, fetch `/site/<slug>`, count image srcs. Three
+occurrences of one URL. Looked obvious in a screenshot; measured anyway,
+because two near-identical URLs would have looked the same and needed a
+different fix.
+
+**Cause:** `cardsOf` took a single `fallbackImage` — `ctx.poolImage` — and
+handed it to every card in the section. `poolImage` is derived from the
+*section* index (`site.js`), so it is one image per section by
+construction. Any card without its own photo therefore got the same one.
+
+**Fix:** build a per-card spread from the same pool, offset by the section's
+index so two sections do not start on the same photo either. An item that
+*does* have its own picture still wins — only the fallback changed.
+
+Measured after the fix, on a features section in the card-grid variant:
+
+    Fast and reliable  2f8b828add9
+    Made with care     e0d58224f24
+    Here to help       7-4c7edcad34c4
+    DISTINCT: 3 of 3
+
+**A false measurement worth recording.** The first attempt to verify this
+found **zero** `.ss-card` elements and I nearly read that as "already
+fixed". It was not: the fixture's sections had all landed on list/row
+variants, which render no cards at all. A check that measures nothing
+passes silently — this one would have reported green while proving nothing.
+The test therefore asserts on a variant that is known to render cards, and
+first asserts that cards exist at all.
