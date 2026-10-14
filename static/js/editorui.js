@@ -1076,12 +1076,12 @@ EditorUI.footerPanel = function (host) {
         "<h3>Colours</h3>" +
         '<label class="field"><span>Background</span>' +
           '<span class="colour-row">' +
-            '<input type="color" id="footBg" value="' + SS.esc(normHex(style.bg) || "#ffffff") + '">' +
+            '<input type="color" id="footBg" value="' + SS.esc(normHex(style.bg) || paletteColor(spec, "bg")) + '">' +
             '<button type="button" class="btn btn-sm" data-clear="bg">Use theme</button>' +
           "</span></label>" +
         '<label class="field"><span>Link colour</span>' +
           '<span class="colour-row">' +
-            '<input type="color" id="footAccent" value="' + SS.esc(normHex(style.accent) || "#1d4ed8") + '">' +
+            '<input type="color" id="footAccent" value="' + SS.esc(normHex(style.accent) || paletteColor(spec, "accent")) + '">' +
             '<button type="button" class="btn btn-sm" data-clear="accent">Use theme</button>' +
           "</span></label>" +
       "</div>" +
@@ -1231,7 +1231,7 @@ EditorUI.footerPanel = function (host) {
         "<h3>Colours</h3>" +
         '<label class="field"><span>Background</span>' +
           '<span class="colour-row">' +
-            '<input type="color" id="blockBg" value="' + SS.esc(normHex(style.bg) || "#ffffff") + '">' +
+            '<input type="color" id="blockBg" value="' + SS.esc(normHex(style.bg) || paletteColor(spec, "bg")) + '">' +
             '<button type="button" class="btn btn-sm" data-clear="bg">Use theme</button>' +
           "</span></label>" +
         '<label class="field"><span>Text</span>' +
@@ -1241,7 +1241,7 @@ EditorUI.footerPanel = function (host) {
           "</span></label>" +
         '<label class="field"><span>Accent</span>' +
           '<span class="colour-row">' +
-            '<input type="color" id="blockAccent" value="' + SS.esc(normHex(style.accent) || "#1d4ed8") + '">' +
+            '<input type="color" id="blockAccent" value="' + SS.esc(normHex(style.accent) || paletteColor(spec, "accent")) + '">' +
             '<button type="button" class="btn btn-sm" data-clear="accent">Use theme</button>' +
           "</span></label>" +
       "</div>" +
