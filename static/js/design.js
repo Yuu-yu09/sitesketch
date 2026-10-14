@@ -122,6 +122,17 @@
       "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=1200&q=70",
       "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=1200&q=70"
     ],
+    /* People, for a place that serves food. The generic "people" pool is
+       three stock photos of office workers at laptops, which is right for a
+       software course and badly wrong for a ramen shop - it was the hero
+       image on a published restaurant site. Every id here was fetched and
+       looked at before being added, rather than trusted because the URL
+       returned 200. */
+    guests: [
+      "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&q=70",
+      "https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?w=1200&q=70",
+      "https://images.unsplash.com/photo-1544025162-d76694265947?w=1200&q=70"
+    ],
     store: [
       "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&q=70",
       "https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=1200&q=70",
@@ -151,7 +162,7 @@
   };
   /* image pool per site type (generator picks from these) */
   D.TYPE_IMAGES = {
-    restaurant: ["food", "place", "people"],
+    restaurant: ["food", "place", "guests"],
     store: ["product", "store", "work"],
     business: ["studio", "people", "place"],
     portfolio: ["work", "studio", "people"],
