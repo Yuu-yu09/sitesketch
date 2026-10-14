@@ -208,6 +208,23 @@ rather than clicking blindly.
 
 ---
 
+## Known bugs
+
+**`KNOWN_BUGS.md` is the current list.** It is written from real-user testing
+and every entry records how it was reproduced, because a bug that cannot be
+reproduced cannot be proven fixed.
+
+Read it before starting work. It carries entries marked **NOT REPRODUCED**,
+which are there specifically to stop someone "fixing" a non-bug — two things
+in that file looked broken and were not.
+
+**Report before you fix.** State the bug and the planned fix first, fix one
+at a time, commit each fix on its own, and update `KNOWN_BUGS.md` in that same
+commit. A fix that arrives without a diagnosis is how a wrong change gets a
+green test suite attached to it.
+
+---
+
 ## Architecture worth knowing before you change it
 
 **One renderer.** `static/js/site.js` draws the builder canvas, the device
