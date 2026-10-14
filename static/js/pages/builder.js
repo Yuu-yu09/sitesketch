@@ -388,6 +388,12 @@
         else if (panelMode === "menu") EditorUI.menuPanel(panelBody);
         else if (panelMode === "block") EditorUI.blockPanel(panelBody);
         else EditorUI.stylesPanel(panelBody);
+
+        /* Whichever panel just rendered, give every colour control in it a
+           chip that opens SiteSketch's picker. Done here rather than in
+           each panel so no panel has to know the picker exists, and so a
+           panel added later gets it for free. */
+        EditorUI.enhanceColourInputs(panelBody);
       }
 
       /* ---------------- render ---------------- */

@@ -893,7 +893,61 @@ EditorUI.menuPanel = function (host) {
     }
   };
 
-  EditorUI.footerPanel = function (host) {
+  /* Every remaining colour control, in one place.
+
+   The brand swatches were rebuilt by hand, and the other seven - frame,
+   footer background and link, block background/text/accent, decorative
+   shapes - were still bare <input type="color">. Each would have opened the
+   native dialog in the top-left corner with no Apply and a meaningless
+   opacity slider.
+
+   This adds a chip in front of every one of them and wires it, rather than
+   editing seven call sites that each already have their own working change
+   handler. Applying dispatches a plain "input" event on the original
+   element, so the existing handler runs untouched - the point of doing it
+   this way is that no panel needs to know the picker exists.
+
+   The brand inputs carry .colour-native already and are skipped, so they
+   never end up with two chips. */
+function enhanceColourInputs(host) {
+  var inputs = host.querySelectorAll('input[type="color"]:not(.colour-native)');
+  Array.prototype.forEach.call(inputs, function (input) {
+    if (input.dataset.chipReady) return;
+    input.dataset.chipReady = "1";
+    input.classList.add("colour-native");
+
+    var chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "colour-chip";
+    chip.style.setProperty("--chip", input.value || "#000000");
+    chip.setAttribute("aria-label", "Choose a colour");
+    chip.innerHTML = '<span class="colour-chip-inner"></span>';
+    input.parentNode.insertBefore(chip, input);
+
+    chip.addEventListener("click", function () {
+      if (!window.SS || !SS.openColourPicker) return;
+      SS.openColourPicker({
+        anchor: chip,
+        value: input.value,
+        native: input,
+        onApply: function (hex) {
+          input.value = hex;
+          chip.style.setProperty("--chip", hex);
+          /* the panel's own handler, unchanged, is what persists it */
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      });
+    });
+
+    input.addEventListener("input", function () {
+      chip.style.setProperty("--chip", input.value);
+    });
+  });
+}
+
+EditorUI.enhanceColourInputs = enhanceColourInputs;
+
+EditorUI.footerPanel = function (host) {
     var Editor = window.Editor;
     host.hidden = false;
     var plan = Editor.plan;

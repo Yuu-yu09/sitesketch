@@ -1244,6 +1244,60 @@ def run(page, phase=None):
     check("a custom menu link can be added", t_a_custom_menu_link_can_be_added)
     check("a dangerous menu address is refused", t_a_dangerous_menu_address_is_refused)
     check("a menu link survives a round trip", t_a_menu_link_survives_a_round_trip)
+    def t_every_colour_control_opens_the_picker():
+        """Not just the brand swatches.
+
+        Frame, footer background and link, block background/text/accent and
+        the decorative shapes were all still bare input[type=color], so each
+        opened the native dialog in the top-left corner with no Apply and an
+        opacity slider for a design system that has no transparency.
+        """
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=SLOW)
+        page.wait_for_timeout(1200)
+
+        checked = 0
+        for btn in ("#footerBtn", "#stylesBtn"):
+            if page.get_attribute(btn, "aria-pressed") != "true":
+                page.click(btn)
+                page.wait_for_timeout(800)
+
+            natives = page.locator("#panelBody input[type=color]").count()
+            chips = page.locator("#panelBody .colour-chip").count()
+            # equal, not merely at least: the brand inputs already carry
+            # .colour-native and must not have gained a second chip
+            assert chips == natives, \
+                f"{btn} has {natives} colour inputs but {chips} chips"
+            checked += natives
+
+        assert checked >= 5, \
+            f"only found {checked} colour controls; the panels changed"
+
+        # and one of them really works end to end
+        if page.get_attribute("#footerBtn", "aria-pressed") != "true":
+            page.click("#footerBtn")
+            page.wait_for_timeout(800)
+        page.locator("#panelBody .colour-chip").first.click()
+        page.wait_for_timeout(600)
+        assert page.locator(".ss-picker").count() == 1, \
+            "a footer colour chip did not open the picker"
+
+        page.fill(".ss-picker-hex", "#2A6B4F")
+        page.wait_for_timeout(300)
+        page.click(".ss-picker-apply")
+        page.wait_for_timeout(1200)
+        applied = page.evaluate("() => document.querySelector('#footBg').value")
+        assert applied.lower() == "#2a6b4f", \
+            f"applying from a footer chip did not persist: {applied}"
+
+        # put it back
+        page.evaluate("() => { const c = document.querySelector('#footBgClear');"
+                      "  if (c) c.click(); }")
+        page.wait_for_timeout(900)
+
+    check("every colour control opens the picker",
+          t_every_colour_control_opens_the_picker)
     check("the picker opens beside the swatch", t_the_picker_opens_beside_the_swatch)
     check("the picker applies and cancels", t_the_picker_applies_and_cancels)
     check("the picker survives being clicked", t_the_picker_survives_being_clicked)
