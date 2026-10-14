@@ -23,12 +23,30 @@ likely to be reused elsewhere and it gates everything else.
 | 4 | `JWT_SECRET` | generate your own — it never needed to exist elsewhere | update `.env` and Vercel env vars; **this signs everyone out** |
 | 5 | `GOOGLE_CLIENT_SECRET` | Google Cloud Console → Credentials | update `.env` and Vercel env vars |
 | 6 | `GITHUB_CLIENT_SECRET` | GitHub → Settings → Developer settings → Apps | update `.env` and Vercel env vars |
-| 7 | `SECRET_KEY` | generate your own | update `.env` and Vercel env vars |
-| 8 | Vercel token | Vercel → Account Settings → Tokens → revoke | mint a new one; needed for CLI deploys |
+| 7 | Vercel token | Vercel → Account Settings → Tokens → revoke | mint a new one; needed for CLI deploys |
 
-OAuth secrets (#5, #6) are for features that are **not implemented yet**
-(`oauth_accounts` is still commented out in `supabase/schema.sql`). Rotating
-them is cheap; leaving them leaked is not.
+### Two things checked against the code, so the list above is the whole list
+
+`config.py` reads exactly nine credential-shaped settings: `DATABASE_URL`,
+`SUPABASE_URL`, `SUPABASE_KEY`, `GEMINI_API_KEY`, `JWT_SECRET`, `SECRET_KEY`,
+and the Google and GitHub client id/secret pairs. Client **IDs** are public
+by design and are not rotated.
+
+- **`SECRET_KEY` is not set in `.env`**, and `config.py` line 52 reads
+  `SECRET_KEY = _get("SECRET_KEY") or JWT_SECRET`. So it silently falls back
+  to `JWT_SECRET` — rotating `JWT_SECRET` (#4) rotates both. There is no
+  separate step, and adding a new `SECRET_KEY` would *not* rotate anything
+  that matters today.
+- **`.env` also holds `SUPABASE_PUBLISHABLE_KEY`**, which no code reads. It
+  is the publishable (anon) key and is designed to be public, so it does not
+  need rotating. The one that matters is `SUPABASE_KEY`, which `media.py`
+  sends as `Authorization: Bearer` — that is the **service_role** key, and it
+  bypasses row-level security. Confirm you are rotating the service_role key
+  and not the publishable one.
+
+`.env` is confirmed gitignored (`.gitignore:2`) and
+`tests/scan_history_for_secrets.py` passes. The repository is clean. The
+exposure is the transcript, and only rotation fixes that.
 
 ## After rotating
 
