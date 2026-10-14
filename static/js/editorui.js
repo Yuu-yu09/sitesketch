@@ -516,9 +516,26 @@
     fp.addEventListener("input", function () { fpOut.textContent = this.value + "px"; });
     fp.addEventListener("change", function () { setFrame("padding", this.value + "px"); });
 
-    host.querySelector("#frameColor").addEventListener("input", function () { setFrame("color", this.value); });
+    host.querySelector("#frameColor").addEventListener("input", function () {
+      /* Picking a border colour or style while the width is still 0 leaves
+         `border: 0px dashed …`, which draws nothing. Reported as "the
+         border is not working properly, like the dash" - the dash was set
+         correctly and was invisible because there was nothing to dash
+         around. Give it a width so the choice is visible. */
+      var f2 = item.frame || {};
+      var w2 = parseInt(f2.width || "0px", 10) || 0;
+      if (w2 === 0) setFrame("width", "3px");
+      setFrame("color", this.value);
+    });
     host.querySelector("#frameColorClear").addEventListener("click", function () { setFrame("color", null); refresh(); });
-    host.querySelector("#frameStyle").addEventListener("change", function () { setFrame("style", this.value); });
+    host.querySelector("#frameStyle").addEventListener("change", function () {
+      if (this.value !== "none") {
+        var f3 = item.frame || {};
+        var w3 = parseInt(f3.width || "0px", 10) || 0;
+        if (w3 === 0) setFrame("width", "3px");
+      }
+      setFrame("style", this.value);
+    });
     host.querySelector("#frameShadow").addEventListener("change", function () {
       setFrame("shadow", this.value === "none" ? null : this.value);
     });
