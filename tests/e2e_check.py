@@ -798,6 +798,35 @@ def t_unknown_slug_is_not_found():
         assert status == 404, f"{path} -> {status}"
 
 
+def t_a_browser_gets_a_page_and_an_api_caller_gets_json():
+    """A 404 has to match who is asking.
+
+    The handler always answered with JSON, so a stale or mistyped URL dumped
+    {"error": "not found"} into the browser. A real user hit this and
+    reported it as "publishing not found" - it was never about publishing.
+    """
+    # a browser navigation asks for HTML
+    status, body = raw_text("GET", "/no-such-page-at-all")
+    ctype = HEADERS.get("content-type", "")
+    assert status == 404, status
+    assert "text/html" in ctype, f"a browser got {ctype} for a missing page"
+    assert body.lstrip().startswith("<"), \
+        f"a browser got non-HTML for a missing page: {body[:80]!r}"
+    assert "couldn't find" in body.lower(), \
+        "the 404 page has no message for a person to read"
+
+    # a fetch against the API still gets JSON, so the app's own error
+    # handling keeps working
+    status, data, _ = raw_call("GET", "/api/no-such-endpoint")
+    assert status == 404, status
+    assert "not found" in str(data.get("error", "")).lower(), data
+
+    # a missing .html page is the same case and used to dump JSON too
+    status, body = raw_text("GET", "/no-such-page.html")
+    assert status == 404, status
+    assert "text/html" in HEADERS.get("content-type", ""), HEADERS
+
+
 def t_publish_refuses_a_request_with_no_compiled_pages():
     """A missing `pages` key and an empty `pages: {}` mean the same thing.
 
@@ -1036,6 +1065,8 @@ for name, fn in [
     ("published site cannot run script", t_published_site_has_no_working_script),
     ("published site is public and cacheable", t_published_site_is_public_and_cached),
     ("unknown slug and page are 404", t_unknown_slug_is_not_found),
+    ("a browser gets a page and an api caller gets json",
+     t_a_browser_gets_a_page_and_an_api_caller_gets_json),
     ("publish refuses a request with no compiled pages",
      t_publish_refuses_a_request_with_no_compiled_pages),
     ("publish refuses a taken slug", t_publish_rejects_a_slug_already_taken),

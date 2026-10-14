@@ -11,7 +11,7 @@ import pathlib
 import re
 from datetime import timedelta
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, make_response, request, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 
@@ -473,12 +473,63 @@ def page_html(name: str):
     candidate = (ROOT / f"{name}.html").resolve()
     if candidate.parent == ROOT.resolve() and candidate.exists():
         return send_from_directory(ROOT, candidate.name)
-    return jsonify(error="not found", path=name), 404
+    # same reasoning as the 404 handler: a person asking for a page that is
+    # not there should get a page, not a JSON object
+    if _wants_json():
+        return jsonify(error="not found", path=name), 404
+    return make_response(_APP_404_HTML, 404)
+
+
+def _wants_json() -> bool:
+    """True when this request is a fetch/XHR against the API.
+
+    The 404 handler used to answer with JSON for everything, so any stale or
+    mistyped URL - a /site/... link from an old publish, a deleted project, a
+    typo - dumped {"error": "not found"} at a person in their browser
+    instead of a page. That is also what the "publishing not found" report
+    turned out to be twice over: it was never about publishing.
+    """
+    if request.path.startswith("/api/"):
+        return True
+    # an XHR or fetch sends Accept: application/json; a browser navigation
+    # asks for text/html. Test the path first so a curl to /api still gets
+    # JSON regardless of its Accept header.
+    accept = request.headers.get("Accept", "")
+    return "application/json" in accept and "text/html" not in accept
+
+
+_APP_404_HTML = (
+    "<!doctype html><meta charset=utf-8><title>Page not found &middot; SiteSketch</title>"
+    "<meta name=viewport content='width=device-width,initial-scale=1'>"
+    "<div style=\"font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;"
+    "max-width:34rem;margin:18vh auto;padding:0 1.5rem;text-align:center\">"
+    "<div style=\"font-size:2rem;margin-bottom:1rem\">&#9888;</div>"
+    "<h1 style=\"font-size:1.5rem;margin:0 0 .6rem\">We couldn't find that page</h1>"
+    "<p style=\"color:#5a5f6b;margin:0 0 1.6rem\">"
+    "The address may have a typo in it, or the page may have moved.</p>"
+    "<a href=\"/index.html\" style=\"display:inline-block;padding:.7rem 1.2rem;"
+    "border-radius:8px;background:#16283c;color:#fff;text-decoration:none;"
+    "font-weight:600\">Back to SiteSketch</a></div>"
+)
+
+
+def _not_found_response():
+    """A 404 that matches who is asking.
+
+    A person who mistypes an address gets a page. A script calling the API
+    gets JSON. The old handler always answered with JSON, so a stale
+    /site/... link or a deleted project dumped {"error": "not found"} into
+    the browser - which is what the "publishing not found" report turned out
+    to be, twice, and was never about publishing.
+    """
+    if _wants_json():
+        return jsonify(error="not found"), 404
+    return make_response(_APP_404_HTML, 404)
 
 
 @app.errorhandler(404)
 def not_found(_err):
-    return jsonify(error="not found"), 404
+    return _not_found_response()
 
 
 if __name__ == "__main__":
