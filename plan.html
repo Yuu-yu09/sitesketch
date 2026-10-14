@@ -40,19 +40,30 @@
         <li data-step="3"><span class="n">3</span> Sections</li>
       </ol>
 
-      <!-- ================= STEP 1: TYPE ================= -->
+      <!-- ================= STEP 1: TYPE =================
+           The description box comes first, and the order is not cosmetic.
+
+           Clicking a type card auto-advances to step 2 after 180ms, so
+           anything below the grid is only reachable by pressing Back. The
+           "Or describe it - AI drafts your whole plan" box was below the
+           grid, which made the product's headline feature require a detour
+           to find. Reported as "I have to click multiple times before it
+           opens".
+
+           Reading the description first matches what the product actually
+           does, and it makes choosing a type the deliberate act of "I have
+           decided, take me on" rather than something that happens to you.
+      -->
       <section id="step1">
         <div class="page-head">
           <div>
             <h1>What kind of website?</h1>
-            <p>Pick the closest type — you can change it later.</p>
+            <p>Describe it and the AI drafts the whole plan — or pick a type below.</p>
           </div>
         </div>
 
-        <div class="type-grid" id="typeGrid" role="group" aria-label="Website types"></div>
-
-        <div class="ai-box" style="margin-top: 2rem;">
-          <label for="aiDesc">Or describe it — AI drafts your whole plan</label>
+        <div class="ai-box">
+          <label for="aiDesc">Tell us about the website</label>
           <textarea id="aiDesc" rows="3" placeholder="Try: &quot;a menu website for my aunt's carinderia&quot;"></textarea>
           <div style="display:flex; gap:.8rem; align-items:center; flex-wrap:wrap; margin-top:.8rem;">
             <button class="btn btn-primary" id="aiBtn" type="button">
@@ -61,6 +72,11 @@
             <span class="hand" id="aiNote" hidden>sketching your plan…</span>
           </div>
         </div>
+
+        <p class="hint" style="margin:1.6rem 0 .7rem">
+          Or pick the closest type — you can change it later.
+        </p>
+        <div class="type-grid" id="typeGrid" role="group" aria-label="Website types"></div>
       </section>
 
       <!-- ================= STEP 2: GOAL ================= -->

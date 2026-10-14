@@ -1296,6 +1296,41 @@ def run(page, phase=None):
                       "  if (c) c.click(); }")
         page.wait_for_timeout(900)
 
+    def t_the_description_box_needs_no_detour():
+        """The AI description box was only reachable by pressing Back.
+
+        Clicking a type card auto-advances to step 2 after 180ms, and the
+        description box lived below the type grid inside step 1 - so it
+        disappeared almost as soon as you picked a type. Using the product's
+        headline feature meant going forward, then back, then finding it.
+        Reported as "I have to click multiple times before it opens".
+        """
+        page.goto(f"{BASE}/plan.html", wait_until="domcontentloaded")
+        page.wait_for_selector("#typeGrid .type-card", timeout=SLOW)
+        page.wait_for_timeout(800)
+
+        # usable on arrival, before any type has been chosen
+        box = page.locator("#aiDesc")
+        assert box.is_visible(), "the description box is not visible on arrival"
+        assert box.is_editable(), "the description box cannot be typed into"
+
+        box.fill("A ramen shop in Melbourne doing late-night bowls.")
+        page.wait_for_timeout(300)
+        assert page.locator("#aiBtn").is_visible(), \
+            "there is no way to start generating from the description"
+
+        # and still on screen once a type has been picked and stepped back
+        page.locator("#typeGrid .type-card").first.click()
+        page.wait_for_timeout(900)
+        page.click("#back2")
+        page.wait_for_timeout(600)
+        assert page.locator("#aiDesc").is_visible(), \
+            "the description box vanished after picking a type"
+        assert page.locator("#aiDesc").input_value(), \
+            "what you typed was lost by choosing a type"
+
+    check("the description box needs no detour",
+          t_the_description_box_needs_no_detour)
     check("every colour control opens the picker",
           t_every_colour_control_opens_the_picker)
     check("the picker opens beside the swatch", t_the_picker_opens_beside_the_swatch)
