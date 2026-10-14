@@ -1640,6 +1640,16 @@ EditorUI.footerPanel = function (host) {
     var page = plan.pages.filter(function (p) { return p.id === window.Editor.pageId; })[0];
     if (!page) return;
     var def = API.SECTIONS[typeKey] || { name: typeKey, blurb: "" };
+    /* A page can reasonably have three testimonials or two menus, but two
+       heroes stacked full-width reads as a mistake - measured on a published
+       site, which came out with g-hero twice and both rendered. Features
+       and items stay repeatable; only the opener is a singleton. Refused
+       out loud rather than silently, because a rail card that does nothing
+       on click looks broken rather than deliberate. */
+    if (typeKey === "hero" && page.sections.some(function (s) { return s.type === "hero"; })) {
+      SS.toast("This page already has a hero at the top", "bi-exclamation-circle");
+      return;
+    }
     var section = {
       id: "s_" + Math.random().toString(36).slice(2, 9),
       type: typeKey,

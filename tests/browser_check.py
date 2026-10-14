@@ -1358,10 +1358,25 @@ def run(page, phase=None):
                 "() => [...document.querySelectorAll('#rail [data-key]')]"
                 ".map(n => n.dataset.key)")
 
-        def drag_first_available_to(target_y):
+        def first_addable_card():
             """The rail offers different sections per site type, so this
-            takes whatever is on offer rather than naming one."""
-            card = page.locator("#rail [data-key]").first
+            takes whatever is on offer rather than naming one - but "on
+            offer" now excludes a type the page already has, because a
+            second hero is refused. Picking .first unconditionally made
+            this test fail the moment the fixture's first card became a
+            hero, and it would have kept failing for a reason that had
+            nothing to do with dragging."""
+            have = page.eval_on_selector_all(
+                "#canvas .ss-sec", "els => els.map(e => e.dataset.sectLabel)")
+            for key in page.eval_on_selector_all(
+                    "#rail [data-key]", "els => els.map(e => e.dataset.key)"):
+                if key == "hero" and have.count("hero"):
+                    continue
+                return page.locator(f'#rail [data-key="{key}"]').first
+            raise AssertionError(f"the rail offers nothing addable: {available_keys()}")
+
+        def drag_first_available_to(target_y):
+            card = first_addable_card()
             card.scroll_into_view_if_needed()
             page.wait_for_timeout(200)
             box = card.bounding_box()
@@ -1400,7 +1415,7 @@ def run(page, phase=None):
 
         # --- Escape abandons the drag and adds nothing
         count = len(ids())
-        card = page.locator("#rail [data-key]").first
+        card = first_addable_card()
         card.scroll_into_view_if_needed()
         page.wait_for_timeout(200)
         box = card.bounding_box()
@@ -1421,13 +1436,53 @@ def run(page, phase=None):
 
         # --- and a plain click still means "add to the end"
         before = ids()
-        page.locator("#rail [data-key]").last.click()
+        first_addable_card().click()
         page.wait_for_timeout(1500)
         assert len(ids()) == len(before) + 1, "a plain click stopped adding"
         assert ids()[-1] not in before, "a click no longer appends"
 
+    def t_a_second_hero_is_refused_but_others_repeat():
+        """A page can have three testimonials but only one opener. Two heroes
+        stacked full-width published as a visible mistake."""
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector("#rail [data-key='hero']", timeout=SLOW)
+        page.wait_for_timeout(1200)
+
+        def labels():
+            return page.eval_on_selector_all(
+                "#canvas .ss-sec", "els => els.map(e => e.dataset.sectLabel)"
+            )
+
+        before = labels()
+        assert before.count("hero") == 1, \
+            f"the fixture should start with exactly one hero: {before}"
+
+        page.click("#rail [data-key='hero']")
+        page.wait_for_timeout(1500)
+        after = labels()
+        assert after.count("hero") == 1, \
+            f"a second hero was added: {after}"
+
+        # refusing silently reads as a broken button, so it has to say why
+        toast = page.eval_on_selector_all(
+            ".toast, .toast-msg", "els => els.map(e => e.innerText.trim())"
+        )
+        assert any("hero" in t.lower() for t in toast), \
+            f"the refusal was silent: {toast}"
+
+        # and the singleton rule must not have leaked onto repeatable sections
+        n0 = len(after)
+        page.click("#rail [data-key='testimonials']")
+        page.wait_for_timeout(1500)
+        n1 = len(labels())
+        assert n1 == n0 + 1, \
+            f"testimonials stopped being repeatable: {n0} -> {n1}"
+
     check("a section can be dropped where you want it",
           t_a_section_can_be_dropped_where_you_want_it)
+    check("only one hero per page",
+          t_a_second_hero_is_refused_but_others_repeat)
     check("the description box needs no detour",
           t_the_description_box_needs_no_detour)
     check("every colour control opens the picker",
@@ -1711,7 +1766,16 @@ def run(page, phase=None):
         page.wait_for_selector("#rail [data-key]", timeout=SLOW)
 
         before = page.locator("#canvas .ss-sec").count()
-        page.locator("#rail [data-key]").first.click()
+        # any type the page does not already have. Naming "gallery" would
+        # assume the fixture's site type offers it; the rail differs per
+        # type, and this test has already been wrong once by assuming.
+        have = page.eval_on_selector_all(
+            "#canvas .ss-sec", "els => els.map(e => e.dataset.sectLabel)")
+        offer = page.eval_on_selector_all(
+            "#rail [data-key]", "els => els.map(e => e.dataset.key)")
+        spare = [k for k in offer if k != "hero" and k not in have]
+        assert spare, f"the rail offers nothing new: {offer} vs {have}"
+        page.locator(f'#rail [data-key="{spare[0]}"]').first.click()
         page.wait_for_timeout(1500)
         assert page.locator("#canvas .ss-sec").count() == before + 1, \
             "the rail card did not add a section, so this test proves nothing"

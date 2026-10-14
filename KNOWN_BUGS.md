@@ -360,3 +360,28 @@ useless as one that fires on nothing:
 
 **Advisory, not a gate.** The check reports but does not block publishing —
 you may legitimately want a scaffold section live while you write it.
+
+## 11. Two hero sections stack on one page — FIXED
+
+**Seen as:** on a live publish, `g-hero` appeared twice in the section list,
+both rendering full-width.
+
+    g-hero s_mgo3dti
+    g-hero s_ittov4r
+
+**Cause:** `EditorUI.addSection` had no duplicate guard. The rail will add
+any section type any number of times.
+
+**Fix:** refuse a second hero on a page, with a toast saying why — a rail
+card that does nothing on click reads as broken rather than deliberate.
+Only the opener is a singleton: features, testimonials and menus stay
+repeatable, which is correct and was verified not to have been caught by the
+same rule.
+
+Measured after the fix: clicking the hero card leaves the label list
+unchanged and toasts "This page already has a hero at the top", while
+clicking testimonials still goes 4 → 5.
+
+**Scope note.** This does not prevent a hero being *moved* rather than added
+— that is deliberate reordering, not a mistake, and blocking it would break
+drag-to-position.
