@@ -79,7 +79,12 @@
     if (plan && plan.design) return plan.design;
     var seed = window.DESIGN ? DESIGN.hash((seedKey || "site") + (plan && plan.meta ? plan.meta.siteName : "")) : 1;
     var spec = window.DESIGN
-      ? DESIGN.generateSpec({ type: plan && plan.meta ? plan.meta.type : "business" }, seed)
+      ? DESIGN.generateSpec({
+          type: plan && plan.meta ? plan.meta.type : "business",
+          /* the description the user typed, so "pixelated retro" reaches
+             the design and not just the copy */
+          description: plan && plan.meta ? plan.meta.description : ""
+        }, seed)
       : { tokens: {}, sections: {} };
     if (plan) plan.design = spec;
     return spec;
@@ -137,7 +142,7 @@
     if (y + h > 1) { h = 1 - y; }
     if (w <= 0 || h <= 0) return "";
     return "object-fit:cover;" +
-      "object-position:" + (x + w / 2) * 100 + "% " + (y + h / 2) * 100 + "%;";
+      "object-position:" + (x + w / 2) * 100 + "% " + (y + h / 2) * 100 + "%;"
   }
 
   function clamp01(n) {
@@ -923,9 +928,40 @@ function navItems(plan) {
       return key === SS.pageKey(homeId) ? options.pageBase
                                          : options.pageBase + "/" + key;
     }
-    var links = pages.map(function (p) {
-      return '<a href="' + esc(pageHref(p)) + '">' + esc(p.name) + "</a>";
-    }).join("");
+    /* The footer used to list pages, so on a one-page site the whole column
+       read "PAGES / Home" - one link to the page you are already on, under a
+       heading for a list of one. The navbar already learned to list
+       sections for exactly that reason, so the footer now follows: the same
+       entries, the same anchors, resolved the same way. Multi-page sites
+       still get their pages. */
+    var footLinks = (function () {
+      var entries = navItems(plan).filter(function (i) { return i.visible; });
+      /* fall back to pages when the menu says nothing useful */
+      if (!entries.length) {
+        return pages.map(function (p) {
+          return '<a href="' + esc(pageHref(p)) + '">' + esc(p.name) + "</a>";
+        }).join("");
+      }
+      return entries.map(function (entry) {
+        var target = entry.pageId || homeId;
+        var base = options.pageBase ? pageHref(target) : "#" + esc(target);
+        var href = entry.sectionId ? base + "#" + esc(entry.sectionId) : base;
+        var label = entry.label;
+        if (!label) {
+          var page = pages.filter(function (p) { return p.id === target; })[0];
+          label = page ? page.name : "";
+        }
+        if (entry.sectionId) {
+          var host = pages.filter(function (p) { return p.id === target; })[0] || pages[0];
+          var sec = host && (host.sections || []).filter(function (s) {
+            return s.id === entry.sectionId;
+          })[0];
+          if (sec && sec.title) label = sec.title;
+        }
+        return '<a href="' + esc(href) + '">' + esc(label) + "</a>";
+      }).join("");
+    })();
+    var links = footLinks;
 
     var socials = f.socials.map(function (s, i) {
       var href = s.url || "#";
