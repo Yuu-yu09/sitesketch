@@ -55,6 +55,22 @@
     if (parts.length === 1) return { section: section, key: parts[0] };
     if (parts[0] === "fields") return { section: section, key: "fields", field: parts[1] };
 
+    /* "items:<n>:<field>" is the format every card and list row uses for its
+       picture - cardsOf emits `path + ":" + i + ":img"`, which is
+       "items:0:img". It was not understood here: parseInt("items") is NaN,
+       so resolve returned {key: "items"} and writeValue fell through to
+       `section[key] = value`, replacing the whole items array with a URL
+       string. The next render then threw "items(...).map is not a
+       function" and took the whole canvas down - and onChange autosaved the
+       corruption. Picking any card image was silently destructive. */
+    if (parts[0] === "items") {
+      var ii = parseInt(parts[1], 10);
+      if (isNaN(ii)) return { section: section, key: "items" };
+      if (!Array.isArray(section.items)) section.items = [];
+      if (!section.items[ii]) section.items[ii] = { title: "", text: "" };
+      return { section: section, items: true, index: ii, field: parts[2] || "img" };
+    }
+
     var index = parseInt(parts[0], 10);
     if (isNaN(index)) return { section: section, key: parts[0] };
     if (!section.items) section.items = [];

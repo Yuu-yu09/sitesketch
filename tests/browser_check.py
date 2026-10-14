@@ -165,6 +165,85 @@ def run(page, phase=None):
     check("expired access token recovers without a login prompt", t_expired_access_token_recovers_silently)
     check("the dashboard lists the account's projects", t_project_created_and_listed)
 
+    def t_delete_gives_visible_feedback():
+        """The two-step delete armed invisibly - .is-armed had no CSS at all,
+        so the first click only set a tooltip. Reported as "you have to click
+        multiple times for it to function well": the click registered, there
+        was just no sign of it. And it expired after 3s, silently, so anyone
+        who read the tooltip and then clicked started over."""
+        page.goto(f"{BASE}/dashboard.html", wait_until="domcontentloaded")
+        page.wait_for_selector("[data-del]", timeout=SLOW)
+
+        # Its own throwaway project. Deleting the first card would have
+        # removed the fixture every builder check below this one opens, and
+        # the suite would have failed much later for an unrelated reason.
+        made = page.evaluate("""async () => {
+            const r = await fetch('/api/projects', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + localStorage.getItem('sitesketch_token_v1'),
+                },
+                body: JSON.stringify({
+                    name: 'Throwaway for delete check',
+                    type: 'business', goal: 'get-contact',
+                    plan_json: {"pages": [{"id": "home", "name": "Home", "sections": [
+                        {"id": "s_del_hero", "type": "hero", "title": "Hero",
+                         "subtitle": "x", "fields": {}, "items": []}]}]},
+                }),
+            });
+            return r.status;
+        }""")
+        assert made == 201, f"could not seed a throwaway project: {made}"
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_selector("[data-del]", timeout=SLOW)
+        page.wait_for_timeout(600)
+
+        before_count = page.locator(".proj-card:not(.proj-new)").count()
+        assert before_count >= 2, \
+            f"need the fixture plus the throwaway, found {before_count}"
+
+        # the throwaway, matched by name rather than by position
+        btn = page.locator("[data-del][data-name='Throwaway for delete check']")
+        assert btn.count() == 1, \
+            f"could not find the throwaway's delete button ({btn.count()})"
+        assert btn.get_attribute("data-armed") is None, \
+            "the delete button started out armed"
+
+        btn.click()
+        page.wait_for_timeout(600)
+
+        # it must LOOK armed, not merely be armed
+        style = btn.evaluate(
+            "e => { const s = getComputedStyle(e);"
+            " const tick = e.querySelector('.bi-check-lg');"
+            " const trash = e.querySelector('.bi-trash3');"
+            " return {bg: s.backgroundColor, armed: e.dataset.armed,"
+            "   tick: tick ? getComputedStyle(tick).display : 'none',"
+            "   trash: trash ? getComputedStyle(trash).display : 'none'}; }"
+        )
+        assert style["armed"] == "1", f"the first click did not arm: {style}"
+        assert style["bg"] not in ("rgba(0, 0, 0, 0)", "transparent", ""), \
+            f"the armed state is invisible - no background change: {style}"
+        assert style["tick"] != "none", \
+            f"the armed state shows no confirmation tick: {style}"
+        assert style["trash"] == "none", \
+            f"the armed state still shows a trash icon: {style}"
+
+        # and it must not expire while a careful user is still reading it
+        page.wait_for_timeout(4200)
+        assert page.locator("[data-del]").first.get_attribute("data-armed") == "1", \
+            "the armed state expired after 3s, so a slow second click " \
+            "starts the whole thing over"
+
+        page.locator("[data-del]").first.click()
+        page.wait_for_timeout(2500)
+        after_count = page.locator(".proj-card:not(.proj-new)").count()
+        assert after_count == before_count - 1, \
+            f"the second click did not delete: {before_count} -> {after_count}"
+
+    check("delete gives visible feedback", t_delete_gives_visible_feedback)
+
     # -------------------------------------------------------------- builder
     builder_id: dict[str, str] = {}
     if phase:
@@ -1494,6 +1573,24 @@ def run(page, phase=None):
             page.click("#rail [data-key='features']")
             page.wait_for_timeout(1500)
 
+        # The features section can land on the rows variant, which renders
+        # no cards at all - so the section being present is not enough, and
+        # the assertion below would (correctly) refuse to measure. Cycle the
+        # layout until the card grid is showing.
+        for _ in range(4):
+            cls = page.evaluate(
+                "() => { const s = document.querySelectorAll('#canvas .ss-sec');"
+                " return s.length ? s[s.length - 1].className : ''; }"
+            )
+            if "v-grid" in cls:
+                break
+            page.locator("#canvas .ss-sec").last.click()
+            page.wait_for_timeout(700)
+            layout = page.locator('[data-do="layout"]')
+            if layout.count():
+                layout.first.click()
+                page.wait_for_timeout(1200)
+
         # Cards only exist in the grid/row variants. Assert they are there
         # before measuring them: an earlier version of this check found zero
         # .ss-card elements, and "zero duplicates" would have passed while
@@ -1544,6 +1641,98 @@ def run(page, phase=None):
           t_a_second_hero_is_refused_but_others_repeat)
     check("cards do not all show the same photo",
           t_cards_do_not_all_show_the_same_photo)
+
+    def t_picking_a_card_image_keeps_the_section():
+        """Picking a picture on a card used to replace the section's whole
+        items array with a URL string, so the next render threw
+        "items(...).map is not a function" and the canvas died. Reported as
+        "you can select it but you can't change it" - the page failed before
+        it could repaint. Read the stored plan, not just the picture."""
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector("#rail [data-key='features']", timeout=SLOW)
+        page.wait_for_timeout(1200)
+
+        have = page.eval_on_selector_all(
+            "#canvas .ss-sec", "els => els.map(e => e.dataset.sectLabel)")
+        if "features" not in have:
+            page.click("#rail [data-key='features']")
+            page.wait_for_timeout(1500)
+        for _ in range(4):
+            cls = page.evaluate(
+                "() => { const s = document.querySelectorAll('#canvas .ss-sec');"
+                " return s.length ? s[s.length - 1].className : ''; }"
+            )
+            if "v-grid" in cls:
+                break
+            page.locator("#canvas .ss-sec").last.click()
+            page.wait_for_timeout(700)
+            layout = page.locator('[data-do="layout"]')
+            if layout.count():
+                layout.first.click()
+                page.wait_for_timeout(1200)
+
+        cards = page.locator("#canvas .ss-card")
+        assert cards.count() >= 2, "need at least two cards to test one"
+
+        # Read through evaluate rather than chained locators: get_attribute on
+        # a nested locator timed out for thirty seconds here while the very
+        # same flow driven by hand worked every time.
+        def first_card_src():
+            return page.evaluate(
+                "() => { const i = document.querySelector('#canvas .ss-card img');"
+                " return i ? i.getAttribute('src') : ''; }"
+            )
+
+        before = first_card_src()
+        assert before, "the first card rendered no picture to replace"
+
+        page.evaluate(
+            "() => document.querySelector('#canvas .ss-card img').click()")
+        page.wait_for_selector("#mediaModal:not([hidden])", timeout=SLOW)
+        page.wait_for_timeout(800)
+
+        tiles = page.locator("#mediaGrid .media-tile")
+        assert tiles.count() >= 2, \
+            f"the library offered only {tiles.count()} pictures"
+
+        target = page.evaluate(
+            "() => { const t = document.querySelectorAll('#mediaGrid .media-tile img');"
+            " return t.length > 1 ? t[1].getAttribute('src') : ''; }"
+        )
+        page.evaluate(
+            "() => document.querySelectorAll('#mediaGrid .media-tile')[1].click()")
+        page.wait_for_timeout(2000)
+
+        after = page.evaluate(
+            "() => { const i = document.querySelector('#canvas .ss-card img');"
+            " return i ? i.getAttribute('src') : ''; }"
+        )
+        assert after == target, (
+            f"the card picture did not change to the one chosen: "
+            f"{before!r} -> {after!r}, wanted {target!r}"
+        )
+
+        # the section must still be an array of items, not a URL string
+        shape = page.evaluate(
+            "() => { const s = window.Editor.plan.pages[0].sections"
+            ".filter(x => x.type === 'features')[0];"
+            " return {isArray: Array.isArray(s.items), n: (s.items || []).length,"
+            "   first: s.items && s.items[0] ? typeof s.items[0] : 'none',"
+            "   img: !!(s.items && s.items[0] && s.items[0].img)}; }"
+        )
+        assert shape["isArray"], (
+            f"picking a card image replaced the items array: {shape}")
+        assert shape["n"] >= 2, f"the items list shrank: {shape}"
+        assert shape["first"] == "object", f"an item is not an object: {shape}"
+        assert shape["img"], f"the chosen picture was not stored: {shape}"
+
+        # and the canvas must still be alive
+        assert page.locator("#canvas .ss-sec").count() > 0, \
+            "the canvas emptied after picking a card image"
+
+    check("picking a card image keeps the section",
+          t_picking_a_card_image_keeps_the_section)
     check("a food site is not given office photos",
           t_a_food_site_is_not_given_office_photos)
     check("the description box needs no detour",
