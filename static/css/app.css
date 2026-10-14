@@ -1333,8 +1333,15 @@ textarea { resize: vertical; min-height: 96px; }
 }
 
 /* The native input stays in the DOM so the picker can offer "More colours"
-   and the eyedropper, but it is never shown or reachable. */
-.brand-inputs .colour-native {
+   and the eyedropper, but it is never shown or reachable.
+
+   Scoped to .colour-row rather than .brand-inputs: the footer panel builds
+   the same chip-plus-input pair but is not wrapped in .brand-inputs, so with
+   the narrower selector the raw <input type="color"> rendered right beside
+   the chip. Two boxes per row, and the second one opened the operating
+   system's colour dialog instead of the app's picker - which is why the
+   footer colours "did not function well". */
+.colour-row input[type="color"].colour-native {
   position: absolute;
   width: 1px;
   height: 1px;

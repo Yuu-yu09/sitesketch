@@ -1089,13 +1089,16 @@ EditorUI.footerPanel = function (host) {
         '<label class="field"><span>Background</span>' +
           '<span class="colour-row">' +
             '<input type="color" id="footBg" value="' + SS.esc(normHex(style.bg) || paletteColor(spec, "bg")) + '">' +
-            '<button type="button" class="btn btn-sm" data-clear="bg">Use theme</button>' +
           "</span></label>" +
-        '<label class="field"><span>Link colour</span>' +
+        '<label class="field"><span>Text</span>' +
           '<span class="colour-row">' +
-            '<input type="color" id="footAccent" value="' + SS.esc(normHex(style.accent) || paletteColor(spec, "accent")) + '">' +
-            '<button type="button" class="btn btn-sm" data-clear="accent">Use theme</button>' +
+            '<input type="color" id="footText" value="' + SS.esc(normHex(style.textColor) || paletteColor(spec, "text")) + '">' +
           "</span></label>" +
+        /* No "Use theme" button. Picking the colour the footer is already
+           showing clears the override instead, so the theme is still one
+           click away - a separate button to explain was the confusing part,
+           not the capability. accent is gone: link colour is the brand
+           accent everywhere else, and it was the row nobody could work out. */
       "</div>" +
 
       '<div class="panel-section">' +
@@ -1118,8 +1121,24 @@ EditorUI.footerPanel = function (host) {
     });
     var bgInput = host.querySelector("#footBg");
     if (bgInput) bgInput.addEventListener("input", function () { setStyle("bg", this.value); });
-    var accentInput = host.querySelector("#footAccent");
-    if (accentInput) accentInput.addEventListener("input", function () { setStyle("accent", this.value); });
+    var textInput = host.querySelector("#footText");
+    if (textInput) textInput.addEventListener("input", function () { setStyle("textColor", this.value); });
+
+    /* The "Use theme" button is gone, and this is what replaces it: choosing
+       the colour the footer is already showing clears the override rather
+       than storing that same colour as an override. Without it, deleting the
+       button would have left no way back to the theme at all. */
+    function clearIfTheme(key) {
+      return function () {
+        var shown = paletteColor(spec, key === "bg" ? "bg" : "text");
+        if (normHex(style[key]) && normHex(style[key]).toLowerCase() === String(shown).toLowerCase()) {
+          setStyle(key, null);
+          refresh();
+        }
+      };
+    }
+    if (bgInput) bgInput.addEventListener("change", clearIfTheme("bg"));
+    if (textInput) textInput.addEventListener("change", clearIfTheme("textColor"));
 
     host.querySelectorAll("[data-clear]").forEach(function (button) {
       button.addEventListener("click", function () {

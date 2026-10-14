@@ -423,3 +423,137 @@ variants, which render no cards at all. A check that measures nothing
 passes silently — this one would have reported green while proving nothing.
 The test therefore asserts on a variant that is known to render cards, and
 first asserts that cards exist at all.
+
+## 13. The navbar reaches none of the sections — FIXED
+
+**Seen as:** a six-section site publishing a navbar reading
+
+    Midnight Bowl -> /site/nav-628acc47
+    Home          -> /site/nav-628acc47
+
+Two entries, both pointing at the same address. Five of six sections
+unreachable.
+
+**Cause, two layers.** `plan.nav` entries could only target a **page**, and
+SiteSketch generates a one-page site — so the menu collapsed to a single
+link to the page you were already on. Underneath that, nothing on a
+published page was linkable at all: sections carried `data-sect` but no
+`id` (this is the same measurement recorded under bug 10, where it showed up
+as dead footer links).
+
+**Fix.**
+
+1. Sections render with a real `id`, so a fragment has a target.
+2. A nav entry may carry a `sectionId` as well as a `pageId`. It survives
+   `navItems`, the Menu panel and a save/load round trip — the panel
+   rebuilds each entry, and dropping the field there would silently turn
+   every section link back into a page link the moment you renamed
+   something else.
+3. A one-page site with no saved menu now defaults to its own sections
+   rather than to "Home". Their titles are already written, and this is what
+   a brochure one-pager is. Sites with several pages are untouched.
+
+`aria-current="page"` stays on the page link only. A section anchor is on
+the same page, so marking every entry current would have been meaningless.
+
+Measured on a live publish:
+
+    Home                       /site/nav-7e99c1c8                aria-current=page
+    Our signature bowls        /site/nav-7e99c1c8#s_gne0yzk
+    Cooked slow and served...  /site/nav-7e99c1c8#s_1ch82rx
+    Open late for hungry souls /site/nav-7e99c1c8#s_qowzrqi
+
+    dangling fragments: []
+    clicking the 3rd link scrolls to y=641
+
+**A bug caught by measuring the builder, not the published site.** The first
+version emitted `#home#s_gne0yzk` in the builder — two fragments, which
+resolves to nothing. The published site was fine, so a test that only looked
+at `/site/<slug>` would have passed. The builder is the in-place preview
+and has to be checked separately.
+
+## 14. The footer colour swatch lies about what is on screen — FIXED
+
+**Seen as:** the Footer's Background swatch showing an empty white square
+while the footer is dark. Reported twice, as "the footer colour does not
+work" and "the selected colour does not appear in the box", and **not
+reproducible for a long time** — driving the picker end to end showed the
+chip, the painted colour and the page background all updating correctly.
+
+**What finally made it reproducible:** a screenshot of the panel. The
+measurement that had been missing was simply *what the swatch shows when
+the value is inherited*, because the earlier probes had always clicked a
+colour first.
+
+    bgInput     = #ffffff        <- what the swatch claimed
+    footPainted = rgba(0, 0, 0, 0) <- actually transparent, inheriting dark
+    footColor   = rgb(241, 238, 232) <- cream text on that dark ground
+
+**Cause:** with "Use theme" there is no stored value, and the footer panel
+fell back to hardcoded `#ffffff` and `#1d4ed8`. `paletteColor(spec, key)` —
+which resolves the real palette entry — existed already and was used by the
+section panel two panels further down. The footer panel was simply never
+updated when that helper was introduced. So the swatch promised white on a
+dark footer: picking a colour then produced something that looked nothing
+like the square that was clicked, which is the whole of the complaint.
+
+**Fix:** use `paletteColor(spec, …)` in the footer panel, as the section
+panel already does. Measured after:
+
+    bgInput    = #f4f5f6
+    resolvedBg = #F4F5F6     -> matches: True
+
+**And a regression I caused while committing this, recorded because it is
+the exact failure this project keeps hitting.** To keep one bug per commit I
+temporarily reverted the footer fix with a PowerShell `String.Replace` and
+restored it afterwards. The replace was unguarded, so it also rewrote
+`#blockBg` and `#blockAccent` — the *section* panel, which had been correct
+all along — and the navbar commit shipped that regression. A guarded edit
+would have caught it; the same guard is used for the `cardsOf` call sites
+precisely because this has happened before. Repaired in the commit that
+follows.
+
+## 15. Uploading an image hangs on "Uploading…" forever — FIXED
+
+**Seen as:** "I uploaded an image yet I click it many times it don't do
+anything." The dialog sits on **Uploading…** and never resolves.
+
+**Reproduced:** POST /api/media directly. It does not return.
+
+**Measured:**
+
+    bucket GET -> 200 in 42.7s
+    first upload  -> 201 in 83.5s
+    second upload -> 201 in 43.0s
+    list uploads  -> 200 in  0.5s
+
+**Cause, two halves.**
+
+1. `ensure_bucket()` ran on **every** upload. It is a network round trip to
+   Supabase Storage that takes ~43s here, so every upload paid that before a
+   byte was stored. The bucket is not un-created between requests, so it only
+   ever needs checking once per process. Caching it took the first upload
+   from 83.5s to 43.0s.
+2. `uploadFile` used a bare `fetch` with no timeout and no visible failure,
+   so however long the store took, the UI waited indefinitely. Now bounded
+   at 90s and it says what happened instead of hanging.
+
+**Not a full fix, stated plainly.** 43s is still far too slow for a user
+clicking a button, and that remainder is the Supabase Storage round trip
+itself, not our code. What is fixed here is the part we own: paying for a
+bucket check on every upload, and failing silently.
+
+**The other half of the report — "I click it many times it doesn't do
+anything" — is the same bug, not a second one.** Picking an existing upload
+works:
+
+    tiles: 1  "Bloomfield Poster.png"
+    img BEFORE: images.unsplash.com/photo-1544025162...
+    img AFTER : ...supabase.co/storage/v1/object/public/...
+    IMAGE CHANGED: True   modal closed   js errors: []
+
+The repeated clicking was happening *during* the 83-second hang, before the
+file had finished uploading, so there was nothing to pick yet. Worth
+recording because "clicking an upload does nothing" and "the upload hangs"
+look like two bugs and are one, and fixing only the second would have left
+the report feeling unanswered.
