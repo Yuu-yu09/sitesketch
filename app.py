@@ -533,4 +533,10 @@ def not_found(_err):
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=config.PORT, debug=not config.IS_PROD)
+    # threaded matters: the dev server handles one request at a time without
+    # it, so any page asking for a stylesheet and a script at once gets its
+    # connection reset. That showed up as net::ERR_CONNECTION_RESET in the
+    # test suites and looked like a product bug twice before it was traced
+    # here. It is a property of the dev server, not of the app.
+    app.run(host="127.0.0.1", port=config.PORT, debug=not config.IS_PROD,
+            threaded=True)
