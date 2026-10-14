@@ -2375,7 +2375,9 @@ input[type="checkbox"] {
 .ss-picker-sv-dot {
   width: 14px;
   height: 14px;
-  margin: -7px 0 0 -7px;
+  /* no margin offset: the shared rule already centres it with
+     translate(-50%,-50%), and doing it twice pushed the dot 7px out of the
+     square at the top-left corner */
   border-radius: 50%;
   border: 2px solid #fff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, .45);
@@ -2404,7 +2406,6 @@ input[type="checkbox"] {
   left: 50%;
   width: 24px;
   height: 8px;
-  margin-top: -4px;
   border-radius: 4px;
   border: 2px solid #fff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, .45);

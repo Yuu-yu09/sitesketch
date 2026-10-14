@@ -178,7 +178,14 @@
        by hand. */
     function paint() {
       var rgb = hsvToRgb(hsv[0], hsv[1], hsv[2]);
-      sv.style.background = "hsl(" + hsv[0] + ", 100%, 50%)";
+      /* A greyscale has no hue. Showing a saturated red square for #000000
+         - which is what hsl(0) is - read as though the picker had already
+         decided the colour was red, and it is not: the dot sits in the
+         bottom left corner and the value really is black. Neutral grey is
+         the honest background when there is no hue to show. */
+      sv.style.background = hsv[1] < 1
+        ? "#8a8a8a"
+        : "hsl(" + hsv[0] + ", 100%, 50%)";
 
       var s = positionOf(sv);
       var dx = (hsv[1] / 100) * s.w;
