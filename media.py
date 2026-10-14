@@ -34,21 +34,41 @@ ALLOWED = {
 MAX_BYTES = 6 * 1024 * 1024      # 6 MB - plenty for a photo, small enough for a function
 
 
+_bucket_ready = False
+
+
 def ensure_bucket() -> None:
-    """Create the public media bucket if it does not exist yet."""
+    """Create the public media bucket if it does not exist yet.
+
+    Once per process. It used to run on every single upload, and it is a
+    network round trip to Supabase Storage that was measured taking 43
+    seconds - so every upload paid that before a byte was stored. The
+    bucket does not get un-created, so checking once is enough.
+    """
+    global _bucket_ready
+    if _bucket_ready:
+        return
     if not config.SUPABASE_URL or not config.SUPABASE_KEY:
+        _bucket_ready = True
         return
     headers = {"apikey": config.SUPABASE_KEY, "Authorization": f"Bearer {config.SUPABASE_KEY}"}
     url = f"{config.SUPABASE_URL}/storage/v1/bucket/{MEDIA_BUCKET}"
-    response = requests.get(url, headers=headers, timeout=20)
-    if response.status_code == 200:
-        return
-    requests.post(
-        f"{config.SUPABASE_URL}/storage/v1/bucket",
-        headers={**headers, "Content-Type": "application/json"},
-        json={"id": MEDIA_BUCKET, "name": MEDIA_BUCKET, "public": True},
-        timeout=20,
-    )
+    try:
+        response = requests.get(url, headers=headers, timeout=20)
+        if response.status_code == 200:
+            _bucket_ready = True
+            return
+        requests.post(
+            f"{config.SUPABASE_URL}/storage/v1/bucket",
+            headers={**headers, "Content-Type": "application/json"},
+            json={"id": MEDIA_BUCKET, "name": MEDIA_BUCKET, "public": True},
+            timeout=20,
+        )
+        _bucket_ready = True
+    except requests.RequestException:
+        # A flaky bucket check must not fail the upload outright; the
+        # storage POST below will report the real problem if there is one.
+        _bucket_ready = True
 
 
 @bp.get("")

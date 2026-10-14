@@ -145,12 +145,19 @@
     var form = new FormData();
     form.append("file", file);
 
+    /* This fetch had no timeout and no user-visible failure, so a slow or
+       unreachable store left the dialog reading "Uploading…" forever with
+       no way out. Bounded, and it says what happened. */
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = setTimeout(function () { if (controller) controller.abort(); }, 90000);
+
     fetch("/api/media", {
       method: "POST",
       headers: { Authorization: "Bearer " + localStorage.getItem("sitesketch_token_v1") },
-      body: form
+      body: form,
+      signal: controller ? controller.signal : undefined
     })
-      .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+      .then(function (r) { clearTimeout(timer); return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
       .then(function (result) {
         if (!result.ok) {
           hint.textContent = result.body.error || "Upload failed.";
@@ -162,7 +169,12 @@
         if (yours) yours.click();
         else paintMediaGrid("yours");
       })
-      .catch(function () { hint.textContent = "Upload failed. Check your connection."; });
+      .catch(function (err) {
+        clearTimeout(timer);
+        hint.textContent = (err && err.name === "AbortError")
+          ? "Upload timed out. Check your connection and try again."
+          : "Upload failed. Check your connection.";
+      });
   }
 
   /* ------------------------------------------------------------------ starters */
