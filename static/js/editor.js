@@ -664,9 +664,28 @@
       }
     });
 
-    /* clicking away from a selected section clears the toolbar */
+    /* Clicking away from a selected section clears the toolbar.
+
+       "Away" has to mean away from the canvas. This used to bail only for
+       .ss-sec and .block-toolbar, so clicking anything in the side panel -
+       a Columns dropdown, a colour swatch, a menu label - counted as
+       clicking away. That called Editor.select(null), which runs
+       onSelectionChange, which re-renders the panel, which replaces the
+       element that was being clicked. Chrome closes the native popup of a
+       <select> the moment its node is replaced, so on a touchscreen - where
+       a dropdown only opens on a long press - the list vanished the instant
+       you lifted your finger, and there was no way to pick anything.
+
+       So the builder's own chrome is excluded too. Anything the user can
+       operate is not "away". */
     document.addEventListener("click", function (event) {
-      if (event.target.closest(".ss-sec") || event.target.closest(".block-toolbar")) return;
+      if (event.target.closest(".ss-sec") ||
+          event.target.closest(".block-toolbar") ||
+          event.target.closest(".builder-panel") ||
+          event.target.closest(".builder-rail") ||
+          event.target.closest(".builder-top") ||
+          event.target.closest(".modal") ||
+          event.target.closest(".toast-host")) return;
       Editor.select(null);
     });
 
