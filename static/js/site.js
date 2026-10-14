@@ -823,15 +823,29 @@ function navItems(plan) {
   }
   SS.footerData = footerData;
 
-  function footerHTML(plan, spec, editable) {
+  function footerHTML(plan, spec, editable, pageId, options) {
+    options = options || {};
     var meta = plan.meta || {};
     var name = meta.siteName || "SiteSketch";
     var f = footerData(plan);
     if (f.hidden) return "";
 
+    var pages = plan.pages || [];
+    var homeId = pages.length ? pages[0].id : pageId;
     var year = new Date().getFullYear();
-    var links = (plan.pages || []).map(function (p) {
-      return '<a href="#' + esc(p.id) + '">' + esc(p.name) + "</a>";
+    /* These used to be href="#<page.id>" with nothing on the page carrying
+       that id, so every "Pages" link in the footer went nowhere - measured
+       on a live site: href="#home" with no id="home" anywhere in the
+       document. A published page is its own document, so a link to another
+       page has to be a real URL, exactly as the navbar already does it. */
+    function pageHref(p) {
+      if (!options.pageBase) return "#" + esc(p.id);
+      var key = SS.pageKey(p.id);
+      return key === SS.pageKey(homeId) ? options.pageBase
+                                         : options.pageBase + "/" + key;
+    }
+    var links = pages.map(function (p) {
+      return '<a href="' + esc(pageHref(p)) + '">' + esc(p.name) + "</a>";
     }).join("");
 
     var socials = f.socials.map(function (s, i) {
@@ -846,7 +860,7 @@ function navItems(plan) {
     var html = rich
       ? '<footer class="ss-footer ss-footer--rich" data-foot="1"><div class="ss-wrap">' +
           '<div class="ss-foot-col">' +
-            '<a class="ss-brand" href="#">' + esc(name) + "</a>" +
+            '<a class="ss-brand" href="' + esc(options.pageBase || "#") + '">' + esc(name) + "</a>" +
             '<p class="ss-foot-note"' + ed("aboutTitle") + ' style="margin-top:.6rem">' +
               esc(f.aboutTitle || f.tagline) + "</p>" +
           "</div>" +
@@ -1007,7 +1021,7 @@ function navItems(plan) {
     return '<div class="' + cls + '" style="' + cssVars + '">' +
       navHTML(plan, page.id, spec, options) +
       '<main data-reveal>' + body + "</main>" +
-      footerHTML(plan, spec, options.editable) +
+      footerHTML(plan, spec, options.editable, page.id, options) +
       "</div>";
   };
 

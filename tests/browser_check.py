@@ -1741,6 +1741,60 @@ def run(page, phase=None):
     check("published page metadata is sane", t_published_page_metadata)
     check("published nav points at real pages", t_published_nav_points_at_real_pages)
 
+    def t_published_footer_links_go_somewhere():
+        """The footer's Pages column used to link to href="#<page.id>" while
+        nothing on the page carried that id, so every link was dead. Counting
+        them would not have caught it - the markup was there and looked
+        right. Click them."""
+        page.context.clear_cookies()
+        page.goto(f"{BASE}/site/{slug}", wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-footer", timeout=30000)
+
+        # every fragment link must have a real target on the page
+        frag = page.eval_on_selector_all(
+            "a[href^='#']", "els => els.map(e => e.getAttribute('href').slice(1))"
+        )
+        for target in frag:
+            if not target:
+                continue  # href="#" - top of page, which is legitimate
+            assert page.locator(f"#{target}").count() > 0, \
+                f'footer/nav link points at #{target}, which is not on the page'
+
+        # Only the Pages column: the first .ss-foot-col carrying a heading.
+        # The footer has two .ss-foot-links blocks and the other is socials,
+        # where mailto:, tel: and https:// are correct - and an unset social
+        # renders as href="#", so filtering by protocol would let a dead link
+        # through. A blanket "every footer link is a /site/ URL" assertion
+        # failed on "Email us -> mailto:..." and was testing the wrong thing.
+        pages_col = """cols => {
+            const c = cols.filter(e => e.querySelector('h3'))[0];
+            if (!c) return [];
+            return [...c.querySelectorAll('.ss-foot-links a')]
+              .map(e => ({t: e.innerText.trim(), h: e.getAttribute('href')}));
+        }"""
+        page_links = page.eval_on_selector_all(".ss-foot-col", pages_col)
+        assert page_links, "the footer rendered no page links"
+        for link in page_links:
+            assert link["h"].startswith("/site/"), \
+                f"footer page link is not a real URL: {link}"
+
+        # and it actually navigates
+        before = page.url
+        page.eval_on_selector_all(
+            ".ss-foot-col",
+            """cols => cols.filter(e => e.querySelector('h3'))[0]
+                 .querySelector('.ss-foot-links a').click()""",
+        )
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_selector(".ss-sec", timeout=30000)
+        assert page.url.startswith(f"{BASE}/site/"), page.url
+        assert page.locator(".ss-sec").count() > 0, \
+            "the footer link landed on a page with no sections"
+        assert page.url != before or page.locator(".ss-sec").count() > 0
+
+    check("published footer links go somewhere",
+          t_published_footer_links_go_somewhere)
+
     # ------------------------------------------------------- cookies and legal
     # These only exist in a browser, so the API suite cannot see them.
 

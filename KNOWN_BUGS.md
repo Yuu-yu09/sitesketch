@@ -284,6 +284,39 @@ The test asserts no part of the page still claims "prototype", "phase 2" or
 "flask backend". That assertion is what found the second one; I was only
 looking for the ZIP wording.
 
+## 10. Every "Pages" link in the footer is dead — FIXED
+
+**Seen as:** clicking **Home** in the footer of a published site does nothing.
+
+**Reproduced:** publish any site, fetch `/site/<slug>`, collect every
+`href="#…"` and every `id` in the document.
+
+    Dead fragment targets:
+      href="#home"  -> id present: False
+      href="#"      -> id present: False
+
+**Cause:** `footerHTML` emitted `href="#' + p.id + '"`, but nothing ever
+emitted that id. Sections carry `data-sect="s_…"` — never `id` — so there
+was no target anywhere on the page. The brand link was `href="#"`, which
+merely jumps to the top.
+
+This is also why my earlier claim that "sections already carry a stable id"
+was wrong: that is true of the plan data, not of the compiled document. The
+id is not emitted, so nothing on a published page can be linked to at all.
+
+**Fix:** the footer resolves page links through the same `pageKey`/`pageBase`
+logic the navbar already used — a published page is its own document, so a
+link to another page has to be a real URL. `href="#"` is kept only for the
+in-builder case, where the links are never followed. The footer brand now
+points at the site's own base URL when published.
+
+Verified on a live publish: footer reads
+`Foot Co -> /site/ft-…`, `Home -> /site/ft-…`, and clicking it lands on a
+page with its sections. No fragment targets are left dangling.
+
+The test clicks the link rather than counting it — the old markup was
+present and looked correct, so counting would have passed.
+
 ## 9. The pre-publish checklist passes placeholder text — FIXED
 
 **Seen as:** a published page ending in a section reading
