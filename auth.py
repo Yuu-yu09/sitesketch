@@ -93,10 +93,32 @@ def _password_problem(password: str) -> str | None:
 
 
 def _problem(username: str, email: str, password: str) -> str | None:
-    if not username or len(username) < 3:
-        return "Username needs at least 3 characters."
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,40}", username or ""):
-        return "Usernames may use letters, numbers, dot, dash and underscore."
+    """What is wrong with a sign-up, in the order a person would hit it.
+
+    This used to validate `username` as a username - letters, numbers, dot,
+    dash and underscore - while the form field was labelled "Your name".
+    Typing your actual name got "Usernames may use letters, numbers, dot,
+    dash and underscore", which is both wrong and baffling: "Jane O'Brien"
+    and "Mary Jane" are not usernames but they are names.
+
+    The field is a display name. It is stored, shown, and put in a token
+    claim; it is never a URL, a filename or a selector, so the characters a
+    name actually uses are safe here. Letters, spaces, apostrophes, hyphens,
+    dots, digits and underscores, starting with a letter.
+
+    Two things were left out of the first version of this and both were
+    caught by existing accounts rather than by thought. Digits, and then the
+    underscore. The underscore matters beyond tidiness: accounts created
+    under the old username rule can contain one, so refusing it here would
+    stop somebody re-registering with a name they already hold.
+    """
+    name = (username or "").strip()
+    if len(name) < 2:
+        return "Please enter your name."
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9 _'\-.À-ɏ]{1,39}", name):
+        return ("Your name may use letters, spaces, apostrophes, dots, "
+                "dashes, numbers and underscores, and needs to start with "
+                "a letter.")
     if not EMAIL_RE.match(email or "") or len(email) > 254:
         return "That email address does not look right."
     return _password_problem(password)
@@ -171,14 +193,34 @@ def register():
 
     if db.query_one("select id from users where lower(email) = %s", (email,)):
         return jsonify(error="That email is already registered. Try signing in."), 409
-    if db.query_one("select id from users where lower(username) = %s", (username,)):
-        return jsonify(error="That username is taken. Try another."), 409
+    # lower() on the column but not on the parameter, so this compared
+    # 'mary jane' against 'Mary Jane' and matched nothing. A duplicate name
+    # therefore fell through to the database, which raised a unique
+    # violation and answered 500 with a stack trace - to anyone whose name
+    # had an upper-case letter in it. Found by registering "Mary Jane"
+    # twice.
+    if db.query_one("select id from users where lower(username) = lower(%s)",
+                    (username,)):
+        return jsonify(error="That name is already registered. Try another."), 409
 
-    user = db.query_one(
-        f"insert into users (username, email, password_hash) values (%s, %s, %s) "
-        f"returning {PUBLIC_USER}",
-        (username, email, generate_password_hash(password)),
-    )
+    # The pre-checks above are for a good error message, not for safety:
+    # two people can pass them at the same moment and the database is the
+    # thing that actually guarantees uniqueness. So the constraint is also
+    # caught here. Letting it escape answers 500 with a stack trace, which
+    # is a server fault to tell someone who did nothing wrong beyond
+    # picking a popular name.
+    try:
+        user = db.query_one(
+            f"insert into users (username, email, password_hash) values (%s, %s, %s) "
+            f"returning {PUBLIC_USER}",
+            (username, email, generate_password_hash(password)),
+        )
+    except Exception as exc:
+        if "users_username_key" in str(exc):
+            return jsonify(error="That name is already registered. Try another."), 409
+        if "users_email_key" in str(exc):
+            return jsonify(error="That email is already registered. Try signing in."), 409
+        raise
     return _session(user, 201, remember=_remember(body))
 
 

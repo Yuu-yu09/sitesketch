@@ -157,6 +157,11 @@ def t_db_ping():
 # ------------------------------------------------------------------ auth
 def t_register():
     global token
+    # Clear the counter first. It is five sign-ups an hour from one address
+    # and every suite shares that address, so this file used to fail with a
+    # 429 depending on what else had been run today - a failure that looks
+    # like an application bug and is entirely about test ordering.
+    reset_limits()
     status, data, ms = call("POST", "/api/auth/register",
                             {"username": USERNAME, "email": EMAIL, "password": PASSWORD}, expect=201)
     assert data["token"], data
@@ -798,6 +803,94 @@ def t_unknown_slug_is_not_found():
         assert status == 404, f"{path} -> {status}"
 
 
+def t_a_duplicate_name_is_a_409_not_a_crash():
+    """Registering a name twice answered 500 with a stack trace.
+
+    The duplicate check was `lower(username) = %s` - the column lowercased,
+    the parameter not. So it compared 'mary jane' against 'Mary Jane',
+    matched nothing, and let the insert hit the database constraint. Anyone
+    whose name contained a capital letter got a server fault for the crime
+    of having a name somebody else also has.
+
+    The check below is what found it, by registering the same name twice.
+    """
+    reset_limits()
+    # unique per run: a name is unique in this table now, so a fixed one
+    # would be taken by the first run that ever used it
+    name = "Mary Jane " + uuid.uuid4().hex[:8]
+    _, first, _ = call("POST", "/api/auth/register",
+                       {"username": name,
+                        "email": f"dup1_{uuid.uuid4().hex[:8]}@example.com",
+                        "password": PASSWORD}, expect=201)
+
+    # exactly the same name again
+    status, data, _ = call("POST", "/api/auth/register",
+                           {"username": name,
+                            "email": f"dup2_{uuid.uuid4().hex[:8]}@example.com",
+                            "password": PASSWORD}, expect=409)
+    assert "registered" in str(data.get("error", "")).lower() or \
+           "taken" in str(data.get("error", "")).lower(), data
+
+    # and the same name in different case, which is what the broken
+    # comparison missed entirely
+    status, data, _ = call("POST", "/api/auth/register",
+                           {"username": name.upper(),
+                            "email": f"dup3_{uuid.uuid4().hex[:8]}@example.com",
+                            "password": PASSWORD}, expect=409)
+    assert status == 409, f"a name differing only in case was accepted: {status} {data}"
+
+    del first
+
+
+def t_a_real_name_is_accepted_at_sign_up():
+    """The field said "Your name" and the server checked for a username.
+
+    Typing your actual name produced "Usernames may use letters, numbers,
+    dot, dash and underscore", which is wrong twice over: "Jane O'Brien" and
+    "Mary Jane" are not usernames, and the error contradicts the label on
+    the box in front of you. A first-run wall for anyone whose name is not a
+    handle.
+    """
+    reset_limits()
+    # Two registrations, not five. The limit is five sign-ups an hour from
+    # one address and the limiter runs before validation, so even the
+    # refused attempts count - a thorough version of this test spent the
+    # whole budget and every later check in the file failed with a 429.
+    # The rest of the rule is exercised directly below rather than over HTTP
+    # for the same reason. Unique per run, because a name is unique in the
+    # table now and a fixed one would already be taken.
+    for name in ("Mary Jane " + uuid.uuid4().hex[:8],
+                 "O'Brien-" + uuid.uuid4().hex[:8]):
+        _, data, _ = call("POST", "/api/auth/register",
+                          {"username": name,
+                           "email": f"name_{uuid.uuid4().hex[:8]}@example.com",
+                           "password": PASSWORD}, expect=201)
+        assert data["user"]["name"] == name, \
+            f"{name!r} did not come back as typed: {data['user']}"
+
+    # and the refusals still happen, but now talk about a name
+    _, data, _ = call("POST", "/api/auth/register",
+                      {"username": "123nothaname",
+                       "email": f"bad_{uuid.uuid4().hex[:8]}@example.com",
+                       "password": PASSWORD}, expect=400)
+    message = str(data.get("error", ""))
+    assert "username" not in message.lower(), \
+        f"the error still calls it a username: {message!r}"
+    assert "name" in message.lower(), \
+        f"the error does not mention the name at all: {message!r}"
+
+    # The rest of the rule, checked without spending the budget: the
+    # validator is the thing being changed, so testing it directly is both
+    # cheaper and more precise than registering six accounts to find out.
+    import auth as auth_module
+    for good in ("Jose Garcia-Lopez", "Al", "Renée Dubois", "Cafe 3"):
+        assert auth_module._problem(good, "a@b.com", PASSWORD) is None, \
+            f"{good!r} is a name a person has and was refused"
+    for bad in ("", "A", "123nothaname", "has<angle>", "x" * 45):
+        assert auth_module._problem(bad, "a@b.com", PASSWORD), \
+            f"{bad!r} should have been refused"
+
+
 def t_a_browser_gets_a_page_and_an_api_caller_gets_json():
     """A 404 has to match who is asking.
 
@@ -1065,6 +1158,10 @@ for name, fn in [
     ("published site cannot run script", t_published_site_has_no_working_script),
     ("published site is public and cacheable", t_published_site_is_public_and_cached),
     ("unknown slug and page are 404", t_unknown_slug_is_not_found),
+    ("a duplicate name is a 409 not a crash",
+     t_a_duplicate_name_is_a_409_not_a_crash),
+    ("a real name is accepted at sign up",
+     t_a_real_name_is_accepted_at_sign_up),
     ("a browser gets a page and an api caller gets json",
      t_a_browser_gets_a_page_and_an_api_caller_gets_json),
     ("publish refuses a request with no compiled pages",
