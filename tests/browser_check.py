@@ -1701,6 +1701,40 @@ def run(page, phase=None):
         brand = page.get_attribute(".ss-brand", "href")
         assert brand and brand.startswith("/site/"), brand
 
+    def t_checklist_catches_untouched_scaffold():
+        """A rail-added section still carries the library blurb as its
+        subtitle. The checklist used to call that a written headline and tick
+        every box, and the scaffold then went live. Assert the failing row is
+        actually rendered, not merely that the function returns False."""
+        page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector("#rail [data-key]", timeout=SLOW)
+
+        before = page.locator("#canvas .ss-sec").count()
+        page.locator("#rail [data-key]").first.click()
+        page.wait_for_timeout(1500)
+        assert page.locator("#canvas .ss-sec").count() == before + 1, \
+            "the rail card did not add a section, so this test proves nothing"
+
+        page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector("#preCheck li", timeout=SLOW)
+
+        rows = page.eval_on_selector_all(
+            "#preCheck li", "els => els.map(e => ({t: e.innerText, ok: e.classList.contains('done')}))"
+        )
+        assert rows, "the checklist rendered no rows"
+        placeholder = [r for r in rows if "placeholder" in r["t"].lower()]
+        assert placeholder, \
+            f"an untouched section went unchallenged: {rows}"
+        assert not all(r["ok"] for r in placeholder), \
+            f"the placeholder row is ticked as done: {placeholder}"
+        # and it must name a real count, not just say "placeholder"
+        import re as _re
+        assert _re.search(r"\d+\s+section", placeholder[0]["t"]), \
+            f"the placeholder row does not say how many: {placeholder[0]['t']!r}"
+
+    check("checklist catches untouched scaffold", t_checklist_catches_untouched_scaffold)
     check("publish compiles a live site", t_publish_compiles_a_live_site)
     check("published page really renders", t_published_page_really_renders)
     check("published page runs no script", t_published_page_runs_no_script)

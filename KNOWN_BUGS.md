@@ -283,3 +283,47 @@ every run. Removed.
 The test asserts no part of the page still claims "prototype", "phase 2" or
 "flask backend". That assertion is what found the second one; I was only
 looking for the ZIP wording.
+
+## 9. The pre-publish checklist passes placeholder text — FIXED
+
+**Seen as:** a published page ending in a section reading
+
+    Hero
+    Big headline + one button at the top
+    [ Get started ]
+
+— and all four pre-publish checks showing a green tick.
+
+**Reproduced:** register, wizard (type-card path), add one section from the
+rail, publish. Fetch `/site/<slug>` and read it. Measured before the fix:
+
+    CHECKLIST: all four ticked
+      At least one page exists ✓  At least 3 sections ✓
+      Homepage headline is written ✓  Every section has a title ✓
+
+**Cause:** `publish.js` counted a section as written when
+`s.title.length >= 2`. The text above is 35 characters long, so the scaffold
+passed. A new section is seeded in `api.js` with the library's own
+`SECTIONS[type].name` as its title and `SECTIONS[type].blurb` as its subtitle
+— so the untouched state is *exactly* recognisable, and the check never looked
+for it.
+
+This is AGENTS.md rule 3 and rule 12 in one page: the assertion could pass
+while the feature was broken, and the gate measured the shape of the data
+rather than whether a person had written it.
+
+**Fix:** a section is counted as placeholder when its title still equals
+`SECTIONS[type].name` **and** its subtitle still equals
+`SECTIONS[type].blurb`. New check: "No section is still showing placeholder
+text", naming how many.
+
+Verified both directions, because a check that fires on everything is as
+useless as one that fires on nothing:
+
+- rail-added section, untouched → "7 section(s) still show placeholder text",
+  1 failing check
+- AI-drafted site, untouched by hand → "No section is still showing
+  placeholder text", 0 failing
+
+**Advisory, not a gate.** The check reports but does not block publishing —
+you may legitimately want a scaffold section live while you write it.

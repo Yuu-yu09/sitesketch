@@ -35,10 +35,28 @@
           var hero = plan.pages[0].sections[0];
           items.push({ ok: !hero || (hero.title && hero.title.length > 3), text: "Homepage headline is written" });
           var empties = 0;
+          var untouched = [];
           plan.pages.forEach(function (p) {
-            p.sections.forEach(function (s) { if (!s.title || s.title.length < 2) empties++; });
+            p.sections.forEach(function (s) {
+              if (!s.title || s.title.length < 2) empties++;
+              /* A section nobody has touched still carries the library's own
+                 title and blurb, so it is exactly recognisable. Testing only
+                 for a non-empty title called "Big headline + one button at
+                 the top" a written headline, and that scaffold then went
+                 live. Assert the copy is written, not merely present. */
+              var lib = API.SECTIONS[s.type];
+              if (lib && s.title === lib.name && (s.subtitle || "") === lib.blurb) {
+                untouched.push(p.name + " / " + lib.name);
+              }
+            });
           });
           items.push({ ok: empties === 0, text: empties === 0 ? "Every section has a title" : empties + " section(s) still need a title" });
+          items.push({
+            ok: untouched.length === 0,
+            text: untouched.length === 0
+              ? "No section is still showing placeholder text"
+              : untouched.length + " section(s) still show placeholder text — open them and write your own"
+          });
           document.getElementById("preCheck").innerHTML = items.map(function (i) {
             return '<li class="' + (i.ok ? "done" : "") + '"><span class="box">' +
               (i.ok ? '<i class="bi bi-check-lg" aria-hidden="true"></i>' : "") + "</span>" +
