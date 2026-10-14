@@ -141,8 +141,20 @@
     if (x + w > 1) { w = 1 - x; }
     if (y + h > 1) { h = 1 - y; }
     if (w <= 0 || h <= 0) return "";
+    /* The window was computed and then thrown away: this used to emit only
+       object-position, which slides a cover-fitted image around without
+       magnifying it, so cropping saved, persisted and repainted - and
+       changed nothing on screen. Reported as "i cropped it and it dont
+       update". Zooming by the inverse of the window is what makes a crop a
+       crop; object-position then chooses which part sits in frame.
+
+       Scale is taken from w only, so the image is never distorted: h still
+       controls how much vertical is in frame through object-position. */
+    var scale = 1 / w;
     return "object-fit:cover;" +
-      "object-position:" + (x + w / 2) * 100 + "% " + (y + h / 2) * 100 + "%;"
+      "object-position:" + (x + w / 2) * 100 + "% " + (y + h / 2) * 100 + "%;" +
+      "transform:scale(" + scale.toFixed(4) + ");" +
+      "transform-origin:" + (x + w / 2) * 100 + "% " + (y + h / 2) * 100 + "%;";
   }
 
   function clamp01(n) {
