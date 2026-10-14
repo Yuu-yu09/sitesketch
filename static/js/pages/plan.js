@@ -155,13 +155,34 @@
         });
         home.sections = home.sections.filter(function (s) { return state.selected.indexOf(s.type) !== -1; });
 
+        /* Two network round trips - create, then save the plan - and until both
+           land the button looked completely inert. Reported as "takes too
+           many clicks before it opens": it was working, and clicking again
+           did nothing, because the click had already been spent. Disabled
+           and relabelled while in flight. */
+        var finishBtn = document.getElementById("finish");
+        var finishLabel = finishBtn.innerHTML;
+        finishBtn.disabled = true;
+        finishBtn.innerHTML =
+          '<i class="bi bi-arrow-repeat spin" aria-hidden="true"></i> Opening…';
+
+        function finishFailed(message) {
+          finishBtn.disabled = false;
+          finishBtn.innerHTML = finishLabel;
+          SS.toast(message, "bi-exclamation-triangle");
+        }
+
         API.createProject(plan.meta.siteName, state.type, state.goal).then(function (res) {
           if (!res.ok) {
-            SS.toast(res.error || "Could not create the plan", "bi-exclamation-triangle");
+            finishFailed(res.error || "Could not create the plan");
             return;
           }
           var proj = res.project;
-          return API.savePlan(proj.id, plan).then(function () {
+          return API.savePlan(proj.id, plan).then(function (saved) {
+            if (saved && saved.ok === false) {
+              finishFailed(saved.error || "Could not save the plan");
+              return;
+            }
             location.href = "builder.html?id=" + proj.id;
           });
         });

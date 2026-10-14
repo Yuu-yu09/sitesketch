@@ -309,7 +309,7 @@
     var s = ctx.section;
     var cards = items(s).slice(0, 8).map(function (item, i) {
       return '<article class="ss-card">' +
-        picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title, null, ctx.crop("items:" + i + ":img")) +
+        picture(item.img || ctx.fallback(i), "items:" + i + ":img", item.title, null, ctx.crop("items:" + i + ":img")) +
         "<h3" + ed("items:" + i + ":title") + ">" + esc(item.title) + "</h3>" +
         text(item.text || "", "items:" + i + ":text", "p") +
         (item.price ? '<p class="ss-row-price" style="margin:.6rem 0 0">' + esc(item.price) + "</p>" : "") +
@@ -488,8 +488,27 @@
   BLOCKS.gallery = function (ctx) {
     var s = ctx.section;
     var cards = items(s).slice(0, 9).map(function (item, i) {
-      return '<figure class="ss-card" style="padding:.6rem">' +
-        picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title || s.title, null, ctx.crop("items:" + i + ":img")) +
+var shape = PHOTO_SHAPES.indexOf(item.shape) === -1 ? "rect" : item.shape;
+      /* Gallery cards rendered a bare <img>, so the shape, frame and shadow
+         variables were never applied to them, and there was no way to reach
+         the panel that sets them - the style button exists only on the photo
+         wall. Both halves fixed here: the tile wrapper carries
+         tileStyle(item), and the button opens the same photoPanel the wall
+         uses. Reported as "I can't edit their shape or their style". */
+      var controls = ctx.editable
+        ? '<span class="ss-tile-tools">' +
+            '<button type="button" class="ss-tile-style" data-tile-style="' + i + '" ' +
+            'aria-label="Shape and frame for photo ' + (i + 1) + ", currently " +
+            (PHOTO_SHAPE_LABEL[shape] || shape) + '">' +
+            '<i class="bi bi-bounding-box-circles" aria-hidden="true"></i></button>' +
+          "</span>"
+        : "";
+      return '<figure class="ss-card ss-tile" data-tile="' + i + '"' +
+          tileStyle(item) + ">" +
+        '<div class="ss-tile-frame' + (FIT_SHAPES[shape] ? " ss-tile-frame--fit" : "") + '">' +
+        picture(item.img || ctx.fallback(i), "items:" + i + ":img", item.title || s.title, null, ctx.crop("items:" + i + ":img")) +
+        controls +
+        "</div>" +
         (item.text ? '<figcaption>' +
           '<span' + ed("items:" + i + ":text") + ">" + esc(item.text) + "</span></figcaption>" : "") +
         "</figure>";
@@ -507,7 +526,7 @@
         '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
         '<div class="ss-rows">' + items(s).map(function (item, i) {
           return '<div class="ss-row"><div style="display:flex;gap:1rem;align-items:center">' +
-            picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title, "ss-avatar", ctx.crop("items:" + i + ":img")) +
+            picture(item.img || ctx.fallback(i), "items:" + i + ":img", item.title, "ss-avatar", ctx.crop("items:" + i + ":img")) +
             "<div><h3" + ed("items:" + i + ":title") + ">" + esc(item.title) + "</h3>" +
             text(item.text || "", "items:" + i + ":text", "p") + "</div></div></div>";
         }).join("") + "</div></div></section>";
@@ -536,7 +555,7 @@
       '<div class="ss-wrap"><h2' + ed("title") + ">" + esc(s.title || "") + "</h2>" +
       '<div class="ss-grid">' + posts.map(function (item, i) {
         return '<article class="ss-card ss-post">' +
-          picture(item.img || ctx.poolImage, "items:" + i + ":img", item.title, null, ctx.crop("items:" + i + ":img")) +
+          picture(item.img || ctx.fallback(i), "items:" + i + ":img", item.title, null, ctx.crop("items:" + i + ":img")) +
           '<p class="ss-post-meta"' + ed("items:" + i + ":text") + ">" + esc(item.text || "") + "</p>" +
           "<h3" + ed("items:" + i + ":title") + '><a href="#">' + esc(item.title) + "</a></h3></article>";
       }).join("") + "</div></div></section>";
@@ -1123,6 +1142,15 @@ function navItems(plan) {
       imageTag: picture(image, "img", section.title, null, crop("img")),
       poolImage: poolImage,
       cardPool: cardPool,
+      /* Per-item fallback. The duplicate-photo fix landed on cardsOf only,
+         and four other blocks still passed ctx.poolImage to every item in
+         the section - so a gallery, a menu list, a team row and a blog row
+         each rendered the same photograph in every slot. Measured on a
+         gallery: items 0, 1 and 2 all pointed at the same url. */
+      fallback: function (i) {
+        if (cardPool && cardPool.length) return cardPool[i % cardPool.length];
+        return poolImage;
+      },
       crop: crop,
       wrapAttrs: ' id="' + esc(section.id) + '" data-sect="' + esc(section.id) +
         '" data-sect-label="' + esc(section.type) + '"',

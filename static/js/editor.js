@@ -450,9 +450,17 @@
     if (!Editor.plan) return null;
     var page = (Editor.plan.pages || []).filter(function (p) { return p.id === Editor.pageId; })[0];
     if (!page) return null;
+    /* Not just the photo wall. Gallery cards now carry the same style button,
+       and this filtered to type === "images", so a gallery tile resolved to
+       null and the shape/frame panel opened for nothing. Any section with
+       an items array can hold a photo now. */
+    if (sectionId) {
+      return page.sections.filter(function (s) {
+        return s.id === sectionId && Array.isArray(s.items);
+      })[0] || null;
+    }
     var list = page.sections.filter(function (s) { return s.type === "images"; });
-    if (!sectionId) return list[0] || null;
-    return list.filter(function (s) { return s.id === sectionId; })[0] || null;
+    return list[0] || null;
   }
 
   function wallItems(sectionId) {
