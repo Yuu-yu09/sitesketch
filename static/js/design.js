@@ -475,6 +475,25 @@
     return null;
   };
 
+  /* Named type presets, borrowed from WordPress's Global Styles. The three
+     type dials --type-scale, --lh and --ls are independent, so reaching a
+     good combination by dragging is guesswork and nobody remembers what
+     they set. A preset names the combination. */
+  D.TYPE_PRESETS = [
+    { id: "compact", name: "Compact",    scale: 0.92, lh: 1.38, ls: 0 },
+    { id: "balanced", name: "Balanced",   scale: 1,    lh: 1.5,  ls: 0 },
+    { id: "relaxed", name: "Relaxed",    scale: 1.06, lh: 1.68, ls: 0 },
+    { id: "editorial", name: "Editorial", scale: 1.18, lh: 1.4,  ls: -0.006 },
+    { id: "display", name: "Display",    scale: 1.32, lh: 1.28, ls: -0.012 }
+  ];
+
+  D.typePreset = function (id) {
+    for (var i = 0; i < D.TYPE_PRESETS.length; i++) {
+      if (D.TYPE_PRESETS[i].id === id) return D.TYPE_PRESETS[i];
+    }
+    return null;
+  };
+
   /* generate a full design spec.
       ctx: { type, goal, description, excludeSeed } */
   D.generateSpec = function (ctx, seed) {

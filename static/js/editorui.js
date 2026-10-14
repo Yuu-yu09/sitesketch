@@ -1554,6 +1554,21 @@ EditorUI.footerPanel = function (host) {
                 SS.esc(font.name) + "</option>";
             }).join("") +
           "</select></label>" +
+        /* WordPress's best design idea: named type presets instead of one
+           anonymous slider. --type-scale, --lh and --ls are three separate
+           dials, and finding a good combination by dragging is guesswork.
+           A preset sets all three at once; the sliders stay for anyone who
+           wants to go past it. */
+        '<label class="field"><span>Type preset</span>' +
+          '<select id="typePresetPick">' +
+            '<option value="">Custom…</option>' +
+            (window.DESIGN ? DESIGN.TYPE_PRESETS : []).map(function (p) {
+              var ty = spec.tokens.type || {};
+              var on = ty.scale === p.scale && ty.lh === p.lh && ty.ls === p.ls;
+              return '<option value="' + p.id + '"' + (on ? " selected" : "") + ">" +
+                SS.esc(p.name) + "</option>";
+            }).join("") +
+          "</select></label>" +
         /* Three sliders rather than nine dropdowns. Every size on the page
            is a calc() against --type-scale, so this one control is the
            whole type scale - and there is no way to set the heading size
@@ -1756,6 +1771,21 @@ EditorUI.footerPanel = function (host) {
     host.querySelector("#fontPick").addEventListener("change", function () {
       window.Editor.setToken("font", this.value); refresh();
     });
+
+    var tp = host.querySelector("#typePresetPick");
+    if (tp) {
+      tp.addEventListener("change", function () {
+        var preset = window.DESIGN ? DESIGN.typePreset(this.value) : null;
+        if (!preset) return;
+        /* setToken, not a direct assignment: it is what fires onChange, and
+           without that the preset repainted fine and then vanished on
+           reload. Measured before this was fixed. */
+        window.Editor.setToken("type", {
+          scale: preset.scale, lh: preset.lh, ls: preset.ls
+        });
+        refresh();
+      });
+    }
     host.querySelector("#radiusPick").addEventListener("change", function () {
       window.Editor.setToken("radius", this.value); refresh();
     });
