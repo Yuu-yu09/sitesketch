@@ -310,6 +310,71 @@
       });
   }
 
+  /* Starter rows for a list section, exposed here because api.js is the one
+     script the wizard page loads - editorui.js is not on it. Without these a
+     menu or hours section starts with no rows at all and publishes as a bare
+     heading. editorui.js keeps its own copy for the builder. */
+  var API_STARTERS = {
+    features: [
+      { title: "Fast and reliable", text: "What makes this worth choosing." },
+      { title: "Made with care", text: "The detail people notice." },
+      { title: "Here to help", text: "Support when you need it." }
+    ],
+    products: [
+      { title: "Product one", text: "A short line about it.", price: "24" },
+      { title: "Product two", text: "A short line about it.", price: "32" },
+      { title: "Product three", text: "A short line about it.", price: "18" }
+    ],
+    menu: [
+      { title: "House special", text: "Chef's pick", price: "12" },
+      { title: "Seasonal plate", text: "Changes weekly", price: "15" },
+      { title: "House classic", text: "The one everyone orders", price: "11" }
+    ],
+    gallery: [
+      { title: "Photo one", text: "" },
+      { title: "Photo two", text: "" },
+      { title: "Photo three", text: "" }
+    ],
+    /* the photo wall starts small and spread out, so the user grows it */
+    images: [
+      { img: "", size: "w", text: "" },
+      { img: "", size: "s", text: "" },
+      { img: "", size: "t", text: "" },
+      { img: "", size: "s", text: "" },
+      { img: "", size: "l", text: "" }
+    ],
+    team: [
+      { title: "First name", text: "Their role" },
+      { title: "Second name", text: "Their role" },
+      { title: "Third name", text: "Their role" }
+    ],
+    testimonials: [
+      { title: "Great service from the start", text: "First name, Local Guide" },
+      { title: "Exactly what we needed", text: "Second name, Local Guide" },
+      { title: "We will be back", text: "Third name, Local Guide" }
+    ],
+    blog: [
+      { title: "First post title", text: "A short summary of the post." },
+      { title: "Second post title", text: "A short summary of the post." },
+      { title: "Third post title", text: "A short summary of the post." }
+    ],
+    faq: [
+      { title: "A common question?", text: "The answer goes here." },
+      { title: "Another question?", text: "The answer goes here." },
+      { title: "And one more?", text: "The answer goes here." }
+    ],
+    hours: [
+      { title: "Monday to Friday", text: "9:00 - 18:00" },
+      { title: "Saturday", text: "10:00 - 16:00" },
+      { title: "Sunday", text: "Closed" }
+    ]
+  };
+
+  function startersFor(typeKey) {
+    var list = API_STARTERS[typeKey] || [];
+    return JSON.parse(JSON.stringify(list));
+  }
+
   /* turn the server's draft into a Plan the builder can open */
   function planFromDraft(draft) {
     var plan = makePlan(draft.type, draft.goal, draft.siteName || "My Website",
@@ -317,6 +382,16 @@
     var written = draft.sections || [];
 
     plan.pages[0].sections.forEach(function (section) {
+      /* A list section with no items renders as a heading and a subtitle
+         and nothing else - 226px of empty page on a published site, which is
+         what a screenshot of a live ramen shop showed. makePlan does not
+         create items, and the draft carries none, so every menu, hours and
+         features section started empty. Seed the starters the same way
+         adding one from the rail does, so the user opens onto real content
+         and can edit it. */
+      if (!Array.isArray(section.items)) {
+        section.items = startersFor(section.type);
+      }
       var match = null;
       for (var i = 0; i < written.length; i++) {
         if (written[i].type === section.type) { match = written[i]; break; }
@@ -402,6 +477,8 @@
     /* meta */
     TYPES: TYPES,
     SECTIONS: SECTIONS,
+    startersFor: startersFor,
+    setStarters: function (map) { API_STARTERS = map || {}; },
     goalsFor: function (typeId) { return GOALS[typeId] || []; },
     recommendedFor: function (typeId) { return TYPE_SECTIONS[typeId] || []; },
 

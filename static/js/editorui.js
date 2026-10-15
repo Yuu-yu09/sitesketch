@@ -182,66 +182,9 @@
   /* A section with no items renders as a bare heading, which reads as a
      broken page. Every list-based block starts with a few editable
      placeholders the user overwrites. */
-  var STARTERS = {
-    features: [
-      { title: "Fast and reliable", text: "What makes this worth choosing." },
-      { title: "Made with care", text: "The detail people notice." },
-      { title: "Here to help", text: "Support when you need it." }
-    ],
-    products: [
-      { title: "Product one", text: "A short line about it.", price: "24" },
-      { title: "Product two", text: "A short line about it.", price: "32" },
-      { title: "Product three", text: "A short line about it.", price: "18" }
-    ],
-    menu: [
-      { title: "House special", text: "Chef's pick", price: "12" },
-      { title: "Seasonal plate", text: "Changes weekly", price: "15" },
-      { title: "House classic", text: "The one everyone orders", price: "11" }
-    ],
-    gallery: [
-      { title: "Photo one", text: "" },
-      { title: "Photo two", text: "" },
-      { title: "Photo three", text: "" }
-    ],
-    /* the photo wall starts small and spread out, so the user grows it */
-    images: [
-      { img: "", size: "w", text: "" },
-      { img: "", size: "s", text: "" },
-      { img: "", size: "t", text: "" },
-      { img: "", size: "s", text: "" },
-      { img: "", size: "l", text: "" }
-    ],
-    team: [
-      { title: "First name", text: "Their role" },
-      { title: "Second name", text: "Their role" },
-      { title: "Third name", text: "Their role" }
-    ],
-    testimonials: [
-      { title: "Great service from the start", text: "First name, Local Guide" },
-      { title: "Exactly what we needed", text: "Second name, Local Guide" },
-      { title: "We will be back", text: "Third name, Local Guide" }
-    ],
-    blog: [
-      { title: "First post title", text: "A short summary of the post." },
-      { title: "Second post title", text: "A short summary of the post." },
-      { title: "Third post title", text: "A short summary of the post." }
-    ],
-    faq: [
-      { title: "A common question?", text: "The answer goes here." },
-      { title: "Another question?", text: "The answer goes here." },
-      { title: "And one more?", text: "The answer goes here." }
-    ],
-    hours: [
-      { title: "Monday to Friday", text: "9:00 - 18:00" },
-      { title: "Saturday", text: "10:00 - 16:00" },
-      { title: "Sunday", text: "Closed" }
-    ]
-  };
+;
 
-  EditorUI.startersFor = function (typeKey) {
-    var list = STARTERS[typeKey] || [];
-    return JSON.parse(JSON.stringify(list));
-  };
+  EditorUI.startersFor = function (typeKey) { return API.startersFor(typeKey); };
 
   /* ----------------------------------------------------------------- styles */
 

@@ -149,6 +149,9 @@
               title: s.name,
               subtitle: s.blurb,
               fields: {},
+              /* A list section with no items publishes as a bare heading.
+                 Same reason as in planFromDraft. */
+              items: API.startersFor(key),
               ready: 0
             });
           }

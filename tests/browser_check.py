@@ -1044,7 +1044,13 @@ def run(page, phase=None):
             page.wait_for_timeout(500)
         page.fill("#colour_accent_hex", "#2E7D32")
         page.dispatch_event("#colour_accent_hex", "change")
-        page.wait_for_timeout(2500)
+        # Wait for the thing being asserted, rather than sleeping a fixed
+        # 2.5s and hoping. Measured on a fresh site the warning appears at
+        # about 3s, and the suite's fixture plan is larger still. Polling
+        # #saveState did not work either: it reads "SAVED" before the edit
+        # too, so it matched instantly and the check still ran too early.
+        expect(stale).to_be_visible(timeout=20000)
+        page.wait_for_timeout(500)
 
         assert stale.is_visible(), \
             "the live site is behind the editor and the builder did not say so"
