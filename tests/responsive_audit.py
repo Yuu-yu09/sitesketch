@@ -300,6 +300,39 @@ def audit(browser, label: str, url: str, width: int, height: int, seed, touch: b
     return found, overflow, bad, errors
 
 
+def canvas_hidden(page, url: str) -> str:
+    """Is the thing being edited actually on screen?
+
+    Every other check here looks at overflow, tap size and text size. None
+    of them notice an editor whose canvas is completely covered by its own
+    sidebar: nothing overflows, nothing is too small, and the page looks
+    fine - while the user cannot see what they are editing. Measured on a
+    tablet, where the rail took the full 768px and the canvas sat behind it.
+
+    Reported for the builder only. A published site has no canvas.
+    """
+    if "builder" not in url:
+        return ""
+    canvas = page.query_selector("#canvas")
+    if canvas is None:
+        return ""
+    # whatever is painted on top of the middle of the canvas
+    top = page.evaluate(
+        """() => {
+            const c = document.querySelector('#canvas');
+            if (!c) return '';
+            const r = c.getBoundingClientRect();
+            if (r.width < 40 || r.height < 40) return 'canvas has collapsed';
+            const hit = document.elementFromPoint(
+                r.left + r.width / 2, r.top + Math.min(60, r.height / 2));
+            if (!hit) return '';
+            return c.contains(hit) ? '' : 'covered by ' +
+                (hit.id ? '#' + hit.id : hit.className || hit.tagName);
+        }"""
+    )
+    return top
+
+
 def report(label: str, width: int, height: int, found, overflow, bad, errors, touch: bool) -> None:
     mark = "FAIL" if bad else "ok  "
     how = "touch" if touch else "mouse"
@@ -348,6 +381,29 @@ def main() -> int:
                 browser, label, f"/builder.html?id={pid}", width, height, seed, touch)
             report(label, width, height, found, overflow, bad, errors, touch)
             problems += 1 if bad else 0
+
+        # Is the canvas actually visible? A separate pass, because audit()
+        # closes its own context. This is the check that would have caught
+        # the rail covering the editor on a tablet: nothing overflowed and
+        # every control was the right size, so the audit above said ok.
+        print("\n--- the builder canvas ---")
+        for label, width, height, touch in SIZES:
+            c2 = browser.new_context(
+                viewport={"width": width, "height": height},
+                has_touch=bool(touch),
+                is_mobile=bool(touch))
+            pg = c2.new_page()
+            pg.goto(f"{BASE}/index.html", wait_until="domcontentloaded")
+            pg.evaluate(SEED_AUTH, seed)
+            pg.goto(f"{BASE}/builder.html?id={pid}", wait_until="domcontentloaded")
+            pg.wait_for_selector("#canvas", timeout=20000)
+            pg.wait_for_timeout(700)
+            hidden = canvas_hidden(pg, "builder")
+            print(f"  {'FAIL' if hidden else 'ok  '}  {label:<16} "
+                  f"{'CANVAS ' + hidden if hidden else 'canvas visible'}")
+            if hidden:
+                problems += 1
+            c2.close()
 
         # The pages every visitor meets before they have an account. These
         # are hand-written marketing and sign-in screens rather than

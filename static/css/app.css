@@ -1814,6 +1814,73 @@ textarea { resize: vertical; min-height: 96px; }
   }
 }
 
+/* ---- narrow builder: overlays, not stacked columns ----
+   The single-column rule above left the rail at position:static, so on a
+   tablet it took the full 768px and the canvas sat underneath it, out of
+   sight. Measured at five widths: rail was 390/430/768px at phone and
+   tablet against a 268px sidebar on desktop, and the canvas was full width
+   in every case - i.e. hidden behind the rail.
+
+   Below 900px the rail becomes a drawer over the canvas and the panel
+   becomes a bottom sheet, so the canvas is always the thing you can see.
+   Nothing overflowed, which is why the responsive audit - which checks
+   overflow and text size - had been reporting green throughout. */
+@media (max-width: 900px) {
+  .builder-rail,
+  .builder-panel {
+    position: fixed;
+    z-index: 60;
+    background: #F4F1E8;
+    box-shadow: 0 0 0 100vmax rgba(22, 40, 33, .38);
+  }
+  .builder-rail {
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(310px, 84vw);
+    height: 100dvh;
+    max-height: 100dvh;
+    border-right: 1.5px solid var(--ink);
+    border-bottom: 0;
+    transform: translateX(0);
+    transition: transform .18s ease;
+  }
+  .builder-panel {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: auto;
+    max-height: 72dvh;
+    height: auto;
+    overflow-y: auto;
+    border-top: 1.5px solid var(--ink);
+    border-inline: 0;
+    transform: translateY(0);
+    transition: transform .18s ease;
+    z-index: 61;
+  }
+  /* Closed means off-screen, not zero-width: display:none would pull the
+     canvas into the collapsed grid column, which is exactly what the
+     desktop rule goes out of its way to avoid. */
+  .builder-shell.rail-closed .builder-rail {
+    transform: translateX(-102%);
+    box-shadow: none;
+  }
+  .builder-shell.panel-closed .builder-panel {
+    transform: translateY(102%);
+    box-shadow: none;
+  }
+  .builder-shell.rail-closed.panel-closed { grid-template-columns: 1fr; }
+  /* the canvas takes the whole screen at every width now */
+  .builder-shell,
+  .builder-shell.rail-closed,
+  .builder-shell.panel-closed { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .builder-rail, .builder-panel { transition: none; }
+}
+
 /* ============ app shell (dashboard / builder / publish) ============ */
 .app-main { padding: 2.2rem 0 4rem; }
 .page-head {

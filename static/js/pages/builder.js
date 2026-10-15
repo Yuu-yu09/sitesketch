@@ -272,6 +272,20 @@
 
       /* the left rail collapses too, so the page can use the whole screen */
       var railToggle = document.getElementById("railToggle");
+
+      /* Below 900px the rail is a drawer over the canvas, so opening the
+         page with it already out covered the thing you came to edit. The
+         audit caught this the moment it was taught to ask: "CANVAS covered
+         by #rail" at both phone sizes. Close both on a narrow screen, and
+         keep the toggle's label honest about what it will do. */
+      if (window.innerWidth <= 900) {
+        /* not `shell`: that binding is declared further down this function,
+           so it was still undefined here and the whole block threw. */
+        document.getElementById("shell").classList.add("rail-closed", "panel-closed");
+        railToggle.setAttribute("aria-expanded", "false");
+        railToggle.setAttribute("aria-label", "Show the sidebar");
+        railToggle.title = "Show the sidebar";
+      }
       railToggle.addEventListener("click", function () {
         var closed = shell.classList.toggle("rail-closed");
         this.setAttribute("aria-expanded", String(!closed));
