@@ -86,9 +86,16 @@
 
           if (proj.is_published) {
             var url = baseUrl + "/site/" + proj.slug;
+            /* The address sits in one span with overflow-wrap doing the
+               wrapping. Zero-width slashes were tried here and thrown away:
+               they are invisible characters IN the copied text, so a user
+               who copied the address they read got a dead URL - clicking
+               the button worked,手工 copying did not. Report: "live link
+               doesn't open" while /site/<slug> returned 200 the whole
+               time. Write what you mean and let the line wrap itself. */
             document.getElementById("statusHead").textContent = "Your site is live";
             document.getElementById("statusBlurb").textContent = "Anyone with this link can see it. Republish after edits to push them live.";
-            document.getElementById("liveUrl").textContent = url.replace(/\//g, "/\u200B");
+            document.getElementById("liveUrl").textContent = url;
             document.getElementById("openLink").href = url;
             document.getElementById("viewCount").textContent = "Demo · " + proj.view_count + " view" + (proj.view_count === 1 ? "" : "s");
             liveBox.hidden = false;
