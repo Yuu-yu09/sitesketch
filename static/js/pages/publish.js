@@ -223,14 +223,38 @@
           } else fallbackCopy(url);
         });
 
-        /* Export is not built. The button is disabled and says so in publish.html,
-           and this listener only exists for the case where it somehow fires
-           anyway - in which case the honest sentence is better than the old
-           one, which mentioned a backend and a phase and left a person
-           none the wiser about whether anything was going to happen. */
+        /* The ZIP is the published copy with its internal links rewritten
+           to file names, so the archive opens as a working site offline.
+           The JWT lives in localStorage, so the plain anchor cannot carry
+           the header - the fetch runs here instead and the bytes are
+           offered as a download from this page.
+
+           The prerequisite is checked here rather than by asking the
+           server: a refusal that can be known without the round trip
+           should not spend one - and the console error a browser logs on
+           any 4xx would otherwise read as breakage during a test run. */
         document.getElementById("zipBtn").addEventListener("click", function () {
-          SS.toast("A downloadable copy is not built yet. Your site is live at the address above.",
-                   "bi-info-circle");
+          if (!proj.is_published) {
+            SS.toast("Publish the site first - the ZIP is the published copy.",
+                     "bi-info-circle");
+            return;
+          }
+          var button = this;
+          button.disabled = true;
+          API.exportZip(proj.id).then(function (res) {
+            button.disabled = false;
+            if (!res.ok) {
+              SS.toast(res.error || "Could not build the ZIP", "bi-exclamation-triangle");
+              return;
+            }
+            var link = document.createElement("a");
+            link.href = URL.createObjectURL(res.blob);
+            link.download = proj.slug + ".zip";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            SS.toast("Downloaded " + proj.slug + ".zip - it opens offline", "bi-file-earmark-zip");
+          });
         });
 
         render();

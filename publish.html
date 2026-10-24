@@ -73,26 +73,20 @@
             <button class="btn btn-primary" id="pubBtn" type="button">
               <i class="bi bi-rocket-takeoff" aria-hidden="true"></i> Publish site
             </button>
-            <!-- Export is not built. It used to be a normal-looking button
-                 wired to a toast reading "Prototype: ZIP export runs through
-                 the Flask backend (Phase 2)", which is worse than not
-                 offering it: it looks like a working control and the only
-                 answer a person gets is the word "backend".
-
-                 Left visible and disabled rather than removed, so the
-                 feature is acknowledged instead of hidden, and so building
-                 it later is turning a control on rather than inventing one.
-                 Building it properly is its own piece of work. -->
-            <button class="btn" id="zipBtn" type="button" disabled
-                    aria-disabled="true"
-                    title="Not built yet. Your site is already live at the address above; this would download a copy of the files.">
+            <!-- The ZIP is the published copy with internal links rewritten
+                 to relative file names, so the archive opens as a working
+                 site offline. The server refuses with a sentence if nothing
+                 is published yet, so the button is turned on for real. -->
+            <button class="btn" id="zipBtn" type="button"
+                    title="Download the published copy of your site as a ZIP of files.">
               <i class="bi bi-download" aria-hidden="true"></i>
-              Export ZIP &mdash; not built yet
+              Export ZIP
             </button>
           </div>
           <p class="hint" id="zipNote">
-            A downloadable copy is not built yet. Publishing is what puts your
-            site online, and that already works.
+            A copy of the published site that opens from the file itself, no
+            server needed. Publish first - the download is your live site's
+            finished pages.
           </p>
         </div>
 

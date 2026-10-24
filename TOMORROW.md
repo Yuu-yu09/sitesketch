@@ -24,9 +24,14 @@ State at the end of the last session: **24 commits, working tree clean,
   slashes for wrapping; copying that text yields a dead address. Clicking
   the button is safe. If she copied instead of clicking, that explains one
   symptom; the button path is instrumented either way.
-- **ZIP export is next** (she asked outright). Published pages live in
-  `published_pages jsonb` as self-contained documents; a server route can
-  zip them directly.
+- **ZIP export is built** (she asked outright; bug #8 second fix). Server
+  route `GET /api/projects/<id>/export.zip` zips the stored published copy,
+  rewriting `/site/<slug>...` hrefs to `index.html`/`<key>.html` so the
+  archive opens offline as a working site; the button downloads through the
+  authenticated fetch; unpublished projects get a client-side refusal (the
+  console would log a 400 network error otherwise, which the suite counts as
+  an uncaught error). Two suite checks cover refusal and a real download
+  read back through `zipfile`.
 - **Gallery control** she asked for: columns/spacing controls for the
   gallery grid.
 - **Browser suite has become flaky, and the failures predate today's

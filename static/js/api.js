@@ -579,6 +579,34 @@
           return { ok: true, project: res.data };
         });
     },
+
+    /* The ZIP binary cannot ride through request(), which parses JSON. It
+       still asks for a token and replays once on an expired one, exactly
+       like send(), because the download is a signed-in owner action. */
+    exportZip: function (projectId) {
+      function attempt(retry) {
+        var headers = {};
+        if (token()) headers.Authorization = "Bearer " + token();
+        return fetch("/api/projects/" + encodeURIComponent(projectId) + "/export.zip", {
+          headers: headers
+        }).then(function (res) {
+          if (res.ok) return res.blob().then(function (blob) {
+            return { ok: true, blob: blob };
+          });
+          return res.text().then(function (text) {
+            var data = null;
+            try { data = JSON.parse(text); } catch (e) { /* html errors */ }
+            if (res.status === 401 && retry === 0) {
+              return renew().then(function (ok) {
+                return ok ? attempt(1) : { ok: false, error: "Please sign in again." };
+              });
+            }
+            return { ok: false, error: (data && data.error) || "Could not build the ZIP." };
+          });
+        });
+      }
+      return attempt(0);
+    },
     baseUrl: function () {
       return location.origin;
     },

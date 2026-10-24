@@ -288,10 +288,13 @@ it for the gesture was worth more than another hour of guessing.
 
 ---
 
-## 8. Export ZIP is a button that does nothing — FIXED
+## 8. Export ZIP is a button that does nothing — FIXED (twice; second fix 24 Oct)
 
 **Seen as:** clicking it says only "Prototype: ZIP export runs through the
-Flask backend (Phase 2)".
+Flask backend (Phase 2)". Then, from the same real-user session that produced
+this list: *"also the zipping of file it don't work"* — the disabled-button
+honesty of the first fix was still the feature being absent, and the user
+asked for the feature outright.
 
 **Cause:** `#zipBtn` is wired to a toast. It is a real button in the
 publish page that cannot do the thing its label promises.
@@ -304,6 +307,19 @@ work and should be scoped as such.
 publishing already puts the site online. Left visible rather than removed,
 so the feature is acknowledged and building it later is turning something on
 rather than inventing it.
+
+**Second fix, 24 Oct: export is built.** `GET /api/projects/<id>/export.zip`
+(authenticated, owner only) zips the stored published copy. The stored pages
+carry `/site/<slug>` addresses internally, which die on `file://`, so the
+route rewrites exactly the two link shapes the renderer emits (home and
+`/site/<slug>/<key>`, with fragments preserved) to `index.html` and
+`<key>.html`. The archive is a working standalone site: index.html plus one
+file per page plus a README, links relative. Refused with a sentence when
+nothing has been published, because a silent zip-of-nothing would be the
+"button that pretends" mistake again. The button is enabled, downloads
+through the authenticated fetch (a bare anchor cannot carry the JWT header),
+and the browser suite now asserts both halves: the refusal when unpublished
+and a real download whose contents have no absolute `/site/` links left.
 
 **And the opposite mistake, found by the test written for this one.** The
 same page carried a visible line claiming publishing was *"simulated in the

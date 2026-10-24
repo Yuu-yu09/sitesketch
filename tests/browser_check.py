@@ -1288,18 +1288,14 @@ def run(page, phase=None):
         }""")
         page.wait_for_timeout(1500)
 
-    def t_export_zip_does_not_pretend_to_work():
-        """A control that cannot do what its label says is a bug.
+    def t_export_zip_refuses_until_something_is_published():
+        """The ZIP button downloads the published copy, so with nothing
+        published it must refuse with a sentence rather than download
+        nothing or[- worse -]zip an empty archive and call it the site.
 
-        Export ZIP was a normal-looking button wired to a toast reading
-        "Prototype: ZIP export runs through the Flask backend (Phase 2)".
-        Reported as "for zipping the file it says backend" - and it is worse
-        than having no button at all, because it looks like a working
-        control and the only answer a person gets mentions a backend and a
-        phase.
-
-        Building export properly is separate work. Until then it is disabled
-        and says so.
+        The button itself used to be disabled with a toast about a backend
+        and a phase; now it is built, the honest state is an enabled control
+        whose refusal explanes the one prerequisite it has.
         """
         page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
                   wait_until="domcontentloaded")
@@ -1307,25 +1303,31 @@ def run(page, phase=None):
 
         btn = page.locator("#zipBtn")
         assert btn.count() == 1, "the export button has gone entirely"
-        assert btn.is_disabled(), \
-            "export is presented as working when it is not built"
-        assert btn.get_attribute("aria-disabled") == "true", \
-            "a disabled control should still say so to assistive tech"
-
+        assert btn.is_enabled(), \
+            "export is built; presenting it as not working hides the feature"
         label = " ".join(btn.inner_text().split()).lower()
-        assert "not built" in label, \
-            f"the button does not admit it does not work: {label!r}"
-        assert page.locator("#zipNote").is_visible(), \
-            "nothing explains that export is unavailable"
+        assert "export zip" in label, \
+            f"the button does not say what it does: {label!r}"
+        assert "not built" not in label, \
+            f"the button still claims it is unbuilt: {label!r}"
 
-        # and no part of the page should still be promising a backend
+        # unpublished project: the click has to come back with the reason
+        page.click("#zipBtn")
+        page.wait_for_timeout(1200)
+        toast = page.eval_on_selector_all(
+            ".toast, .toast-msg", "els => els.map(e => e.innerText.trim())"
+        )
+        assert any("publish" in t.lower() for t in toast), \
+            f"the refusal was silent: {toast}"
+
+        # and no part of the page should still talk about phases or prototypes
         body = " ".join(page.inner_text("body").split()).lower()
-        for claim in ("prototype", "phase 2", "flask backend"):
+        for claim in ("prototype", "phase 2", "flask backend", "not built"):
             assert claim not in body, \
                 f"the page still claims {claim!r} about export"
 
-    check("export zip does not pretend to work",
-          t_export_zip_does_not_pretend_to_work)
+    check("export zip refuses until something is published",
+          t_export_zip_refuses_until_something_is_published)
     check("a custom menu link can be added", t_a_custom_menu_link_can_be_added)
     check("a dangerous menu address is refused", t_a_dangerous_menu_address_is_refused)
     check("a menu link survives a round trip", t_a_menu_link_survives_a_round_trip)
@@ -2143,6 +2145,46 @@ def run(page, phase=None):
 
     check("published footer links go somewhere",
           t_published_footer_links_go_somewhere)
+
+    def t_export_zip_downloads_a_working_site():
+        """The ZIP has to open offline as the same site, not as a pile of
+        broken absolute links.
+
+        The stored published pages carry /site/<slug>... addresses, which
+        file:// cannot resolve. The route rewrites them to relative file
+        names - this asserts the rewrite by opening the archive and
+        following what is inside it rather than trusting a toast.
+        """
+        import re
+        import zipfile
+
+        page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
+                  wait_until="domcontentloaded")
+        page.wait_for_selector("#zipBtn", timeout=SLOW)
+        page.wait_for_timeout(1500)
+
+        page.locator("#zipBtn").scroll_into_view_if_needed()
+        with page.expect_download(timeout=30000) as dl:
+            page.click("#zipBtn")
+        path = dl.value.path()
+        assert dl.value.suggested_filename.endswith(".zip"), \
+            f"the download is not a zip: {dl.value.suggested_filename}"
+
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+            assert "index.html" in names, f"no home page in the archive: {names}"
+            assert "README.txt" in names, f"no README in the archive: {names}"
+            html = zf.read("index.html").decode("utf-8")
+            # a working offline copy has no absolute /site links left in
+            # href attributes - following one from file:// would die
+            dead = [v for v in re.findall(r'href="([^"]*)"', html)
+                    if v.startswith("/site/")]
+            assert not dead, f"the archive links off-line to: {dead[:3]}"
+            assert "<style>" in html, \
+                "the home page in the archive is unstyled"
+
+    check("export zip downloads a working site",
+          t_export_zip_downloads_a_working_site)
 
     # ------------------------------------------------------- cookies and legal
     # These only exist in a browser, so the API suite cannot see them.

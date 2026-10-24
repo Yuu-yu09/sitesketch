@@ -249,6 +249,93 @@ def unpublish(pid: str):
     return jsonify(serialize(row))
 
 
+@bp.get("/<pid>/export.zip")
+@jwt_required()
+def export_zip(pid: str):
+    """Download the published site as a ZIP that opens locally.
+
+    The compiled pages already live in `published_pages`. Inside the stored
+    documents every internal link points at the live address -
+    /site/<slug>/about-us - because that is what the published copy needs.
+    Those links die the moment the copy leaves the server: file:// cannot
+    resolve them. So the ZIP rewrites exactly the two link shapes the
+    renderer emits (the home page and /site/<slug>/<key>) to their relative
+    file names, which makes the archive open as a working site offline.
+    Anything else in the document is left untouched.
+
+    Refused loudly if there is nothing published - the button is on the
+    publish page and says what it is doing, so a silent zip-of-nothing
+    would be the old "button that pretends" mistake again.
+    """
+    import io
+    import zipfile
+
+    from flask import send_file
+
+    row = _owned(pid)
+    if not row:
+        return jsonify(error="Project not found"), 404
+    pages = row.get("published_pages") or {}
+    if not row["is_published"] or not row.get("published_home") or not pages:
+        return jsonify(error="Publish the site first - a download needs a " +
+                             "finished copy to zip"), 400
+
+    slug = row["slug"] or "site"
+    home = row["published_home"] if row["published_home"] in pages \
+        else next(iter(pages))
+    live = "/site/" + slug
+
+    # The renderer emits exactly two internal href shapes - the home page as
+    # <live> and any other page as <live>/<key> - each optionally carrying a
+    # #section anchor. Order matters: sub-pages are rewritten first so the
+    # home rule cannot swallow their path as a fragment. Rewriting both to
+    # file names turns every stored document into a working relative site.
+    # The quote guards names that merely contain the live path from a
+    # half-rewritten fate. §-fragments travel because file:// links to
+    # named sections stay valid relative.
+    def to_local(html: str) -> str:
+        esc = re.escape(live)
+        html = re.sub(
+            r'(["\'])' + esc + r"/(?P<k>[a-z0-9][a-z0-9-]*)(?P<f>[^\"']*)[\"']",
+            lambda m: m.group(1) + m.group("k") + ".html" +
+                      (m.group("f") if m.group("f").startswith("#") else "") +
+                      m.group(1),
+            html,
+        )
+        html = re.sub(
+            r'(["\'])' + esc + r'(?P<f>[^"\']*)["\']',
+            lambda m: m.group(1) + "index.html" +
+                      (m.group("f") if m.group("f").startswith("#") else "") +
+                      m.group(1),
+            html,
+        )
+        return html
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for key, html in pages.items():
+            name = "index.html" if key == home else key + ".html"
+            zf.writestr(name, to_local(html))
+        zf.writestr(
+            "README.txt",
+            "%s - downloaded from SiteSketch on %s\n\n"
+            "This is the exact copy visitors see at:\n"
+            "    https://<your-host>/site/%s\n\n"
+            "index.html is the home page. Every other page is a file of its\n"
+            "own, and the links between them are relative, so opening\n"
+            "index.html in a browser works with no server - double-click it.\n\n"
+            "Editing these files will not change the live site; republish\n"
+            "from SiteSketch instead.\n"
+            % (row["name"],
+               row["published_at"].strftime("%Y-%m-%d") if
+               row.get("published_at") else "(date missing)",
+               slug),
+        )
+    buf.seek(0)
+    return send_file(buf, mimetype="application/zip", as_attachment=True,
+                     download_name=slug + ".zip")
+
+
 @bp.delete("/<pid>")
 @jwt_required()
 def destroy(pid: str):
