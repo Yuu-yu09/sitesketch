@@ -7,6 +7,39 @@ first.
 State at the end of the last session: **24 commits, working tree clean,
 `local == origin/main` at `91f809c`.**
 
+## Session update (24 Oct)
+
+- **Drag-and-drop fixed.** Root cause: `onEnd` destroyed and re-created
+  Sortable *inside* Sortable's own `_onDrop`, leaving the module-level
+  `dragEl` guard set for every later instance — first drag works, the rest
+  die silently. Fix defers the splice/render one tick. Measured before and
+  after in `KNOWN_BUGS.md` #16. One commit.
+- **Publishing works; the owner's 404 is still unexplained.** Probed the
+  whole flow end to end (fresh account, wizard, publish, Open site): 200,
+  real HTML. Nicole's `WebDev` project also serves 200 right now. The
+  "This site isn't published" page now logs the requested slug, so if the
+  owner hits it again the server log names the exact slug asked for
+  (`not-published hit: slug=...`). Ask her to retry and check first.
+- **"Open site" trap still possible:** the visible URL text has zero-width
+  slashes for wrapping; copying that text yields a dead address. Clicking
+  the button is safe. If she copied instead of clicking, that explains one
+  symptom; the button path is instrumented either way.
+- **ZIP export is next** (she asked outright). Published pages live in
+  `published_pages jsonb` as self-contained documents; a server route can
+  zip them directly.
+- **Gallery control** she asked for: columns/spacing controls for the
+  gallery grid.
+- **Browser suite has become flaky, and the failures predate today's
+  change:** across four runs, varying subsets of `delete gives visible
+  feedback`, `type scale survives a reload`, `brand colours survive a
+  reload`, `a menu link survives a round trip` fail, and `the builder warns
+  when the live site is behind` fails every run (stashes and runs with and
+  without the drag fix both show it). Baseline stashes prove they are not
+  caused by the drag commit. `the builder warns...` needs a reproduction
+  outside the suite's long fixture lives; project GET once returned an
+  in-session 500 that did not reproduce on plain API calls. Do not ship a
+  green claim while both runs disagree; bisect this before trusting "PASS".
+
 ---
 
 ## 1. Nav and footer links are full sentences — BUG, found in a screenshot

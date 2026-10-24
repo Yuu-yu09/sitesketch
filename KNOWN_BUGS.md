@@ -30,6 +30,39 @@ by looking at a screenshot rather than by reading code.
 
 ---
 
+## 16. Dragging a section works once, then nothing — FIXED (measured)
+
+**Reporter:** the site owner, "sometimes it don't work sometimes it works".
+
+**Measured (2026-10-24):** the first reorder of every session worked, 6 of 6
+fresh loads, and every drag *after the first successful reorder did nothing
+at all* — ten presses in a row, each verified to land on the grip, against a
+re-created instance that was healthy by every outward test
+(`options.disabled === false`, `Sortable.active === false`). Healthy face,
+dead tap.
+
+**Cause:** Sortable clears its module-level `dragEl` in `_nulling()`, which
+only runs at the very end of its own `_onDrop`. Our `onEnd` fired *inside*
+that drop handler and synchronously called `render()` → `wireSortable()` →
+`sortable.destroy()` — tearing the instance and its list down mid-drop. The
+uncleaned state survives into every instance created afterwards, because
+they share one module closure; tap-start sees the stale `dragEl` and
+silently returns. The first drag always works because state was clean
+before it.
+
+**Repro probe:** fresh AI plan, then reorder attempts on the second
+section's grip, press verified by `elementFromPoint` against the grip each
+time. Before the fix: attempt 0 moves, attempts 1-9 die mid-flight with
+chosen/ghost classes never reappearing. After the fix: 8 consecutive
+reorders, all landing. Two non-reorders in the post-fix runs were the press
+missing the grip after a scroll (`inGripBox: false`), not drag failures.
+
+**Fix:** `builder.js` `onEnd` defers the splice, render and autosave past
+the drop (`setTimeout(..., 0)`) so Sortable finishes its own bookkeeping
+before the DOM is rebuilt.
+
+---
+
 ## Closed
 
 1. Every 404 rendered as raw JSON

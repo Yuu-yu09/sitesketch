@@ -514,10 +514,23 @@
             var page = currentPage();
             var from = event.oldIndex, to = event.newIndex;
             if (from === to || from === undefined || to === undefined) return;
-            var moved = page.sections.splice(from, 1)[0];
-            page.sections.splice(to, 0, moved);
-            render();
-            changed();
+            /* Deferred, deliberately. This callback runs inside Sortable's
+               own _onDrop, which clears its module-level state (_nulling) at
+               the very end. Destroying and re-creating the instance from
+               inside that call - which is what render() and wireSortable()
+               do - left the cleared-never guard dragEl set for every
+               instance created afterwards: the first reorder of a session
+               worked and every later one silently did nothing, because
+               _onTapStart refuses taps while dragEl is non-null. Measured:
+               10 tries, first moved, the rest dead with the same healthy
+               instance attached. Deferring past _onDrop lets Sortable finish
+               its own bookkeeping before the DOM is rebuilt. */
+            setTimeout(function () {
+              var moved = page.sections.splice(from, 1)[0];
+              page.sections.splice(to, 0, moved);
+              render();
+              changed();
+            }, 0);
           }
         });
       }

@@ -448,6 +448,17 @@ def _count_view(slug: str) -> None:
 
 
 def _no_site():
+    """A slug nobody published served a miss. Log what was actually asked
+    for: "the live link doesn't open" has never reproduced locally - every
+    probe publish has opened fine - so a recorded slug against the live
+    rows is the only instrument that can catch the real occurrence. The
+    row could be genuinely absent, or a stale tab could be asking for an
+    old slug; without the log the two look identical. Logged without the
+    traceback noise: the condition itself is known, only the slug is not.
+    """
+    import sys
+    print("not-published hit: slug=%r path=%s" % (request.view_args.get("slug") if request.view_args else None, request.path),
+          file=sys.stderr, flush=True)
     res = app.response_class(
         "<!doctype html><meta charset=utf-8><title>Not published</title>"
         "<div style=\"font:16px/1.6 system-ui;max-width:34rem;margin:18vh auto;"
