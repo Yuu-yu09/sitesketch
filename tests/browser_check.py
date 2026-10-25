@@ -275,11 +275,34 @@ def run(page, phase=None):
             "the armed state expired after 3s, so a slow second click " \
             "starts the whole thing over"
 
+        # capture the id while the button still exists
+        thrown_away = btn.get_attribute("data-del")
+
         page.locator("[data-del]").first.click()
-        page.wait_for_timeout(2500)
+        # The dashboard now removes the card on the server's confirmation -
+        # but its own refresh of the list has been measured stalling for
+        # seconds on a slow database connect, so wait for the count to
+        # actually change rather than assuming a sleep is long enough. A
+        # fixed sleep is what produced '2 -> 2' one run after the server
+        # had already confirmed the delete.
+        page.wait_for_function(
+            "(n) => document.querySelectorAll('.proj-card:not(.proj-new)').length === n",
+            arg=before_count - 1, timeout=30000)
         after_count = page.locator(".proj-card:not(.proj-new)").count()
-        assert after_count == before_count - 1, \
-            f"the second click did not delete: {before_count} -> {after_count}"
+        if after_count != before_count - 1:
+            server_list = page.evaluate(
+                """async () => {
+                     const tok = localStorage.getItem('sitesketch_token_v1');
+                     const res = await fetch('/api/projects',
+                       {headers: {'Authorization': 'Bearer ' + tok}});
+                     const rows = await res.json();
+                     return rows.map(r => r.id);
+                   }""")
+            raise AssertionError(
+                f"the second click did not delete: {before_count} -> {after_count} | "
+                f"deleted id was {thrown_away} | server now lists "
+                f"{len(server_list)}, deleted id still present: "
+                f"{thrown_away in server_list}")
 
     check("delete gives visible feedback", t_delete_gives_visible_feedback)
 
@@ -1074,7 +1097,7 @@ def run(page, phase=None):
         slug = "stale-" + uuid.uuid4().hex[:8]
         page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
                   wait_until="domcontentloaded")
-        page.wait_for_timeout(1500)
+        wait_project_loaded(page)
         page.fill("#slug", slug)
         page.click("#pubBtn")
         page.wait_for_timeout(6000)
@@ -1083,9 +1106,30 @@ def run(page, phase=None):
                   wait_until="domcontentloaded")
         page.wait_for_selector(".ss-sec", timeout=SLOW)
         page.wait_for_timeout(1500)
-        # published and unedited since: nothing to warn about
-        assert not stale.is_visible(), \
-            "warned immediately after publishing, with no edits since"
+        # published and unedited since: nothing to warn about. When this
+        # contradicts itself, carry the row's own timestamps: whether the
+        # DB actually has updated_at > published_at (a save landed after
+        # the publish - a check-premise bug) or it does not and the
+        # banner's paint is lying. Asserting on an eyeballed phrase made
+        # three runs produce no data.
+        row = page.evaluate(
+            """async () => {
+                 const tok = localStorage.getItem('sitesketch_token_v1');
+                 const id = new URLSearchParams(location.search).get('id');
+                 const res = await fetch('/api/projects/' + id,
+                   {headers: {'Authorization': 'Bearer ' + tok}});
+                 const j = await res.json();
+                 const pip = document.getElementById('saveState');
+                 return {u: j.updated_at, p: j.published_at, pub: j.is_published,
+                         pip: pip ? pip.textContent.trim() : '(none)',
+                         dirty: pip ? pip.classList.contains('dirty') : null};
+               }""")
+        delta = row["u"] - (row["p"] or 0)
+        if stale.is_visible():
+            raise AssertionError(
+                "warned immediately after publishing, with no edits since | "
+                f"row: updated={row['u']} published={row['p']} delta={delta}ms "
+                f"is_published={row['pub']} pip={row['pip']!r} dirty={row['dirty']}")
 
         # now make an edit and wait for autosave
         if page.get_attribute("#stylesBtn", "aria-pressed") != "true":

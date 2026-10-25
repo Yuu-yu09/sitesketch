@@ -106,9 +106,30 @@
             }
             this.dataset.armed = "0";
             this.classList.remove("is-armed");
-            API.deleteProject(this.getAttribute("data-del")).then(function () {
-              render();
+            var btnEl = this;
+            API.deleteProject(btnEl.getAttribute("data-del")).then(function (result) {
+              if (result && result.ok === false) {
+                render();
+                SS.toast(result.error || "Could not delete the plan",
+                         "bi-exclamation-triangle");
+                return;
+              }
+              /* the row is gone on the server; take the card away now.
+                 Waiting for render()'s refetch has been measured stalling
+                 for seconds on a slow database connect, and a card that
+                 survives its own delete is what "you have to click several
+                 times" was describing. Reconcile with the server after:
+                 the refetch paints the list and the counts whenever its
+                 connection gets there. */
+              var card = btnEl.closest(".proj-card");
+              if (card) card.remove();
               SS.toast("Plan deleted", "bi-trash3");
+              setTimeout(render, 0);
+            }).catch(function () {
+              /* a failed delete must say so - the old listener had no
+                 catch, so a network error was a silent dead click */
+              render();
+              SS.toast("Could not delete the plan", "bi-exclamation-triangle");
             });
           });
         });

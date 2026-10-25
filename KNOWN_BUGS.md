@@ -685,6 +685,20 @@ Measured: after one click the button computes
 `background-color: rgb(163, 46, 27)`, trash `display: none`, tick visible,
 and it is still armed at 5.4s. The second click deletes and toasts.
 
+**Second fix, 25 Oct: the card survives its own delete while the refetch
+stalls.** The check reported `2 -> 2` one run after the server had
+answered the DELETE with 200 and a fresh API list no longer contained the
+row — the dashboard's confirmation path called `render()`, which refetches
+the list, and that refetch has been measured stalling for seconds on a
+slow database connect. During the stall the deleted card stayed on
+screen: the same "you have to click several times" complaint the arming
+fix addressed, in its second layer. The delete listener now removes the
+card the moment the server confirms and reconciles with the server after
+(a refetch, whenever its connection gets there), and refusal or network
+failure toast a reason instead of dying silently — the listener had no
+catch at all. The check waits for the card count to change rather than
+betting on a fixed sleep.
+
 ## 17. Picking a card image destroys the section — FIXED
 
 **Seen as:** "the img you can select it but you cant change it, you cant even
