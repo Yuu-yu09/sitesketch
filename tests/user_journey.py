@@ -180,8 +180,23 @@ def run(page, log):
             f"the edit is not on the page: {shown!r}"
         log("typed into the page itself")
 
+    def wait_saved(timeout: int = 25000):
+        """Wait until the editor's autosave has really finished. Same rule the
+        browser suite uses: an edit flips the pip to Saving synchronously and
+        the pip clears only on the save's own completion, so clear-plus-Saved
+        after an edit means the server has the bytes. Duplicated here rather
+        than imported because the journey runs standalone."""
+        page.wait_for_function(
+            "() => { const s = document.getElementById('saveState');"
+            " return s && !s.classList.contains('dirty')"
+            "        && /Saved/i.test(s.textContent || ''); }",
+            timeout=timeout,
+        )
+
     def t_the_edit_survives_a_reload():
-        """Which means the autosave actually reached the server."""
+        """Which means the autosave actually reached the server, not merely
+        that a sleep long enough had passed."""
+        wait_saved()
         page.reload(wait_until="domcontentloaded")
         page.wait_for_selector(".ss-sec", timeout=SLOW)
         page.wait_for_timeout(1500)

@@ -42,10 +42,49 @@ def check(name: str, fn) -> None:
         results.append((name, True, detail))
         print(f"  PASS  {name}" + (f"  [{detail}]" if detail else ""))
     except Exception as exc:  # noqa: BLE001 - a failing check must not abort
-        message = str(exc).split("\n")[0][:150]
+        # Playwright actionability timeouts name the locator AND the action
+        # log lines; keeping only the first left "a click timed out" without
+        # saying which element or why. Keep the locator plus the full log.
+        lines = [ln.strip() for ln in str(exc).split("\n") if ln.strip()]
+        message = " | ".join(lines)[:900]
         results.append((name, False, message))
         print(f"  FAIL  {name}\n        {message}")
     _ = round(time.time() - started, 2)
+
+
+def wait_saved(page, timeout: int = 25000) -> None:
+    """Wait until the editor has actually finished saving.
+
+    #saveState reads 'Saved' before an edit too, so it is not a signal on
+    its own, and a fixed sleep is a bet on the debounce. The save flow
+    flips the pip to Saving the instant an edit lands, and clears it only
+    on that save's own completion, so after an edit, clear-plus-'Saved'
+    can only mean the server now has the bytes. Call it after making the
+    edit, before anything reloads; what restored the flaky 'survives a
+    reload' checks was exactly this, not longer sleeps."""
+    page.wait_for_function(
+        "() => { const s = document.getElementById('saveState');"
+        " return s && !s.classList.contains('dirty')"
+        "        && /Saved/i.test(s.textContent || ''); }",
+        timeout=timeout,
+    )
+
+
+def wait_project_loaded(page, timeout: int = 30000) -> None:
+    """Wait until publish() has actually run on the page.
+
+    Every publish-page handler attaches after GET /api/projects answers,
+    and that connect has been measured taking seconds. A fixed sleep
+    raced it (the rotating `export zip downloads a working site` flake;
+    pre-load clicks did literally nothing), so wait on the page's own
+    signal instead: render() fills the slug input, and nothing user-
+    visible on this page happens before that.
+    """
+    page.wait_for_function(
+        "() => document.getElementById('slug')"
+        " && document.getElementById('slug').value.length > 1",
+        timeout=timeout,
+    )
 
 
 def run(page, phase=None):
@@ -573,11 +612,15 @@ def run(page, phase=None):
 
     def t_type_scale_survives_a_reload():
         """It has to be stored in the plan, or it is a preview-only toy."""
+        # drain the previous check's possibly-in-flight save first: a full-plan
+        # PUT that lands after this one restores pre-edit data, and the
+        # symptom used to look like a persistence bug.
+        wait_saved(page)
         page.evaluate("() => {"
                       "  const s = window.Editor.spec();"
                       "  s.tokens.type = { scale: 1.15, lh: 1.1, ls: 0.03 };"
                       "  window.Editor.onChange('design:type'); }")
-        page.wait_for_timeout(1600)          # let the debounced save land
+        wait_saved(page)                     # poll the real save, not the debounce
         page.reload(wait_until="domcontentloaded")
         page.wait_for_selector(".ss-sec", timeout=SLOW)
         stored = page.evaluate("() => JSON.stringify("
@@ -665,21 +708,27 @@ def run(page, phase=None):
             f"text should have come from the palette, got {got['text']}"
 
     def t_brand_colours_survive_a_reload():
+        wait_saved(page)                     # drain first; see the type-scale note
         page.evaluate("() => {"
                       "  const s = window.Editor.spec();"
                       "  s.tokens.colour = { accent: '#7A1F3D', bg: '#FFFDF9', text: '#2A1E16' };"
                       "  window.Editor.onChange('design:colour'); }")
-        page.wait_for_timeout(1600)
+        wait_saved(page)
         page.reload(wait_until="domcontentloaded")
         page.wait_for_selector(".ss-sec", timeout=SLOW)
-        accent = page.evaluate(
-            "() => getComputedStyle(document.querySelector('.ss-site'))"
-            ".getPropertyValue('--accent').trim()")
-        assert accent.upper() == "#7A1F3D", f"brand colour not persisted: {accent}"
+        boot = page.evaluate(
+            "() => { const s = window.Editor && window.Editor.spec ? window.Editor.spec() : null;"
+            "  const c = (s && s.tokens && s.tokens.colour) || null;"
+            "  return { planAccent: c ? c.accent : null,"
+            "           cssAccent: getComputedStyle(document.querySelector('.ss-site'))"
+            "             .getPropertyValue('--accent').trim(),"
+            "           scale: s && s.tokens && s.tokens.type ? s.tokens.type.scale : null }; }")
+        assert boot["cssAccent"].upper() == "#7A1F3D", \
+            f"brand colour not persisted: {boot}"
         page.evaluate("() => {"
                       "  const s = window.Editor.spec();"
                       "  delete s.tokens.colour; window.Editor.onChange('design:colour'); }")
-        page.wait_for_timeout(1200)
+        wait_saved(page)
 
     def t_published_copy_carries_no_editor_instructions():
         """A visitor must never read instructions meant for the builder.
@@ -979,7 +1028,7 @@ def run(page, phase=None):
         page.evaluate("() => {"
                       "  const s = window.Editor.spec();"
                       "  delete s.tokens.colour; window.Editor.onChange('design:colour'); }")
-        page.wait_for_timeout(1200)
+        wait_saved(page)
 
     def t_the_picker_survives_being_clicked():
         """Clicking inside the picker must not destroy it.
@@ -1257,7 +1306,7 @@ def run(page, phase=None):
         if page.get_attribute("#menuBtn", "aria-pressed") != "true":
             page.click("#menuBtn")
             page.wait_for_timeout(700)
-
+        wait_saved(page)                     # drain the previous check's save
         page.evaluate("""() => {
             const plan = window.Editor.plan;
             plan.nav = [
@@ -1268,7 +1317,7 @@ def run(page, phase=None):
             ];
             window.Editor.onChange('nav');
         }""")
-        page.wait_for_timeout(2000)
+        wait_saved(page)
         page.reload(wait_until="domcontentloaded")
         page.wait_for_selector(".ss-sec", timeout=SLOW)
         page.wait_for_timeout(1500)
@@ -1281,12 +1330,15 @@ def run(page, phase=None):
         assert "mailto:hello@example.com" in hrefs, \
             f"a mailto link did not survive a reload: {hrefs}"
 
-        # put the menu back as the rest of the suite expects it
+        # put the menu back as the rest of the suite expects it. This save
+        # must land: a published-nav check later renders whatever was left
+        # here, and the custom link leaking into it was once reported as a
+        # publish bug when it was a save race all along.
         page.evaluate("""() => {
             window.Editor.plan.nav = null;
             window.Editor.onChange('nav');
         }""")
-        page.wait_for_timeout(1500)
+        wait_saved(page)
 
     def t_export_zip_refuses_until_something_is_published():
         """The ZIP button downloads the published copy, so with nothing
@@ -1299,7 +1351,7 @@ def run(page, phase=None):
         """
         page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
                   wait_until="domcontentloaded")
-        page.wait_for_timeout(1800)
+        wait_project_loaded(page)
 
         btn = page.locator("#zipBtn")
         assert btn.count() == 1, "the export button has gone entirely"
@@ -1689,7 +1741,12 @@ def run(page, phase=None):
 
         # select the gallery and open its section settings. The floating
         # toolbar lives on the body, not inside the section it serves.
-        page.click("#canvas .g-gallery")
+        # The grip is the reliable selection affordance: the section's
+        # own centre can land on an empty photo slot, and clicking such a
+        # slot opens the media picker and returns WITHOUT selecting the
+        # section - reproduced twice, the settings click then timing out
+        # against an intercepting #mediaHost overlay.
+        page.click("#canvas .g-gallery .sec-grip")
         page.wait_for_timeout(500)
         page.click("[data-do='settings']")
         page.wait_for_selector("#blockColumns", timeout=SLOW)
@@ -2285,6 +2342,25 @@ def run(page, phase=None):
             assert link["h"].startswith("/site/"), \
                 f"footer page link is not a real URL: {link}"
 
+        # the footer is the navbar's twin: the same entries, the same order,
+        # the same addresses, so a link labelled like a menu section opens
+        # that menu section - not the top of the page it lives on. The two
+        # columns are generated from the same nav one way, and this pins
+        # them together: edited nav must be reflected on the next publish,
+        # or the columns drift and one of them is lying to the visitor.
+        # Labels compare case-insensitively: a navbar variant may render
+        # uppercase, and inner_text returns the rendered text.
+        nav_links = page.eval_on_selector_all(
+            # direct children only: a submenu's own links are not footer
+            # entries, and the footer mirrors the top level of the nav
+            ".ss-nav .ss-navitem > a[href]",
+            """els => els.map(e => [e.innerText.trim().toLowerCase(),
+                                   e.getAttribute('href')])""")
+        assert nav_links, "the published navbar rendered no links"
+        foot_pairs = [(l["t"].lower(), l["h"]) for l in page_links]
+        assert [tuple(x) for x in nav_links] == foot_pairs, \
+            f"footer links do not mirror the navbar: nav={nav_links} footer={foot_pairs}"
+
         # and it actually navigates
         before = page.url
         page.eval_on_selector_all(
@@ -2317,7 +2393,10 @@ def run(page, phase=None):
         page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
                   wait_until="domcontentloaded")
         page.wait_for_selector("#zipBtn", timeout=SLOW)
-        page.wait_for_timeout(1500)
+        # the handlers attach after GET /api/projects answers; a click
+        # before that did nothing at all (the source of this check's
+        # rotating failure). wait_project_loaded is the checked signal.
+        wait_project_loaded(page)
 
         page.locator("#zipBtn").scroll_into_view_if_needed()
         with page.expect_download(timeout=30000) as dl:
@@ -2577,6 +2656,13 @@ def main() -> int:
     failed = [name for name, ok, _ in results if not ok]
     if failed:
         print("failed: " + ", ".join(failed))
+        # run_all shows any failing suite only its last 14 lines. Messages
+        # printed where each check ran were 300 lines earlier and invisible,
+        # so a failing check came out with no reason attached. Print every
+        # failed message here, at the end, where the tail sees it.
+        for name, ok, message in results:
+            if not ok and message:
+                print(f"\nFAIL {name}: {message}")
     return 0 if passed == total else 1
 
 
