@@ -1152,9 +1152,16 @@ def run(page, phase=None):
         # and the warning clears once the site is republished
         page.goto(f"{BASE}/publish.html?id={builder_id['pid']}",
                   wait_until="domcontentloaded")
-        page.wait_for_timeout(1500)
+        # The publish-page handlers attach after GET /api/projects answers,
+        # and the pre-start loading-guard toasts clicks that come too
+        # early - a fixed sleep here once clicked into that window and the
+        # publish silently did not happen, which this check then reported
+        # as 'still warning after republishing'.
+        wait_project_loaded(page)
         page.click("#pubBtn")
-        page.wait_for_timeout(6000)
+        # Wait for the product's own success signal - on a slow database
+        # connect the POST has been measured outliving any fixed sleep.
+        page.wait_for_selector("text=Changes pushed live", timeout=30000)
         page.goto(f"{BASE}/builder.html?id={builder_id['pid']}",
                   wait_until="domcontentloaded")
         page.wait_for_selector(".ss-sec", timeout=SLOW)
