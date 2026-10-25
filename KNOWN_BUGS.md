@@ -333,6 +333,46 @@ The test asserts no part of the page still claims "prototype", "phase 2" or
 "flask backend". That assertion is what found the second one; I was only
 looking for the ZIP wording.
 
+**Third fix, 25 Oct: the dead window before the project loads.** Reported
+again as "clicking export zip doesn't do anything, it doesn't download the
+zip file" — this time with a screenshot of the app's own 404 page, and the
+server log showing the click produced **no `export.zip` request at all**.
+
+**Reproduced** in a headless run against the dev server
+(`%TEMP%\opencode\zip_repro2.py`): open `publish.html`, click Export ZIP
+the moment the page paints, and record everything —
+
+    A> click pre-load toasts: []
+    A> export.zip requests so far: []
+
+Not a toast, not a fetch, no console error. Every handler on the page —
+Publish, Unpublish, Copy, ZIP — attaches only inside `start()`, which runs
+*after* `GET /api/projects` answers, and that connect has been measured
+taking seconds (bug 15's same Supabase connect path). In that window the
+buttons exist and are dead. Download-when-loaded was verified working both
+before and after this fix (publish 200, status "Your site is live",
+downloaded archive = `index.html` + `about.html` + README, title correct).
+
+**Fix:** four buttons get one loading-guard listener attached at page
+load, before `start()` exists. It answers an early click with
+"one moment - the page is still loading your project" and stays silent
+once `start()` has flipped `projLoaded`. No rebinding of `proj`, no change
+to any handler body. Verified: the pre-load click now toasts, the
+post-publish click still downloads, zero console errors.
+
+**This is also the explanation for the rotating `export zip downloads a
+working site` flake in the browser suite** (run 13's failure had no
+intercepting overlay and no server error — the suite clicked inside the
+same dead window whenever Supabase connect was slow). The suite's zip
+checks now wait for the project to load before clicking.
+
+**The screenshot's 404 is NOT REPRODUCED.** No 404 was served by the dev
+server in the whole logged window, and no `/site/...` request in it 404'd.
+If the owner sees the "We couldn't find that page" screen again, record
+the exact address shown in the browser bar — all 404 pages in this app now
+say what was asked for server-side, so one sighting with the address
+settles it.
+
 ## 10. Every "Pages" link in the footer is dead — FIXED
 
 **Seen as:** clicking **Home** in the footer of a published site does nothing.
@@ -697,3 +737,39 @@ as a fault. Another asserted the card image changed after picking tile zero
 — which may legitimately already be that photograph, so it could never fail
 correctly. Only driving the write directly and reading the thrown error
 found it. "Cannot reproduce" is sometimes "has not reproduced yet".
+
+## 18. Menu cards render as organic blobs — NOT REPRODUCED
+
+**Seen as:** TOMORROW.md item 2, written from a screenshot of a real
+published site on 15 Oct: "`g-menu v-cards` produced three organic rounded
+card shapes. Menu cards are not the shape feature's business."
+
+**Measurements on 25 Oct, none of which reproduce it:**
+
+- The cards variant, driven through its real path (`design.sections
+  [.id].variant = "cards"` — the earlier probe fed the override to
+  `plan.sections` and silently rendered `v-list` instead, which is a
+  lesson in itself): builder canvas computes `border-radius: 8px`,
+  `clip-path: none`, no `--tile-shape`, `overflow: visible`,
+  transform none. Screenshot shows a lead card plus two plain cards.
+- The **compiled published artifact** — `SS.compileSite` with the real
+  stylesheet and `pageBase`, loaded as a visitor document — computes the
+  same: radius 8px, clip none, no image transform. That is exactly what
+  the server stores and serves.
+- Nothing in the pipeline *can* produce it today: `cardsOf` renders bare
+  `article.ss-card` and has never called `tileStyle` in any committed
+  version; `cropStyle` touches only the `<img>` (object-fit, scale), so
+  it cannot round a card; and `git log -S "v-cards"` finds the string
+  **nowhere in site.js history** — the class the report names never
+  existed.
+
+**Both candidates from the original write-up are measured dead.** The
+shape-feature leak is not in the menu path, and the crop change never
+reached the card element.
+
+**What would reopen this:** the original screenshot is gone (the temp
+shots folder emptied). If the owner sees organic menu cards again — on
+the live Midnight Bowl site or in the builder — the next step is the
+requested URL plus a screenshot, then instrumenting the exact plan that
+rendered it. Until then there is nothing to fix, and pretending a fix
+was found would be exactly the failure mode this file exists to stop.

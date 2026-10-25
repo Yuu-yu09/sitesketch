@@ -5,11 +5,33 @@
       var params = new URLSearchParams(location.search);
       var wantedId = params.get("id");
 
+      /* Every button below is wired inside start(), which only runs after
+         GET /api/projects answers - and that connect has been observed
+         taking seconds. In window between the page painting and the
+         project arriving the buttons existed and did nothing at all: a
+         user who clicked one saw a silent dead screen. What a click
+         should get is an honest sentence instead. The guard attaches
+         before start() exists and stays attached; once start() has run,
+         projLoaded is true and the guard stays silent, so the real
+         handlers answer clicks the way they always did. */
+      var projLoaded = false;
+      ["pubBtn", "unpubBtn", "copyBtn", "zipBtn"].forEach(function (id) {
+        var btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener("click", function () {
+          if (!projLoaded) {
+            SS.toast("One moment - the page is still loading your project",
+                     "bi-hourglass-split");
+          }
+        });
+      });
+
       function start(proj) {
         var baseUrl = API.baseUrl();
         var slugInput = document.getElementById("slug");
         var pubBtn = document.getElementById("pubBtn");
         var liveBox = document.getElementById("liveBox");
+        projLoaded = true;
 
         document.getElementById("projTitle").textContent = proj.name;
         document.getElementById("backToBuilder").href = "builder.html?id=" + proj.id;
@@ -253,6 +275,11 @@
             document.body.appendChild(link);
             link.click();
             link.remove();
+            /* createObjectURL pairs with revokeObjectURL, or each export
+               pins its whole ZIP in memory until the tab closes. The
+               revocation waits a tick because a few browsers need the
+               anchor's click fully processed before the URL dies. */
+            setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
             SS.toast("Downloaded " + proj.slug + ".zip - it opens offline", "bi-file-earmark-zip");
           });
         });

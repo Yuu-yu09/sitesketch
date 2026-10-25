@@ -37,6 +37,14 @@ State at the end of the last session: **24 commits, working tree clean,
   (`https://example.com/social`) still in a published nav — the
   round-trip test's restore save had not landed, which is item 3's exact
   shape. Green across the run after this entry. Item 3 still open.
+- **ZIP export "does nothing" — cause found, fixed, verified (later on
+  25 Oct):** every publish-page handler attaches only after
+  `GET /api/projects` answers, so a click in that window (measured in
+  seconds here) did literally nothing — no toast, no request. Reproduced
+  in a clean headless run; details and the fix in KNOWN_BUGS #8 (third
+  fix). The downloaded archive was read back and is a real working site.
+  The screenshot's app-404 was never served in the logged window — need
+  the address from the browser bar on the next sighting.
 
 ---
 
@@ -96,38 +104,50 @@ Was reproduced on a live publish — screenshot at
 item demanded (decided before coding — see the session note above); see
 KNOWN_BUGS #13's second fix.
 
-## 2. Menu cards render as blobs — BUG, undiagnosed
+## 2. Menu cards render as blobs — NOT REPRODUCED (25 Oct), see KNOWN_BUGS #18
 
 Seen in the same screenshot. `g-menu v-cards` produced three organic rounded
 card shapes. Menu cards are not the shape feature's business.
 
-Two candidates, neither confirmed:
-- the shape feature leaking from the gallery change (gallery cards now carry
-  `data-tile` and `tileStyle(item)`)
-- the crop change (`transform: scale(1/w)` plus `transform-origin`) in
-  `cropStyle` interacting with the card border-radius
+Both written-down candidates were measured dead on 25 Oct and neither can
+occur in any committed version of the renderer; the compiled published
+artifact was measured clean end to end (radius 8px, no clip-path, no
+img transform). `v-cards` never existed in site.js history (`git log -S`).
+The original screenshot is gone. Reopen only on a new sighting with the
+URL and screenshot — details and measurements in KNOWN_BUGS #18.
 
-**Measure first.** Read the computed `clip-path`, `--tile-shape` and
-`border-radius` on a menu card and find out which it actually is.
+## 3. Browser tests were flaky — CAUSE FOUND (25 Oct): stale full-plan saves
 
-## 3. Three browser tests are flaky — TEST BUG, not product
+All the rotators (`type scale survives a reload`, `a menu link survives
+a round trip`, `brand colours survive a reload`, and once
+`published nav reaches the sections` with a custom link leaking into a
+published site) now have a named cause, proven by measurement:
 
-Intermittently fail in the full suite, pass alone:
+**A debounced autosave that never cancels an older in-flight PUT.**
+Every save ships the *whole* plan. When one save is still in the
+network and a second edit schedules another, both complete, and the
+server keeps whichever arrived last — not last-written. In the suite
+the previous check's older plan can land after the current check's,
+silently restoring pre-edit data; the failures rotated because overlap
+was random, and `#saveState` said "Saved" because the *meaningless*
+save had also succeeded. Screenshot from a run leave no room for doubt:
+`brand colour not persisted: #A6412B` — the palette default — because
+the reloaded plan was an older snapshot.
 
-- `type scale survives a reload`
-- `a menu link survives a round trip`
-- `brand colours survive a reload`
+Suite-level fix shipped: `wait_saved()` polls the editor's own pip
+(dirty cleared + "Saved" after an edit means the server has the bytes),
+called after every edit and also **before** one, draining any older
+in-flight save so only one PUT is ever near a mutation. Do not replace
+this with longer sleeps; the sleeps were the disease.
 
-All assert "does this survive a reload" **without first confirming the save
-landed**. `the builder warns when the live site is behind` was the same
-shape and has been fixed by waiting for the indicator it asserts.
-
-**The honest fix is to poll the save signal across all of them**, not to
-lengthen sleeps. `#saveState` reads "SAVED" before an edit too, so it is not
-a usable signal on its own — `#saveState` plus a dirty flag, or wait for the
-change to round-trip.
-
-Do not "fix" this by bumping timeouts. That hides the order dependence.
+**Product-level fix shipped same day (25 Oct, builder.js):** the generation
+number is bumped when an edit lands, not when the debounced save fires, and
+a newer edit aborts the older in-flight PUT immediately — so a save that
+predates the current edit can no longer paint the pip "Saved" behind stale
+bytes, and older PUTs cannot land after newer ones. The server-side
+`updated_at` guard (refuse a write older than what is stored) is still
+future work; the client can abort its own saves, two tabs can still race.
+Do not hotfix that blindly.
 
 ## 4. ROTATE_SECRETS.md — NEEDS A HUMAN
 
