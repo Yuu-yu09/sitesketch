@@ -7,6 +7,39 @@ first.
 State at the end of the last session: **24 commits, working tree clean,
 `local == origin/main` at `91f809c`.**
 
+## Session update (25 Oct)
+
+- **Gallery control shipped** (the owner asked for it): Photos per row
+  (2-5) and Spacing (tight/normal/roomy) live on the gallery's block
+  panel, stored as `style.columns`/`style.gap`, emitted as
+  `--sec-grid`/`--sec-gap`. Design reversed once mid-build on evidence:
+  `variantFor` hashes *every* fresh gallery into masonry or spotlight, so
+  the first draft (user yields to variant) would never have applied — an
+  explicit count now overrides the preset, phones drop to two-up.
+  Commit `8049bc1`.
+- **Navbar built; item 1 below is fixed** — labels shortened by the rule
+  the item demanded (decided first: known phrases → standard short form,
+  word-boundary cut ≤24 chars, typed labels untouched; footer links get
+  the same rule), plus a navbar style choice (bar/minimal/outline — the
+  variants `generated.css` always had) and an opt-in per-link icon
+  following the link's section type. KNOWN_BUGS #13 carries the second
+  fix. One commit.
+- **New test order bug found and fixed by repositioning, not by code:**
+  the nav check was first registered between "menu panel lists every
+  page" and the menu chain, but that chain runs on whatever page the
+  previous check left open and needs two pages — five menu/publish
+  checks failed with `setup failed` style errors until the nav check
+  moved next to the gallery check (both seed their own throwaway
+  projects). Lesson recorded: a check that navigates is not free to
+  insert anywhere.
+- **The rotating flake rotated again** during that wrong-order run:
+  `published nav reaches the sections` failed once with a custom link
+  (`https://example.com/social`) still in a published nav — the
+  round-trip test's restore save had not landed, which is item 3's exact
+  shape. Green across the run after this entry. Item 3 still open.
+
+---
+
 ## Session update (24 Oct)
 
 - **Drag-and-drop fixed.** Root cause: `onEnd` destroyed and re-created
@@ -47,23 +80,21 @@ State at the end of the last session: **24 commits, working tree clean,
 
 ---
 
-## 1. Nav and footer links are full sentences — BUG, found in a screenshot
+## 1. Nav and footer links are full sentences — FIXED (25 Oct)
 
 **Mine. Introduced by the navbar-section-anchor change on 14 Oct.**
 
     Home · Our Signature Bowls · Born in Tokyo and raised in Melbourne.
     · Late Night Opening Hours
 
-`labelFor()` in `site.js` uses the section **title**, but AI titles are
-complete headlines. "Born in Tokyo and raised in Melbourne." is not a nav
-label. Shows on any site with an `about` or quote section.
+`labelFor()` in `site.js` used the section **title**, but AI titles are
+complete headlines. "Born in Tokyo and raised in Melbourne." is not a
+nav label. Shows on any site with an `about` or quote section.
 
-Reproduced on a live publish — screenshot at
-`%TEMP%/opencode/shots/wiz-live.png`.
-
-**Not diagnosed yet, so measure first.** Likely fix: trim to a short label,
-and let the Menu panel's label field (which already exists) carry it. Do not
-guess the trimming rule — decide what a nav label should be before coding it.
+Was reproduced on a live publish — screenshot at
+`%TEMP%/opencode/shots/wiz-live.png`. Fixed the same day by the rule the
+item demanded (decided before coding — see the session note above); see
+KNOWN_BUGS #13's second fix.
 
 ## 2. Menu cards render as blobs — BUG, undiagnosed
 

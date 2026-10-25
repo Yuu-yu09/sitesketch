@@ -811,9 +811,53 @@ function navItems(plan) {
   SS.navItems = navItems;
   SS.safeHref = safeHref;
 
+  /* ---------- nav labels and icons ---------- */
+
+  /* What a nav label is: at most one short phrase. AI-written section
+     titles are complete headlines - "Born in Tokyo and raised in
+     Melbourne." is a sentence, not a nav item - so when a link falls back
+     to its section's title, the title gets the shortening rule applied.
+     A label the user typed themselves is never touched. */
+  var NAV_SHORTEN = {
+    "frequently asked questions": "FAQ",
+    "questions and answers": "FAQ",
+    "common questions": "FAQ",
+    "contact us": "Contact",
+    "about us": "About",
+    "our story": "Our story",
+    "opening hours": "Hours",
+    "our location": "Find us"
+  };
+  var NAV_SHORTEN_MAX = 24;
+
+  function shortNavLabel(full) {
+    var lower = String(full || "").toLowerCase();
+    if (NAV_SHORTEN[lower]) return NAV_SHORTEN[lower];
+    var t = String(full || "").replace(/[.\s]+$/, "");
+    if (t.length <= NAV_SHORTEN_MAX) return t;
+    var cut = t.slice(0, NAV_SHORTEN_MAX + 12);
+    var atSpace = cut.lastIndexOf(" ");
+    if (atSpace >= 12) cut = cut.slice(0, atSpace);
+    return cut.replace(/[.\s]+$/, "");
+  }
+  SS.shortNavLabel = shortNavLabel;
+
+  /* Icons ride on the site's own section vocabulary: the same picture a
+     type shows everywhere else. section entries get their type's icon;
+     plain page entries get the first section type on that page, home gets
+     a door. Compiled in the browser like everything else, so no script
+     ever reaches the published page. */
+  var NAV_ICONS = {
+    hero: "bi-house-door", about: "bi-person", features: "bi-grid",
+    gallery: "bi-images", images: "bi-images", testimonials: "bi-chat-quote",
+    menu: "bi-list-ul", products: "bi-bag", team: "bi-people",
+    contact: "bi-envelope", hours: "bi-clock", faq: "bi-question-circle",
+    services: "bi-star", pricing: "bi-tags", blog: "bi-journal",
+    newsletter: "bi-envelope-paper", cta: "bi-megaphone", story: "bi-book",
+    quote: "bi-chat-left-quote"
+  };
   function navHTML(plan, pageId, spec, options) {
-    options = options || {};
-    var meta = plan.meta || {};
+    options = options || {};    var meta = plan.meta || {};
     var name = meta.siteName || "SiteSketch";
     var pages = plan.pages || [];
     var homeId = pages.length ? pages[0].id : pageId;
@@ -860,7 +904,10 @@ function navItems(plan) {
     }
 
     /* A section entry is named after the section, not the page. Its title is
-       already written - that is the whole reason for defaulting to these. */
+       already written - that is the whole reason for defaulting to these.
+       The title passes through the shortening rule: nav labels are short
+       phrases, and AI titles are headlines. Labels the user typed stay as
+       they are. */
     function labelFor(entry) {
       if (entry.label) return entry.label;
       if (entry.sectionId) {
@@ -870,10 +917,40 @@ function navItems(plan) {
         var sec = host && (host.sections || []).filter(function (s) {
           return s.id === entry.sectionId;
         })[0];
-        if (sec && sec.title) return sec.title;
+        if (sec && sec.title) return shortNavLabel(sec.title);
       }
-      return nameOf(entry.pageId, entry.label);
+      return shortNavLabel(nameOf(entry.pageId, entry.label));
     }
+
+    /* The icon for a nav link when the toggle is on. The target decides:
+       a section entry wears its section type's icon, a page entry wears
+       the first section on that page, the home page wears a door. */
+    function iconTypeFor(entry) {
+      if (entry && entry.sectionId) {
+        var host = pages.filter(function (p) {
+          return p.id === (entry.pageId || homeId);
+        })[0] || pages[0];
+        var sec = host && (host.sections || []).filter(function (s) {
+          return s.id === entry.sectionId;
+        })[0];
+        return sec && sec.type;
+      }
+      var id = entry && typeof entry === "object" ? entry.pageId : entry;
+      if (id === homeId) return "hero";
+      var page = pages.filter(function (p) { return p.id === id; })[0];
+      var first = page && page.sections && page.sections[0];
+      return first ? first.type : "";
+    }
+
+    function iconFor(entry) {
+      if (!iconsOn) return "";
+      var icon = NAV_ICONS[iconTypeFor(entry)] || "";
+      if (!icon) return "";
+      return '<i class="bi ' + icon + '" aria-hidden="true"></i>';
+    }
+    /* opt-in: a site the user has already published must not change
+       appearance because a feature landed. */
+    var iconsOn = spec.navIcons === true;
 
     /* `entry` rather than `target`/`label` separately: a custom link has no
        pageId to pass, so the two-argument form could not express one. */
@@ -885,7 +962,7 @@ function navItems(plan) {
       return '<a href="' + esc(hrefFor(entry)) + '"' +
         (current ? ' aria-current="page" style="color:var(--text)"' : "") +
         (sub ? ' class="ss-sublink"' : "") + ">" +
-        esc(labelFor(entry)) + "</a>";
+        iconFor(entry) + esc(labelFor(entry)) + "</a>";
     }
 
     var visible = navItems(plan).filter(function (i) { return i.visible; });
@@ -987,7 +1064,10 @@ function navItems(plan) {
           var sec = host && (host.sections || []).filter(function (s) {
             return s.id === entry.sectionId;
           })[0];
-          if (sec && sec.title) label = sec.title;
+          /* the same shortening rule the navbar applies: a footer link
+             reading "Born in Tokyo and raised in Melbourne." is the same
+             bug wearing a different column */
+          if (sec && sec.title) label = shortNavLabel(sec.title);
         }
         return '<a href="' + esc(href) + '">' + esc(label) + "</a>";
       }).join("");

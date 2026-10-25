@@ -1719,6 +1719,91 @@ def run(page, phase=None):
     check("gallery grid controls reach the page",
           t_gallery_grid_controls_reach_the_page)
 
+    def t_nav_abbreviates_titles_and_can_add_icons():
+        """Nav labels were full AI headlines: 'Born in Tokyo and raised in
+        Melbourne.' sat in the navbar of a live site.
+
+        The rule was decided before the code: a nav label is one short
+        phrase. Known phrases become their standard short form, a long
+        title is cut at a word boundary, and a label the user typed is
+        never touched. Icons are opt-in and follow each link's section -
+        a published site must not change appearance because the feature
+        landed.
+        """
+        pid = page.evaluate("""async () => {
+          const plan = {
+            pages: [{id: 'home', name: 'Home', sections: [
+              {id: 's_hero', type: 'hero', title: 'Hero', subtitle: 'x', fields: {}, items: []},
+              {id: 's_about', type: 'about', title: 'Born in Tokyo and raised in Melbourne.',
+               subtitle: 'y', fields: {}, items: []},
+              {id: 's_faq', type: 'faq', title: 'Frequently Asked Questions',
+               subtitle: 'z', fields: {}, items: []}]}],
+            nav: [
+              {pageId: 'home', label: '', visible: true, children: []},
+              {pageId: 'home', sectionId: 's_about', label: '', visible: true, children: []},
+              {pageId: 'home', sectionId: 's_faq', label: '', visible: true, children: []}
+            ]};
+          const r = await fetch('/api/projects', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ' + localStorage.getItem('sitesketch_token_v1'),
+              },
+              body: JSON.stringify({name: 'Nav check', type: 'business', goal: 'get-contact',
+                                    plan_json: plan})});
+          if (r.status !== 201) return null;
+          return (await r.json()).id;
+        }""")
+        assert pid, "could not seed the nav project"
+
+        page.goto(f"{BASE}/builder.html?id={pid}", wait_until="domcontentloaded")
+        page.wait_for_selector(".ss-navlinks a", timeout=SLOW)
+        page.wait_for_timeout(1200)
+
+        def nav_texts():
+            return page.evaluate(
+                "() => [...document.querySelectorAll('.ss-navlinks a')]"
+                ".map(a => a.textContent.trim())")
+
+        texts = nav_texts()
+        assert any(t == "FAQ" for t in texts), \
+            f"the known phrase was not abbreviated: {texts}"
+        assert any(t.startswith("Born in Tokyo and") and len(t) <= 28
+                   for t in texts), \
+            f"the headline was not cut to a phrase: {texts}"
+        # opt-in means untouched until asked for
+        assert page.locator(".ss-navlinks a .bi").count() == 0, \
+            "icons are on before anyone asked for them"
+
+        if page.get_attribute("#menuBtn", "aria-pressed") != "true":
+            page.click("#menuBtn")
+            page.wait_for_selector("#navStylePick", timeout=SLOW)
+            page.wait_for_timeout(500)
+
+        page.select_option("#navIconsPick", "on")
+        page.wait_for_timeout(1000)
+        got = page.evaluate(
+            "() => [...document.querySelectorAll('.ss-navlinks a .bi')]"
+            ".map(i => i.className)")
+        assert len(got) == len(nav_texts()), \
+            f"icons did not land on every link: {got}"
+
+        page.select_option("#navStylePick", "outline")
+        page.wait_for_timeout(800)
+        cls = page.get_attribute("#canvas nav.ss-nav", "class")
+        assert "ss-nav--outline" in (cls or ""), \
+            f"the navbar style choice did not reach the page: {cls}"
+
+        # a label the user typed is their words, untouched by the rule
+        lab = page.locator("[data-nav-label]").first
+        lab.fill("Our whole long story")
+        page.wait_for_timeout(1200)
+        assert any(t == "Our whole long story" for t in nav_texts()), \
+            f"a typed label was rewritten: {nav_texts()}"
+
+    check("nav labels abbreviate and the navbar is stylable",
+          t_nav_abbreviates_titles_and_can_add_icons)
+
     def t_picking_a_card_image_keeps_the_section():
         """Picking a picture on a card used to replace the section's whole
         items array with a URL string, so the next render threw
@@ -1997,6 +2082,8 @@ def run(page, phase=None):
             "registering its handlers again on every rebuild"
 
     check("menu panel lists every page", t_menu_panel_lists_every_page)
+
+
     check("renaming a menu item changes the nav", t_renaming_a_menu_item_changes_the_nav)
     check("a page can be taken out of the menu", t_a_page_can_be_taken_out_of_the_menu)
     check("menu items can be reordered", t_menu_items_can_be_reordered)
@@ -2062,7 +2149,7 @@ def run(page, phase=None):
     def t_published_page_metadata():
         """The homepage is titled and described as the site, not as "Home"."""
         title = page.title()
-        assert "·" not in title, f"homepage title looks like a sub-page: {title!r}"
+        assert "Â·" not in title, f"homepage title looks like a sub-page: {title!r}"
         assert title.strip(), "empty title"
         desc = page.evaluate(
             "() => (document.querySelector('meta[name=description]')||{}).content"
@@ -2390,7 +2477,7 @@ def run(page, phase=None):
             assert "Terms of use" in p.title(), p.title()
             body = p.inner_text("body")
             assert "Your content" in body, "terms page did not render"
-            assert "—" not in p.inner_text("#legalDate"), "the date placeholder was never filled"
+            assert "â€”" not in p.inner_text("#legalDate"), "the date placeholder was never filled"
         finally:
             p.close()
 

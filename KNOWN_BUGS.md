@@ -521,6 +521,22 @@ resolves to nothing. The published site was fine, so a test that only looked
 at `/site/<slug>` would have passed. The builder is the in-place preview
 and has to be checked separately.
 
+**Second fix (25 Oct): the links were real but labelled with whole
+headlines.** The same `Cooked slow and served...` line above is a section
+*title* used as a nav label, because a link falls back to its section's
+title when the user typed no label. AI titles are sentences, not nav
+items. Rule decided before coding: a nav label is one short phrase —
+known phrases become their standard short form ("Frequently Asked
+Questions" → FAQ), longer titles are cut at a word boundary (≤24 chars),
+trailing punctuation dropped, and a label the user typed is never
+touched. The footer's section links get the same rule. The navbar also
+gained what it never had: a style choice (bar/minimal/outline, the three
+variants the compiled CSS always had but nothing exposed) and an opt-in
+icon per link, following the link's own section type — off by default so
+no published site changes appearance when the feature lands. Suite:
+one new check drives abbreviation, the icon toggle, the style pick and
+the typed-label guarantee on a seeded throwaway project.
+
 ## 14. The footer colour swatch lies about what is on screen — FIXED
 
 **Seen as:** the Footer's Background swatch showing an empty white square

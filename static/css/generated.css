@@ -154,6 +154,14 @@
 .ss-navlinks { display: flex; gap: 1.4rem; }
 .ss-navlinks a { text-decoration: none; color: var(--muted); font-size: calc(.95rem * var(--type-scale, 1)); }
 .ss-navlinks a:hover { color: var(--text); }
+/* icons opt in with the menu panel's toggle. em sizes ride the link's own
+   scaled font size, so no hardcoded px can drift off the type scale. */
+.ss-navlinks a .bi {
+  margin-right: .45em;
+  font-size: .95em;
+  vertical-align: -.1em;
+  opacity: .8;
+}
 
 /* ---------- submenus ----------
    A dropdown needs the parent to be its own box so the panel can sit under

@@ -527,6 +527,9 @@ EditorUI.menuPanel = function (host) {
     var Editor = window.Editor;
     var plan = Editor.plan;
     var SSr = window.SS;
+    /* the design spec carries the navbar look (spec.nav) and the icon
+       toggle (spec.navIcons), next to where the section variants live */
+    var spec = Editor.spec();
 
     /* The menu as a writable list, read fresh from the plan.
 
@@ -754,6 +757,26 @@ EditorUI.menuPanel = function (host) {
             "Add link</button>" +
           '<p class="hint">Any address: a website, a mailto: or a tel: number.</p>' +
         "</fieldset>" +
+      "</div>" +
+
+      '<div class="panel-section"><h3>Navbar</h3>' +
+        '<label class="field"><span>Navbar style</span>' +
+          '<select id="navStylePick">' +
+            [["bar", "Bar - solid strip at the top"],
+             ["minimal", "Minimal - floats over the page"],
+             ["outline", "Outline - a line under the brand"]].map(function (pair) {
+              return '<option value="' + pair[0] + '"' +
+                ((spec.nav || "bar") === pair[0] ? " selected" : "") + ">" +
+                SSr.esc(pair[1]) + "</option>";
+            }).join("") +
+          "</select></label>" +
+        '<label class="field"><span>Icons beside links</span>' +
+          '<select id="navIconsPick">' +
+            '<option value="off"' + (spec.navIcons ? "" : " selected") + ">Off</option>" +
+            '<option value="on"' + (spec.navIcons ? " selected" : "") + ">On - matches each link's section</option>" +
+          "</select></label>" +
+        '<p class="hint">Long section titles are shortened for you - ' +
+          '"Frequently Asked Questions" becomes FAQ. A label you type yourself stays as it is.</p>' +
       "</div>";
 
     /* ---- wiring ---- */
@@ -930,6 +953,25 @@ EditorUI.menuPanel = function (host) {
         }
       });
     }
+
+    /* Navbar look and icons. Direct listeners on element this rebuild
+       created, so a stale closure cannot survive a structural edit and no
+       accumulation is possible. Both write to the design spec, the same
+       place the section variants live, so they round-trip with the plan. */
+    function navSpec(key, value) {
+      var s = Editor.spec();
+      s[key] = value;
+      Editor.render();
+      if (Editor.onChange) Editor.onChange("design:" + key);
+    }
+    var stylePick = host.querySelector("#navStylePick");
+    if (stylePick) stylePick.addEventListener("change", function () {
+      navSpec("nav", this.value);
+    });
+    var iconPick = host.querySelector("#navIconsPick");
+    if (iconPick) iconPick.addEventListener("change", function () {
+      navSpec("navIcons", this.value === "on");
+    });
   };
 
   /* Every remaining colour control, in one place.
