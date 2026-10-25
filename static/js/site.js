@@ -1100,6 +1100,16 @@ function navItems(plan) {
     if (s.radius !== undefined) css.push("--sec-radius:" + s.radius);
     if (s.height) css.push("--sec-min-height:" + s.height);
 
+    /* Gallery grid controls. The gallery panel is the only setter, and
+       validated below so a hand-edited plan cannot emit nonsense into
+       grid-template-columns. Masonry and spotlight decide their own
+       arrangements on purpose - generated.css orders the rules so their
+       templates win - but the spacing applies to every gallery variant. */
+    var cols = parseInt(s.columns, 10);
+    if (cols >= 2 && cols <= 5) css.push("--sec-grid:repeat(" + cols + ", 1fr)");
+    var gap = { tight: ".9rem", normal: "1.6rem", roomy: "2.4rem" }[s.gap];
+    if (gap) css.push("--sec-gap:" + gap);
+
     if (section.align === "center") css.push("--sec-align:center");
 
     if (!css.length) return html;

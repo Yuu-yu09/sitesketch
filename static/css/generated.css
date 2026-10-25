@@ -288,6 +288,18 @@
   gap: var(--gap);
   margin-top: 2rem;
 }
+/* Gallery grid controls, set per section from the block panel.
+   Spacing applies everywhere on the gallery. A column choice is a real
+   constraint: the attribute-guarded rule below deliberately sits AFTER
+   the variant presets so the user's count wins even over masonry and
+   spotlight - a control that works only "sometimes" is a control that
+   lies. On phones a chosen row count becomes two-up. */
+.g-gallery .ss-grid {
+  gap: var(--sec-gap, var(--gap));
+}
+@media (max-width: 720px) {
+  .g-gallery .ss-grid[style*="--sec-grid"] { grid-template-columns: repeat(2, 1fr); }
+}
 .ss-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -512,6 +524,15 @@
 @media (max-width: 720px) {
   .v-masonry .ss-grid, .v-spotlight .ss-grid { grid-template-columns: repeat(2, 1fr); }
   .v-spotlight .ss-card:first-child { grid-row: auto; grid-column: 1 / -1; }
+}
+
+/* the user's own gallery column count, deliberately after the presets so
+   it beats them - see the gallery grid comment above. Desktop only: on
+   phones the two-up rule below is the promise the panel's note repeats. */
+@media (min-width: 721px) {
+  .g-gallery .ss-grid[style*="--sec-grid"] {
+    grid-template-columns: var(--sec-grid);
+  }
 }
 
 /* quote blocks */

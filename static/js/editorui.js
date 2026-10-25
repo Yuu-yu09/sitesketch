@@ -1203,6 +1203,33 @@ EditorUI.footerPanel = function (host) {
   /* The WordPress "block settings" sidebar: everything you can change
      about one section, without leaving the page. Values live in
      section.style and are written as --sec-* custom properties. */
+  /* The gallery-only grid controls: photos per row and the space between
+     them. The count applies to every layout, including masonry and
+     spotlight - the note says so plainly, because a control that worked
+     "except when" would be one that lies. */
+  function galleryGridPanel(section, style) {
+    return '<div class="panel-section"><h3>Gallery grid</h3>' +
+      '<label class="field"><span>Photos per row</span>' +
+        '<select id="blockColumns">' +
+          ["", "2", "3", "4", "5"].map(function (n) {
+            return '<option value="' + n + '"' +
+              ((style.columns || "") === n ? " selected" : "") + ">" +
+              (n === "" ? "Default (fills the width)" : n) + "</option>";
+          }).join("") +
+        "</select></label>" +
+      '<label class="field"><span>Spacing</span>' +
+        '<select id="blockGap">' +
+          ["", "tight", "normal", "roomy"].map(function (g) {
+            return '<option value="' + g + '"' +
+              ((style.gap || "") === g ? " selected" : "") + ">" +
+              (g === "" ? "Theme default" : g.charAt(0).toUpperCase() + g.slice(1)) +
+              "</option>";
+          }).join("") +
+        "</select></label>" +
+      '<p class="hint">Applies to every layout, including Masonry and ' +
+        "Spotlight. Phones show two per row.</p></div>";
+  }
+
   EditorUI.blockPanel = function (host) {
     var Editor = window.Editor;
     var section = Editor.currentSection();
@@ -1260,6 +1287,8 @@ EditorUI.footerPanel = function (host) {
             }).join("") +
           "</select></label>" +
       "</div>" +
+
+      (section.type === "gallery" ? galleryGridPanel(section, style) : "") +
 
       '<div class="panel-section">' +
         "<h3>Colours</h3>" +
@@ -1329,6 +1358,14 @@ EditorUI.footerPanel = function (host) {
     host.querySelector("#blockText").addEventListener("input", function () { set("textColor", this.value); });
     host.querySelector("#blockAccent").addEventListener("input", function () { set("accent", this.value); });
     host.querySelector("#blockRadius").addEventListener("change", function () { set("radius", this.value || null); });
+
+    /* gallery grid controls */
+    var colPick = host.querySelector("#blockColumns");
+    if (colPick) colPick.addEventListener("change", function () {
+      set("columns", this.value || null);
+    });
+    var gapPick = host.querySelector("#blockGap");
+    if (gapPick) gapPick.addEventListener("change", function () { set("gap", this.value || null); });
 
     host.querySelectorAll("[data-clear]").forEach(function (button) {
       button.addEventListener("click", function () {

@@ -1650,6 +1650,75 @@ def run(page, phase=None):
     check("cards do not all show the same photo",
           t_cards_do_not_all_show_the_same_photo)
 
+    def t_gallery_grid_controls_reach_the_page():
+        """The gallery got per-photo controls a while back; the grid itself
+        had no controls at all - columns and spacing were fixed by the
+        theme. The user asked for the grid. Assert on the computed layout,
+        not on the presence of the selects.
+
+        Uses its own restaurant project: the rail differs per site type and
+        the business fixture's rail offers no gallery (the rail test below
+        this file's own comment already tripped over that assumption once).
+        """
+        pid = page.evaluate("""async () => {
+            const r = await fetch('/api/projects', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + localStorage.getItem('sitesketch_token_v1'),
+                },
+                body: JSON.stringify({
+                    name: 'Gallery grid check',
+                    type: 'restaurant', goal: 'get-contact',
+                    plan_json: {"pages": [{"id": "home", "name": "Home", "sections": [
+                        {"id": "s_gal_hero", "type": "hero", "title": "Hero",
+                         "subtitle": "x", "fields": {}, "items": []}]}]},
+                }),
+            });
+            if (r.status !== 201) return null;
+            return (await r.json()).id;
+        }""")
+        assert pid, "could not seed a restaurant project for the gallery check"
+
+        page.goto(f"{BASE}/builder.html?id={pid}", wait_until="domcontentloaded")
+        page.wait_for_selector("#rail [data-key='gallery']", timeout=SLOW)
+        page.wait_for_timeout(1200)
+        page.click("#rail [data-key='gallery']")
+        page.wait_for_selector("#canvas .g-gallery", timeout=SLOW)
+        page.wait_for_timeout(1200)
+
+        # select the gallery and open its section settings. The floating
+        # toolbar lives on the body, not inside the section it serves.
+        page.click("#canvas .g-gallery")
+        page.wait_for_timeout(500)
+        page.click("[data-do='settings']")
+        page.wait_for_selector("#blockColumns", timeout=SLOW)
+
+        page.select_option("#blockColumns", "3")
+        page.wait_for_timeout(900)
+        cols = page.evaluate(
+            "() => { const g = document.querySelector('#canvas .g-gallery .ss-grid');"
+            " return getComputedStyle(g).gridTemplateColumns.split(' ').length; }")
+        assert cols == 3, f"chose 3 per row, the grid computed {cols} columns"
+
+        # the choice is a per-section style, not a global grid change
+        attr = page.evaluate(
+            "() => { const s = document.querySelector('#canvas .g-gallery');"
+            " return (s.getAttribute('style') || '').includes('--sec-grid'); }")
+        assert attr, "the column choice was not written as a section style"
+
+        page.select_option("#blockGap", "roomy")
+        page.wait_for_timeout(900)
+        gap = page.evaluate(
+            "() => getComputedStyle(document.querySelector('#canvas .g-gallery .ss-grid'))"
+            ".columnGap")
+        # roomy = 2.4rem; getComputedStyle resolves rem against the root size
+        assert abs(float(gap[:-2]) - 2.4 * 16) < 1.5, \
+            f"chose roomy spacing, the grid computed {gap}"
+
+    check("gallery grid controls reach the page",
+          t_gallery_grid_controls_reach_the_page)
+
     def t_picking_a_card_image_keeps_the_section():
         """Picking a picture on a card used to replace the section's whole
         items array with a URL string, so the next render threw
