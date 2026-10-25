@@ -366,12 +366,37 @@ intercepting overlay and no server error — the suite clicked inside the
 same dead window whenever Supabase connect was slow). The suite's zip
 checks now wait for the project to load before clicking.
 
-**The screenshot's 404 is NOT REPRODUCED.** No 404 was served by the dev
-server in the whole logged window, and no `/site/...` request in it 404'd.
-If the owner sees the "We couldn't find that page" screen again, record
-the exact address shown in the browser bar — all 404 pages in this app now
-say what was asked for server-side, so one sighting with the address
-settles it.
+**The screenshot's 404 - REPRODUCED AND FIXED the same day, and it was the
+deployment, not the dev server.** The next sighting's screenshot carried
+the browser bar: `sitesketch.vercel.app/site/menu` - a published site on
+the Vercel deployment. Measurements that pinned it:
+
+- same slug, same minute: local `/site/menu` **200** (32 KB, site CSP),
+  deployed `/site/menu` **404** with the app's *general* CSP
+  (`script-src 'self'`) and the generic "Page not found" page - the shape
+  only `@app.errorhandler(404)` can produce, i.e. the Flask function ran
+  and **matched no route at all**; if it had run `site_home` and merely
+  found no row, the reply would have been "This site isn't published"
+  with `script-src 'none'`.
+- the deployment talks to the **same database**: an account + project
+  created through the deployed app's own HTTP API landed in the local
+  `DATABASE_URL` with the deployment-assigned UUID (`vercel_probe.py`),
+  so it is not a second database.
+- `/api/auth/register`, `/api/health` 200 through the alias - so the
+  Flask preset delivers unmatched-by-static paths to `app.py` with their
+  original path intact, and `/static/*` assets serve fine.
+- therefore the only layer that changed shape was `vercel.json`: the
+  three `/site/:slug` rewrites pointed at destination `/app.py`, which
+  replaces the path the function receives - `/site/menu` reached Flask
+  as `/app.py`, which no route serves → generic 404. Every `/site/*`
+  address on the deployment, for any owner, since those rewrites landed.
+
+**Fix:** the rewrites were removed; nothing else in `vercel.json` changes
+(`functions`/`maxDuration`/`excludeFiles` stay). The published-site route
+now behaves like the `/api` routes that always worked: one function, the
+real path, Flask's own routing. The deployment is the only place this
+routing exists, so the fix's verification is the deployed alias itself:
+`/site/<slug>` and `/site/<slug>/<page>` must return 200 after the build.
 
 ## 10. Every "Pages" link in the footer is dead — FIXED
 

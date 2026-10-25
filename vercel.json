@@ -6,10 +6,5 @@
       "maxDuration": 60,
       "excludeFiles": "{.venv/**,tests/**,.impeccable/**,supabase/**,shot.html,*.md}"
     }
-  },
-  "rewrites": [
-    { "source": "/site/:slug", "destination": "/app.py" },
-    { "source": "/site/:slug/", "destination": "/app.py" },
-    { "source": "/site/:slug/:page", "destination": "/app.py" }
-  ]
+  }
 }
