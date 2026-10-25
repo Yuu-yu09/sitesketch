@@ -55,24 +55,66 @@
       }
 
       /* ---------------- saving ---------------- */
+      /* Monotonic save generation. The number is bumped when an EDIT
+         lands, not when the debounced save fires - that is the whole
+         point. A save that was already in the network belongs to a
+         plan that predates the current edit, so its response says
+         nothing about the bytes the pip advertises, and only a save
+         carrying the current generation may touch the pip at all.
+         Without this a pre-edit PUT's response could still read
+         "Saved" while the edit that prompted the reload had not left
+         the browser - measured 25 Oct: PUT landed, GET one second
+         later read updated_at stamped before the edit (bugs 17-x in
+         TOMORROW item 3).
+
+         Each save opens its own database connection and those have
+         been observed taking seconds, so two full-plan PUTs could sit
+         in the network at once and the server kept whichever landed
+         last - not last-written. A newer edit therefore also aborts
+         the older in-flight PUT immediately. */
+      var saveSeq = 0;
+      var saveCtl = null;
+
       function markDirty() {
+        if (saveCtl) {
+          saveCtl.abort();      /* newer edit: the older PUT must not land */
+          saveCtl = null;
+        }
+        saveSeq += 1;           /* older responses no longer say anything */
         saveState.classList.add("dirty");
         saveState.innerHTML = '<span class="pip"></span> Saving…';
         clearTimeout(saveTimer);
-        saveTimer = setTimeout(function () {
-          API.savePlan(plan.id, plan).then(function (res) {
+        saveTimer = setTimeout(saveNow, 700);
+      }
+
+      function saveNow() {
+        var seq = saveSeq;      /* the newest generation */
+        saveCtl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+        API.savePlan(plan.id, plan, { signal: saveCtl && saveCtl.signal }).then(function (res) {
+          if (seq !== saveSeq) return;     /* superseded; the pip belongs to the newest save */
+          saveCtl = null;
+          saveState.classList.remove("dirty");
+          if (!res.ok) {
+            saveState.innerHTML = '<span class="pip"></span> Not saved';
+            SS.toast(res.error || "Could not save", "bi-exclamation-triangle");
+            return;
+          }
+          saveState.innerHTML = '<span class="pip"></span> Saved';
+          /* the save moved updated_at forward, so a published site is now
+             behind the editor */
+          if (res.project) refreshLiveState(res.project);
+        }).catch(function (e) {
+          /* An aborted save is superseded by the newer edit that cancelled
+             it; the newest save's own response paints the pip. Swallow
+             only aborts - anything else is a failed save the user must
+             hear about on the next completion. */
+          if (!(e && e.name === "AbortError") && seq === saveSeq) {
+            saveCtl = null;
             saveState.classList.remove("dirty");
-            if (!res.ok) {
-              saveState.innerHTML = '<span class="pip"></span> Not saved';
-              SS.toast(res.error || "Could not save", "bi-exclamation-triangle");
-              return;
-            }
-            saveState.innerHTML = '<span class="pip"></span> Saved';
-            /* the save moved updated_at forward, so a published site is now
-               behind the editor */
-            if (res.project) refreshLiveState(res.project);
-          });
-        }, 700);
+            saveState.innerHTML = '<span class="pip"></span> Not saved';
+            SS.toast("Save failed: " + (e && e.message || e), "bi-exclamation-triangle");
+          }
+        });
       }
 
       function changed() {

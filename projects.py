@@ -8,7 +8,10 @@ builder, the compiled site and the publish flow.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
+import os
 import re
 
 from flask import Blueprint, jsonify, request
@@ -18,6 +21,44 @@ import db
 import published_html
 
 bp = Blueprint("projects", __name__, url_prefix="/api/projects")
+
+# SKETCH_SAVE_TRACE=1 makes every plan write log what actually arrived:
+# which tokens were set, how many items each wall had, and a short hash of
+# the content. Exists to diagnose "the reload showed the pre-edit value" -
+# a save the pip called Saved whose bytes the server never kept.
+log = logging.getLogger("save-trace")
+if os.environ.get("SKETCH_SAVE_TRACE") and not log.handlers:
+    # The root logger defaults to WARNING and has the werkzeug handler, so a
+    # bare log.info() silently disappears. Own the wiring for this logger.
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    log.addHandler(_h)
+    log.setLevel(logging.INFO)
+    log.propagate = False
+
+
+def _trace(op: str, pid: str, body: dict) -> None:
+    if not os.environ.get("SKETCH_SAVE_TRACE"):
+        return
+    pj = body.get("plan_json")
+    if not isinstance(pj, dict):
+        log.info("%s %s body-keys=%s", op, pid[-6:], sorted(body.keys()))
+        return
+    design = pj.get("design") or {}
+    tokens = design.get("tokens") or {}
+    colour = tokens.get("colour") or {}
+    typ = tokens.get("type") or {}
+    walls = [
+        len(s.get("items") or [])
+        for pg in pj.get("pages") or []
+        for s in (pg.get("sections") or [])
+        if s.get("type") == "images"
+    ]
+    digest = hashlib.sha1(
+        json.dumps(pj, sort_keys=True, default=str).encode()).hexdigest()[:6]
+    log.info("%s %s h=%s pages=%d walls=%s accent=%s scale=%s keys=%s",
+             op, pid[-6:], digest, len(pj.get("pages") or []), walls,
+             colour.get("accent"), typ.get("scale"), sorted(pj.keys()))
 
 NOT_SLUG = re.compile(r"[^a-z0-9]+")
 
@@ -148,6 +189,7 @@ def create():
             body.get("slug"),
         ),
     )
+    _trace("NEW", str(row["id"]), body)
     return jsonify(serialize(row)), 201
 
 
@@ -157,6 +199,19 @@ def show(pid: str):
     row = _owned(pid)
     if not row:
         return jsonify(error="Project not found"), 404
+    if os.environ.get("SKETCH_SAVE_TRACE"):
+        plan = row.get("plan_json") or {}
+        design = plan.get("design") or {}
+        tokens = design.get("tokens") or {}
+        colour = tokens.get("colour") or {}
+        typ = tokens.get("type") or {}
+        up, pub = row.get("updated_at"), row.get("published_at")
+        delta = None
+        if up and pub:
+            delta = round((up - pub).total_seconds(), 3)
+        log.info("GET %s accent=%s scale=%s pub=%s upd-pub=%s upd=%s pub=%s",
+                 pid[-6:], colour.get("accent"), typ.get("scale"),
+                 bool(row.get("is_published")), delta, up, pub)
     return jsonify(serialize(row))
 
 
@@ -183,6 +238,7 @@ def update(pid: str):
     if "plan_json" in body:
         sets.append("plan_json = %s::jsonb")
         params.append(json.dumps(body["plan_json"] or {}))
+        _trace("PUT", pid, body)
 
     if not sets:
         row = _owned(pid)
@@ -227,6 +283,13 @@ def publish(pid: str):
         " where id = %s::uuid and user_id = %s::uuid returning *",
         (slug, json.dumps(pages), home, pid, get_jwt_identity()),
     )
+    if os.environ.get("SKETCH_SAVE_TRACE") and isinstance(row, dict):
+        plan = row.get("plan_json") or {}
+        design = plan.get("design") or {}
+        colour = (design.get("tokens") or {}).get("colour") or {}
+        log.info("PUB %s accent=%s pages=%d pub_at=%s",
+                 pid[-6:], colour.get("accent"), len(pages or {}),
+                 row.get("published_at"))
     return jsonify(serialize(row))
 
 

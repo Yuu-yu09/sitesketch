@@ -62,11 +62,27 @@
     }
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, ms);
+    /* The caller may abort for its own reasons (the autosave cancels an
+       older save when a newer edit fires). Wire that signal into the one
+       that actually drives the fetch, and keep both distinguishable: a
+       timeout becomes isTimeout, a cancelled-by-caller rethrows as-is so
+       the caller can recognise its own abort. */
+    var external = options && options.signal;
+    var onAbort = function () { controller.abort(); };
+    if (external) {
+      if (external.aborted) controller.abort();
+      else external.addEventListener("abort", onAbort);
+    }
+    function detach() {
+      if (external) external.removeEventListener("abort", onAbort);
+    }
     return fetch(url, Object.assign({}, options, { signal: controller.signal }))
-      .then(function (res) { clearTimeout(timer); return res; },
+      .then(function (res) { clearTimeout(timer); detach(); return res; },
             function (err) {
               clearTimeout(timer);
+              detach();
               if (err && err.name === "AbortError") {
+                if (external && external.aborted) throw err;
                 var slow = new Error("timeout");
                 slow.isTimeout = true;
                 throw slow;
@@ -550,14 +566,16 @@
         return { ok: true, project: res.data };
       });
     },
-    savePlan: function (projectId, plan) {
+    savePlan: function (projectId, plan, extra) {
+      extra = extra || {};
       return request("/api/projects/" + encodeURIComponent(projectId), {
         method: "PUT",
         body: {
           plan_json: plan,
           name: (plan.meta && plan.meta.siteName) || undefined,
           theme: plan.meta && plan.meta.theme
-        }
+        },
+        signal: extra.signal
       }).then(function (res) {
         if (!res.ok) return { ok: false, error: res.error, project: null };
         return { ok: true, project: res.data };
