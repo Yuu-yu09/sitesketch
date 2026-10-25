@@ -15,7 +15,7 @@
          projLoaded is true and the guard stays silent, so the real
          handlers answer clicks the way they always did. */
       var projLoaded = false;
-      ["pubBtn", "unpubBtn", "copyBtn", "zipBtn"].forEach(function (id) {
+      ["pubBtn", "copyBtn", "zipBtn"].forEach(function (id) {
         var btn = document.getElementById(id);
         if (!btn) return;
         btn.addEventListener("click", function () {
@@ -195,31 +195,6 @@
             pubBtn.disabled = false;
             render();
             SS.toast(err.message || "Could not publish", "bi-exclamation-triangle");
-          });
-        });
-
-        document.getElementById("unpubBtn").addEventListener("click", function () {
-          /* two-step confirm: first press arms the button */
-          if (this.dataset.armed !== "1") {
-            var el = this;
-            el.dataset.armed = "1";
-            el.classList.add("is-armed");
-            SS.toast("Click Unpublish again to take the site offline", "bi-exclamation-triangle");
-            setTimeout(function () {
-              if (el.dataset.armed === "1") { el.dataset.armed = "0"; el.classList.remove("is-armed"); }
-            }, 3000);
-            return;
-          }
-          this.dataset.armed = "0";
-          this.classList.remove("is-armed");
-          API.setPublished(proj.id, false).then(function (res) {
-            if (!res.ok) {
-              SS.toast(res.error || "Could not take the site offline", "bi-exclamation-triangle");
-              return;
-            }
-            proj = res.project;
-            render();
-            SS.toast("Site taken offline", "bi-cloud-slash");
           });
         });
 
