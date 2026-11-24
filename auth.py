@@ -14,6 +14,7 @@ and the cookie's SameSite=Strict setting between them close off.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import secrets
 import time
@@ -38,6 +39,8 @@ import mailer
 from ratelimit import client_key, limiter
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
+
+log = logging.getLogger(__name__)
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -471,6 +474,19 @@ def forgot():
     blocked = _too_many(request, "forgot", FORGOT_LIMIT)
     if blocked:
         return blocked
+
+    # A server that cannot send mail is a different thing from an address that
+    # has no account, and saying which one it is reveals nothing: this answer
+    # is identical for every address and comes before any lookup. Without it
+    # the endpoint returned its usual "a link is on its way" while mailer.py
+    # logged that it had sent nothing - which is how "sending email is not
+    # working" got reported as a mystery with a success message on screen.
+    if not mailer.can_deliver():
+        log.error("password reset refused: RESEND_API_KEY is not set in this "
+                  "environment, so no email can be sent")
+        return jsonify(error="Password reset emails are not set up on this "
+                             "server yet, so nothing was sent. Please tell the "
+                             "site owner."), 503
 
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip().lower()

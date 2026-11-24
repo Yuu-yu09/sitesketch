@@ -688,14 +688,25 @@ def outbox_reset_token(email):
 def t_forgot_never_says_whether_an_account_exists():
     """The endpoint must not become a way to ask which addresses are taken.
 
-    A known account costs an insert and a call to Resend; an unknown one costs
-    neither, so the reply is padded to a floor and both answers are compared
-    here - body and status, not just "it returned 200".
+    Two states are possible and both are checked: a server that can send mail
+    must answer identically for a real and a made-up address, and a server
+    that cannot send mail must say so rather than promise a link it will never
+    deliver - which is the failure the owner reported, with a success message
+    on screen.
     """
     reset_limits()
-    _, known, _ = call("POST", "/api/auth/forgot", {"email": EMAIL}, expect=200)
+    known_status, known, _ = raw_call("POST", "/api/auth/forgot", {"email": EMAIL})
     unknown_email = f"nobody_{uuid.uuid4().hex[:8]}@example.com"
-    _, unknown, _ = call("POST", "/api/auth/forgot", {"email": unknown_email}, expect=200)
+    unknown_status, unknown, _ = raw_call("POST", "/api/auth/forgot", {"email": unknown_email})
+
+    if known_status == 503:
+        assert "not set up" in (known.get("error") or "").lower(), known
+        assert unknown_status == 503, (unknown_status, unknown)
+        assert known == unknown, f"the refusal differs by address: {known} vs {unknown}"
+        return "SKIPPED: no mail key on this server, and it says so"
+
+    assert known_status == 200, (known_status, known)
+    assert unknown_status == 200, (unknown_status, unknown)
     assert known == unknown, f"the answer reveals which address exists: {known} vs {unknown}"
     assert "if that address has an account" in (known.get("message") or "").lower(), known
     return "same body for a real and a made-up address"

@@ -48,6 +48,19 @@ def configured() -> bool:
     return bool(config.RESEND_API_KEY)
 
 
+def can_deliver() -> bool:
+    """Would a message sent right now reach somebody?
+
+    In production that means a configured key. In development the outbox is a
+    real delivery channel - it is how the reset flow is exercised without an
+    inbox - so the answer is yes. The distinction matters: an endpoint that
+    answers "a link is on its way" while this returns False is lying to the
+    person, which is exactly how "sending email is not working" gets reported
+    as a mystery.
+    """
+    return configured() or not config.IS_PROD
+
+
 def send(to: str, subject: str, text: str, html: str = "") -> bool:
     """Deliver one message. Returns True only when it was actually sent.
 
