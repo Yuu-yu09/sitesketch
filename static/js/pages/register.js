@@ -27,11 +27,9 @@
         var bad = false;
         bad = invalid("fName", name.value.trim().length < 2) || bad;
         bad = invalid("fEmail", !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) || bad;
-        /* mirrors the server rule so people are told before they submit */
-        var classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter(function (re) {
-          return re.test(pw.value);
-        }).length;
-        var strongEnough = pw.value.length >= 10 && classes >= 3;
+        /* mirrors the server rule so people are told before they submit:
+           length only, no character-class rules */
+        var strongEnough = pw.value.length >= 8;
         bad = invalid("fPw", !strongEnough) || bad;
         bad = invalid("fPw2", pw2.value !== pw.value || !strongEnough) || bad;
         if (bad) { (document.querySelector(".field.invalid input") || {}).focus(); return; }

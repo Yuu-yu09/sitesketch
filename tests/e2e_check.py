@@ -197,11 +197,19 @@ def t_rejects_common_password():
          expect=400)
 
 
-def t_rejects_single_character_class_password():
+def t_accepts_a_rememberable_phrase():
+    """The policy is length, not character classes.
+
+    A 16-character lowercase phrase used to be refused for lacking an
+    uppercase letter, a digit and a symbol. That composition rule locked
+    real users out of their own sign-up form, and current guidance drops
+    it; the common-password list is what keeps wordlist favourites out.
+    """
+    reset_limits()
     call("POST", "/api/auth/register",
          {"username": "letterspw", "email": f"letters_{uuid.uuid4().hex[:6]}@example.com",
           "password": "abcdefghijklmnop"},
-         expect=400)
+         expect=201)
 
 
 def t_rejects_bad_username_characters():
@@ -1114,7 +1122,7 @@ for name, fn in [
     ("duplicate email rejected", t_register_duplicate),
     ("weak password rejected", t_register_weak_password),
     ("common password rejected", t_rejects_common_password),
-    ("single-class password rejected", t_rejects_single_character_class_password),
+    ("a lowercase phrase is accepted", t_accepts_a_rememberable_phrase),
     ("bad username characters rejected", t_rejects_bad_username_characters),
     ("security headers on every response", t_security_headers_present),
     ("only the preview may be framed", t_only_preview_may_be_framed),

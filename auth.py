@@ -40,8 +40,15 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # safe - no caller ever supplies this string.
 PUBLIC_USER = "id, username, email, role, created_at"
 
-MIN_PASSWORD = 10
-PASSWORD_CLASSES = 3
+MIN_PASSWORD = 8
+# No character-class rule. Requiring an uppercase letter, a digit and a
+# symbol was measured against the people it governs: it locked users out of
+# their own sign-up form more often than it kept anyone safe, and NIST's
+# current guidance drops composition rules for exactly that reason - length
+# carries the strength here. The common-password list below still refuses
+# the top of every wordlist, so "length alone" cannot let "password123"
+# through; what it no longer does is reject a perfectly good passphrase for
+# lacking a symbol.
 # Very common passwords and their keyboard shapes. A length rule on its own
 # still lets "password123" through, which is in every wordlist ever published.
 WEAK = {
@@ -77,15 +84,6 @@ def _too_many(req, scope: str, limit: tuple[int, int]):
 def _password_problem(password: str) -> str | None:
     if not password or len(password) < MIN_PASSWORD:
         return f"Password needs at least {MIN_PASSWORD} characters."
-    classes = sum([
-        bool(re.search(r"[a-z]", password)),
-        bool(re.search(r"[A-Z]", password)),
-        bool(re.search(r"\d", password)),
-        bool(re.search(r"[^A-Za-z0-9]", password)),
-    ])
-    if classes < PASSWORD_CLASSES:
-        return ("Use a mix of letters, numbers and symbols, or a long passphrase "
-                "made of several words.")
     lowered = (password or "").lower()
     if lowered in WEAK or "password" in lowered or "qwerty" in lowered:
         return "That password is too common. Pick something harder to guess."
