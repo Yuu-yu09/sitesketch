@@ -17,6 +17,10 @@ exports/
 backups/*
 !backups/.gitkeep
 
+# Development mail outbox: holds real password-reset links, so it is a
+# credential file. Never commit it.
+instance/
+
 # Editors / OS
 .vscode/
 

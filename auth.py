@@ -13,7 +13,12 @@ and the cookie's SameSite=Strict setting between them close off.
 
 from __future__ import annotations
 
+import hashlib
 import re
+import secrets
+import time
+from datetime import datetime, timedelta, timezone
+from html import escape as html_escape
 from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request
@@ -29,6 +34,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 import config
 import cookies
 import db
+import mailer
 from ratelimit import client_key, limiter
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -39,6 +45,10 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # password_hash. It is a fixed literal, so interpolating it into SQL is
 # safe - no caller ever supplies this string.
 PUBLIC_USER = "id, username, email, role, created_at"
+# The same columns plus the one the tokens are stamped with. Kept apart from
+# PUBLIC_USER because token_version is not part of the user as the API
+# describes them - it exists so a password reset can expire old sessions.
+SESSION_COLUMNS = PUBLIC_USER + ", token_version"
 
 MIN_PASSWORD = 8
 # No character-class rule. Requiring an uppercase letter, a digit and a
@@ -62,6 +72,15 @@ WEAK = {
 # Attempts allowed per window, per IP address.
 LOGIN_LIMIT = (10, 300)      # 10 tries every 5 minutes
 REGISTER_LIMIT = (5, 3600)   # 5 sign-ups an hour from one address
+FORGOT_LIMIT = (3, 3600)     # 3 "email me a link" requests an hour
+RESET_LIMIT = (10, 3600)     # 10 link submissions an hour
+
+RESET_MINUTES = 30
+# /forgot answers in at least this long. An address that exists costs one
+# insert and one HTTP call to Resend; an address that does not costs neither,
+# and the gap is trivially measurable. Without the floor the "we never say
+# whether an account exists" answer would be a formality.
+ANSWER_FLOOR = 0.35
 
 
 def _too_many(req, scope: str, limit: tuple[int, int]):
@@ -79,6 +98,13 @@ def _too_many(req, scope: str, limit: tuple[int, int]):
             {"Retry-After": str(retry)},
         )
     return None
+
+
+def _answer_after(started: float, floor: float = ANSWER_FLOOR) -> None:
+    """Hold a reply until it has taken at least `floor` seconds."""
+    left = floor - (time.monotonic() - started)
+    if left > 0:
+        time.sleep(left)
 
 
 def _password_problem(password: str) -> str | None:
@@ -135,7 +161,10 @@ def _session(user: dict, status: int = 200, remember: bool = False):
     which meant one XSS was thirty days of access to the account.
     """
     identity = str(user["id"])
-    claims = {"username": user["username"]}
+    # tv is the user's token_version. It rides in both tokens so that a
+    # password reset can bump the column and leave every older session
+    # unable to renew itself - see refresh() and reset_password().
+    claims = {"username": user["username"], "tv": int(user.get("token_version") or 0)}
     # The lifespan the person chose rides along inside the refresh token. The
     # browser will not tell the server whether a cookie is persistent or a
     # session cookie, so the only way to honour "Keep me signed in" across a
@@ -210,7 +239,7 @@ def register():
     try:
         user = db.query_one(
             f"insert into users (username, email, password_hash) values (%s, %s, %s) "
-            f"returning {PUBLIC_USER}",
+            f"returning {SESSION_COLUMNS}",
             (username, email, generate_password_hash(password)),
         )
     except Exception as exc:
@@ -233,7 +262,8 @@ def login():
     password = body.get("password") or ""
 
     row = db.query_one(
-        "select id, username, email, role, password_hash from users where lower(email) = %s",
+        "select id, username, email, role, password_hash, token_version"
+        " from users where lower(email) = %s",
         (email,),
     )
     # Same message and roughly the same work either way, so the endpoint
@@ -318,13 +348,25 @@ def refresh():
         return jsonify(error="Cross-site request refused"), 403
 
     identity = get_jwt_identity()
-    claims = {"username": get_jwt().get("username")}
-    if not claims.get("username"):
-        row = db.query_one("select username from users where id = %s", (identity,))
-        if not row:
-            return jsonify(error="Account no longer exists"), 401
-        claims["username"] = row["username"]
+    # One row read per refresh - at most every thirty minutes per session -
+    # buys the two things a stateless token cannot know on its own: whether
+    # the account still exists, and whether its password has been reset since
+    # this cookie was issued.
+    row = db.query_one(
+        "select username, token_version from users where id = %s", (identity,)
+    )
+    if not row:
+        return jsonify(error="Account no longer exists"), 401
+    # Tokens minted before token_version existed carry no tv; they read as 0,
+    # which is what every account starts at, so this logs nobody out.
+    if int(get_jwt().get("tv", 0)) != int(row["token_version"]):
+        response = cookies.clear_refresh_cookie(
+            jsonify(error="Your password was changed. Please sign in again.")
+        )
+        response.status_code = 401
+        return response
 
+    claims = {"username": row["username"], "tv": int(row["token_version"])}
     remember = bool(get_jwt().get("remember"))
     response = jsonify(
         token=create_access_token(identity=identity, additional_claims=claims),
@@ -370,3 +412,151 @@ def me():
     user = _public(row)
     user["provider"] = get_jwt().get("provider", "password")
     return jsonify(user=user)
+
+
+# ------------------------------------------------------------ password reset
+
+def _hash_token(raw: str) -> str:
+    """SHA-256 of the link token.
+
+    Not a password hash: the token is 32 random bytes, so there is no wordlist
+    to slow a guesser down for, and a deliberately slow hash would only make
+    every reset attempt slow for us. What matters is that the database holds
+    no value that can be turned back into a working link.
+    """
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _reset_link(raw: str) -> str:
+    return f"{config.APP_URL.rstrip('/')}/reset.html?token={raw}"
+
+
+def _reset_text(name: str, link: str) -> str:
+    return (
+        f"Hello {name},\n\n"
+        "Someone asked to reset the password for your SiteSketch account.\n"
+        f"Open this link to choose a new one. It works once, for {RESET_MINUTES} minutes:\n\n"
+        f"{link}\n\n"
+        "If this was not you, nothing has changed and you can ignore this "
+        "message. Your current password still works.\n"
+    )
+
+
+def _reset_html(name: str, link: str) -> str:
+    # Inline styles only: mail clients throw away most stylesheets, so anything
+    # cleverer than this arrives as an unstyled block of text.
+    return (
+        '<div style="font:16px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;color:#16283C">'
+        f"<p>Hello {html_escape(name)},</p>"
+        "<p>Someone asked to reset the password for your SiteSketch account.</p>"
+        f'<p><a href="{html_escape(link)}" style="display:inline-block;background:#16283C;'
+        'color:#fff;padding:.7rem 1.1rem;border-radius:6px;text-decoration:none">'
+        "Choose a new password</a></p>"
+        f'<p style="color:#5a5f6b">The link works once, for {RESET_MINUTES} minutes. '
+        "If this was not you, nothing has changed - your current password still "
+        "works.</p></div>"
+    )
+
+
+@bp.post("/forgot")
+def forgot():
+    """Email a reset link. Answers the same way whatever it found.
+
+    The reply cannot say "no such account", or the form becomes a way to ask
+    which addresses are registered. So the same sentence goes out either way
+    and the work is padded to ANSWER_FLOOR, because the account-dependent
+    branch costs an insert and a call to Resend and the other costs neither.
+    """
+    started = time.monotonic()
+    blocked = _too_many(request, "forgot", FORGOT_LIMIT)
+    if blocked:
+        return blocked
+
+    body = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip().lower()
+    generic = ("If that address has an account, a reset link is on its way. "
+               f"It expires in {RESET_MINUTES} minutes.")
+
+    if EMAIL_RE.match(email) and len(email) <= 254:
+        row = db.query_one(
+            "select id, username, email from users where lower(email) = %s",
+            (email,),
+        )
+        if row:
+            raw = secrets.token_urlsafe(32)
+            # Drop this account's dead rows first: an expired or already-used
+            # link can never work again, so keeping it is just a copy of a
+            # credential sitting in the table.
+            db.execute(
+                "delete from password_resets where user_id = %s"
+                " and (used_at is not null or expires_at < now())",
+                (row["id"],),
+            )
+            db.execute(
+                "insert into password_resets (user_id, token_hash, expires_at)"
+                " values (%s, %s, %s)",
+                (row["id"], _hash_token(raw),
+                 datetime.now(timezone.utc) + timedelta(minutes=RESET_MINUTES)),
+            )
+            link = _reset_link(raw)
+            mailer.send(
+                row["email"],
+                "Reset your SiteSketch password",
+                _reset_text(row["username"], link),
+                _reset_html(row["username"], link),
+            )
+
+    _answer_after(started)
+    return jsonify(ok=True, message=generic)
+
+
+@bp.post("/reset")
+def reset_password():
+    """Trade a valid link for a new password.
+
+    Order matters: the link is checked before the password is judged, so an
+    expired link says so rather than complaining about a password the person
+    is about to have to retype anyway.
+    """
+    blocked = _too_many(request, "reset", RESET_LIMIT)
+    if blocked:
+        return blocked
+
+    body = request.get_json(silent=True) or {}
+    raw = (body.get("token") or "").strip()
+    password = body.get("password") or ""
+    if not raw or len(raw) > 200:
+        return jsonify(error="That reset link is incomplete. Request a new one."), 400
+
+    # The expiry is compared in SQL rather than in Python: the database clock
+    # is the one that stamped the row.
+    row = db.query_one(
+        "select id, user_id,"
+        "       (expires_at < now()) as expired,"
+        "       (used_at is not null) as used"
+        " from password_resets where token_hash = %s",
+        (_hash_token(raw),),
+    )
+    if not row or row["used"] or row["expired"]:
+        return jsonify(error="That reset link has expired or has already been "
+                             "used. Request a new one."), 400
+
+    problem = _password_problem(password)
+    if problem:
+        return jsonify(error=problem), 400
+
+    db.execute(
+        "update users set password_hash = %s,"
+        " token_version = token_version + 1 where id = %s",
+        (generate_password_hash(password), row["user_id"]),
+    )
+    # Close every outstanding link for the account, this one included. Two
+    # links can be live at once (a retry, two devices), and the older one must
+    # not be able to undo the reset that already happened.
+    db.execute(
+        "update password_resets set used_at = now()"
+        " where user_id = %s and used_at is null",
+        (row["user_id"],),
+    )
+    return jsonify(ok=True, message="Your password has been changed. "
+                                    "Sign in with the new one.")

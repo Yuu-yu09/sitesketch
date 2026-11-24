@@ -47,6 +47,12 @@ GEMINI_API_KEY = _get("GEMINI_API_KEY")
 # gemini-3.8-flash is the quality upgrade but can take 20s+ there.
 GEMINI_MODEL = _get("GEMINI_MODEL", "gemini-flash-lite-latest")
 
+# email (password resets) - Resend, https://resend.com/api-keys
+RESEND_API_KEY = _get("RESEND_API_KEY")
+# Must be an address on a domain verified in Resend in production. The
+# default can only deliver to the Resend account owner's own inbox.
+MAIL_FROM = _get("MAIL_FROM", "SiteSketch <onboarding@resend.dev>")
+
 # auth
 JWT_SECRET = _get("JWT_SECRET")
 SECRET_KEY = _get("SECRET_KEY") or JWT_SECRET

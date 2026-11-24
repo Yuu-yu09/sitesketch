@@ -2507,7 +2507,7 @@ def run(page, phase=None):
         fresh = page.context.browser.new_context(viewport={"width": 1280, "height": 900})
         try:
             p = fresh.new_page()
-            for path in ("login.html", "register.html"):
+            for path in ("login.html", "register.html", "forgot.html", "reset.html"):
                 p.goto(f"{BASE}/{path}", wait_until="domcontentloaded")
                 p.wait_for_timeout(400)
                 assert p.locator("#consentBar").count() == 0, \
@@ -2617,15 +2617,17 @@ def run(page, phase=None):
 
         Uses a signed-out context on purpose: login.html redirects to the
         dashboard when there is already a session, which is correct and would
-        otherwise make this check look like it failed.
+        otherwise make this check look like it failed. The reset pages are
+        included because someone locked out of their account still needs to
+        be able to read what the site does with their data.
         """
         fresh = page.context.browser.new_context(viewport={"width": 1280, "height": 900})
         try:
             p = fresh.new_page()
-            for path in ("login.html", "register.html"):
+            for path in ("login.html", "register.html", "forgot.html", "reset.html"):
                 p.goto(f"{BASE}/{path}", wait_until="domcontentloaded")
                 p.wait_for_timeout(500)
-                assert "login" in p.url or "register" in p.url, f"{path} redirected to {p.url}"
+                assert path in p.url, f"{path} redirected to {p.url}"
                 for target in ("privacy.html", "terms.html"):
                     assert p.locator(f'a[href="{target}"]').count() > 0, \
                         f"{path} does not link to {target}"
@@ -2637,7 +2639,7 @@ def run(page, phase=None):
     check("privacy page lists the real inventory", t_privacy_page_lists_the_real_inventory)
     check("preferences can be withdrawn", t_preferences_can_be_withdrawn)
     check("terms page is reachable", t_terms_page_is_reachable)
-    check("login page links to the legal pages", t_login_page_offers_the_legal_links)
+    check("auth pages link to the legal pages", t_login_page_offers_the_legal_links)
 
     # Runs late on purpose. It publishes, and the checks above all load the
     # published address and expect the project in a known state; run earlier

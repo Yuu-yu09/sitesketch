@@ -529,6 +529,31 @@
       clearSession();
     },
 
+    /* Password reset. Both endpoints answer without saying whether an address
+       has an account, and this layer must not add a hint of its own - so a
+       failure here means "the request was refused" (rate limited, bad link,
+       password too short), never "no such user". */
+    forgotPassword: function (email) {
+      return request("/api/auth/forgot", {
+        method: "POST",
+        body: { email: email }
+      }).then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error };
+        return { ok: true, message: (res.data && res.data.message) ||
+          "If that address has an account, a reset link is on its way." };
+      });
+    },
+    resetPassword: function (linkToken, password) {
+      return request("/api/auth/reset", {
+        method: "POST",
+        body: { token: linkToken, password: password }
+      }).then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error };
+        return { ok: true, message: (res.data && res.data.message) ||
+          "Your password has been changed." };
+      });
+    },
+
     /* remembered email and the "keep me signed in" choice, for the login form */
     rememberedEmail: function () {
       return rememberedEmail();

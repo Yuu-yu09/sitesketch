@@ -132,8 +132,8 @@ def _expired_token(jwt_header, jwt_payload):
 def _revoked_token(jwt_header, jwt_payload):
     return jsonify(error="That session is no longer valid."), 401
 
-PAGES = ("", "index", "login", "register", "dashboard", "plan", "builder", "publish",
-         "privacy", "terms")
+PAGES = ("", "index", "login", "register", "forgot", "reset", "dashboard", "plan",
+         "builder", "publish", "privacy", "terms")
 
 
 # ---------------------------------------------------------------- API: health
@@ -161,6 +161,10 @@ def health():
         port=config.PORT,
         gemini_configured=bool(config.GEMINI_API_KEY),
         supabase_key_configured=bool(config.SUPABASE_KEY),
+        # Password reset emails need this. Not in `missing` because it is not
+        # needed to run the app - but a deployment without it cannot send a
+        # reset link, and that is worth being able to ask about directly.
+        email_configured=bool(config.RESEND_API_KEY),
         missing=config.missing(),
     )
 

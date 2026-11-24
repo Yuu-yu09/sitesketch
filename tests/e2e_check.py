@@ -630,6 +630,130 @@ def t_login_unknown_email():
     call("POST", "/api/auth/login", {"email": "nobody@example.com", "password": "whatever1"}, expect=401)
 
 
+# ------------------------------------------------------------ password reset
+LOCAL_TARGET = "127.0.0.1" in BASE or "localhost" in BASE
+
+
+def outbox_reset_token(email):
+    """The newest reset link sent to `email`, read from the dev mail outbox.
+
+    A reset link is a credential. The only two places it may exist are the
+    inbox and - outside production - instance/mail_outbox.jsonl, which
+    mailer.py writes. Reading it there is what lets this suite drive the real
+    flow end to end without a back door in the API and without a mail account.
+    """
+    import mailer
+
+    path = mailer.outbox_path()
+    assert path.exists(), f"no dev mail outbox at {path}"
+    newest = None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if (entry.get("to", "").lower() == email.lower()
+                and "reset your sitesketch password" in entry.get("subject", "").lower()):
+            newest = entry
+    assert newest, f"no reset email was written for {email}"
+    text = newest.get("text", "")
+    marker = "reset.html?token="
+    at = text.find(marker)
+    assert at != -1, f"the email carries no reset link: {text[:200]!r}"
+    return text[at + len(marker):].split()[0].strip()
+
+
+def t_forgot_never_says_whether_an_account_exists():
+    """The endpoint must not become a way to ask which addresses are taken.
+
+    A known account costs an insert and a call to Resend; an unknown one costs
+    neither, so the reply is padded to a floor and both answers are compared
+    here - body and status, not just "it returned 200".
+    """
+    reset_limits()
+    _, known, _ = call("POST", "/api/auth/forgot", {"email": EMAIL}, expect=200)
+    unknown_email = f"nobody_{uuid.uuid4().hex[:8]}@example.com"
+    _, unknown, _ = call("POST", "/api/auth/forgot", {"email": unknown_email}, expect=200)
+    assert known == unknown, f"the answer reveals which address exists: {known} vs {unknown}"
+    assert "if that address has an account" in (known.get("message") or "").lower(), known
+    return "same body for a real and a made-up address"
+
+
+def t_reset_link_changes_the_password():
+    if not LOCAL_TARGET:
+        return "SKIPPED: the link token is only readable on a local target"
+    reset_limits()
+    email = f"reset_{uuid.uuid4().hex[:8]}@example.com"
+    old, new = PASSWORD, "brand-new-phrase-9"
+    call("POST", "/api/auth/register",
+         {"username": f"rp{uuid.uuid4().hex[:6]}", "email": email, "password": old},
+         expect=201)
+    call("POST", "/api/auth/forgot", {"email": email}, expect=200)
+    link_token = outbox_reset_token(email)
+
+    # A rejected password must not spend the link: the first attempt is
+    # deliberately too short, and the second one has to still work.
+    status, data, _ = raw_call("POST", "/api/auth/reset",
+                               {"token": link_token, "password": "short"})
+    assert status == 400, f"a five character password was accepted: {status} {data}"
+
+    status, data, _ = call("POST", "/api/auth/reset",
+                           {"token": link_token, "password": new}, expect=200)
+    assert "changed" in (data.get("message") or "").lower(), data
+
+    status, _, _ = raw_call("POST", "/api/auth/login", {"email": email, "password": new})
+    assert status == 200, f"the new password does not sign in: {status}"
+    status, _, _ = raw_call("POST", "/api/auth/login", {"email": email, "password": old})
+    assert status == 401, f"the old password still signs in: {status}"
+    return "old password refused, new one accepted"
+
+
+def t_reset_link_works_once_and_ends_old_sessions():
+    if not LOCAL_TARGET:
+        return "SKIPPED: the link token is only readable on a local target"
+    reset_limits()
+    email = f"once_{uuid.uuid4().hex[:8]}@example.com"
+    call("POST", "/api/auth/register",
+         {"username": f"on{uuid.uuid4().hex[:6]}", "email": email, "password": PASSWORD},
+         expect=201)
+    # the session this account already has, before the reset
+    stale_cookie = cookie_from_headers()
+    assert stale_cookie.startswith("sitesketch_refresh="), stale_cookie
+
+    call("POST", "/api/auth/forgot", {"email": email}, expect=200)
+    link_token = outbox_reset_token(email)
+    call("POST", "/api/auth/reset",
+         {"token": link_token, "password": "second-phrase-9"}, expect=200)
+
+    # The same link must not be usable again.
+    status, data, _ = raw_call("POST", "/api/auth/reset",
+                               {"token": link_token, "password": "third-phrase-9"})
+    assert status == 400, f"a spent link was accepted again: {status} {data}"
+    assert "used" in (data.get("error") or "").lower(), data
+
+    # And the session that existed before the reset must not renew itself.
+    status, data, _ = raw_call("POST", "/api/auth/refresh", headers={"Cookie": stale_cookie})
+    assert status == 401, f"a pre-reset session still renews: {status} {data}"
+    return "link is single use; the old session cannot renew"
+
+
+def t_reset_rejects_an_unknown_token():
+    reset_limits()
+    status, data, _ = raw_call("POST", "/api/auth/reset",
+                               {"token": "not-a-real-token",
+                                "password": "a-good-phrase-1"})
+    assert status == 400, f"an invented token was accepted: {status} {data}"
+
+
+def t_reset_pages_are_reachable():
+    for page in ("/forgot.html", "/reset.html"):
+        status, body = raw_text("GET", page)
+        assert status == 200, f"{page} -> {status}"
+        assert "SiteSketch" in body, f"{page} served something else"
+        assert "api.js" in body, f"{page} does not load the api layer"
+    return "forgot and reset pages served"
+
+
 def t_me():
     status, data, _ = call("GET", "/api/auth/me", token=token, expect=200)
     assert data["user"]["email"] == EMAIL, data
@@ -1085,6 +1209,7 @@ def t_ai_plan_rejects_a_stub_description():
 # ------------------------------------------------------------------ pages
 def t_pages_render():
     expected = {"/": "SiteSketch", "/login.html": "Sign in", "/register.html": "Create account",
+                "/forgot.html": "Forgot password", "/reset.html": "Choose a new password",
                 "/dashboard.html": "My plans", "/plan.html": "New plan",
                 "/builder.html": "Builder", "/publish.html": "Publish"}
     for path, title in expected.items():
@@ -1148,6 +1273,11 @@ for name, fn in [
     ("login works", t_login),
     ("wrong password rejected", t_login_wrong_password),
     ("unknown email rejected", t_login_unknown_email),
+    ("forgot password never reveals an account", t_forgot_never_says_whether_an_account_exists),
+    ("a reset link changes the password", t_reset_link_changes_the_password),
+    ("a reset link works once and ends old sessions", t_reset_link_works_once_and_ends_old_sessions),
+    ("an invented reset token is refused", t_reset_rejects_an_unknown_token),
+    ("forgot and reset pages are reachable", t_reset_pages_are_reachable),
     ("token identifies the user", t_me),
     ("missing token rejected", t_me_without_token),
     ("garbage token rejected", t_me_with_garbage_token),

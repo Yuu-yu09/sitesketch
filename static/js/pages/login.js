@@ -5,9 +5,17 @@
 
       var form = document.getElementById("loginForm");
       var formError = document.getElementById("formError");
+      var formOk = document.getElementById("formOk");
       var email = document.getElementById("email");
       var pw = document.getElementById("password");
       var rememberMe = document.getElementById("rememberMe");
+
+      /* Arriving from a finished reset. Without this the form looks exactly
+         as it always did, and the next thing people try is the old password. */
+      if (params.get("reset") && formOk) {
+        formOk.textContent = "Your password was changed. Sign in with the new one.";
+        formOk.classList.add("show");
+      }
 
       /* Come back to a half-filled form only for the email. Saving the
          password would put it somewhere any script on the page can read. */
@@ -41,6 +49,7 @@
       form.addEventListener("submit", function (e) {
         e.preventDefault();
         formError.classList.remove("show");
+        if (formOk) formOk.classList.remove("show");
 
         var bad = false;
         bad = invalid("fEmail", !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) || bad;

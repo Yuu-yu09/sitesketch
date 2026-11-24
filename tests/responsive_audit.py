@@ -44,7 +44,14 @@ SIZES = [
 # Every visitor meets these before they have an account. They are measured
 # at every size for the same reason the published site is: nothing else
 # here produces them, so nothing else would ever notice them breaking.
-PUBLIC_PAGES = ["/index.html", "/login.html", "/register.html"]
+PUBLIC_PAGES = [("/index.html", "landing"), ("/login.html", "login"),
+                ("/register.html", "register"),
+                # The two halves of the reset flow. Hand-written like the
+                # others, and the only pages someone sees while locked out.
+                # A token is supplied so the form is on screen rather than the
+                # "this link is incomplete" state.
+                ("/forgot.html", "forgot"),
+                ("/reset.html?token=audit-only-not-a-real-token-0001", "reset")]
 
 # 44px is Apple's comfortable touch target. WCAG 2.2 AA asks for 24x24, which
 # is the right bar for a mouse-driven desktop and would fail every icon
@@ -411,8 +418,7 @@ def main() -> int:
         # else in this file produces them, so nothing measured them. The
         # landing page is the first thing anyone sees.
         print("\n--- the public pages ---")
-        for path, name in [("/index.html", "landing"), ("/login.html", "login"),
-                           ("/register.html", "register")]:
+        for path, name in PUBLIC_PAGES:
             for label, width, height, touch in SIZES:
                 found, overflow, bad, errors = audit(
                     browser, f"{name}/{label}", f"{BASE}{path}", width, height, None, touch)

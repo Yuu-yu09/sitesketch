@@ -19,6 +19,30 @@ create table if not exists users (
   created_at    timestamptz not null default now()
 );
 
+-- Bumped whenever the password changes, and carried in the tokens. A session
+-- issued before a reset therefore stops renewing, which is the difference
+-- between "I changed my password" and "I changed it and the person who had it
+-- is still inside". `if not exists` because the first accounts predate it.
+alter table users add column if not exists token_version int not null default 0;
+
+-- ---------- password resets ----------
+-- The token is emailed once and never stored: only its SHA-256 is, so a
+-- database dump cannot be turned into working reset links. A row is single
+-- use (used_at) and short lived (expires_at), and every outstanding row for
+-- a user is closed the moment one of them is used.
+create table if not exists password_resets (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references users(id) on delete cascade,
+  token_hash text not null unique,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at    timestamptz
+);
+
+create index if not exists password_resets_user_idx on password_resets(user_id);
+create index if not exists password_resets_live_idx
+  on password_resets(expires_at) where used_at is null;
+
 -- Optional: sign-in with Google / GitHub (users table stays the identity).
 -- create table if not exists oauth_accounts (
 --   id             uuid primary key default gen_random_uuid(),

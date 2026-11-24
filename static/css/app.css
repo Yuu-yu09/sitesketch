@@ -609,6 +609,20 @@ textarea { resize: vertical; min-height: 96px; }
   margin-bottom: 1rem;
 }
 .form-error.show { display: block; }
+/* The same box for good news: a reset link sent, a password changed. */
+.form-ok {
+  display: none;
+  border: 1.5px solid var(--ok);
+  background: #F1F8F4;
+  color: var(--ok);
+  border-radius: var(--radius);
+  padding: .6rem .8rem;
+  font-size: .9rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+.form-ok.show { display: block; }
+.form-ok a { color: inherit; text-decoration: underline; }
 
 /* ============ greeter mascot (graph notebook) ============ */
 .page-head-right {
