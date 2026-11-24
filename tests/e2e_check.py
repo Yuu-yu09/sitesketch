@@ -713,9 +713,12 @@ def t_reset_link_works_once_and_ends_old_sessions():
         return "SKIPPED: the link token is only readable on a local target"
     reset_limits()
     email = f"once_{uuid.uuid4().hex[:8]}@example.com"
-    call("POST", "/api/auth/register",
-         {"username": f"on{uuid.uuid4().hex[:6]}", "email": email, "password": PASSWORD},
-         expect=201)
+    # raw_call, not call: only raw_call records the response headers, and the
+    # cookie this account already holds is the point of the check below.
+    status, data, _ = raw_call("POST", "/api/auth/register",
+                               {"username": f"on{uuid.uuid4().hex[:6]}",
+                                "email": email, "password": PASSWORD})
+    assert status == 201, data
     # the session this account already has, before the reset
     stale_cookie = cookie_from_headers()
     assert stale_cookie.startswith("sitesketch_refresh="), stale_cookie
