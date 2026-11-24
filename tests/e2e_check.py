@@ -171,8 +171,30 @@ def t_register():
 
 
 def t_register_duplicate():
-    call("POST", "/api/auth/register",
-         {"username": USERNAME + "2", "email": EMAIL, "password": PASSWORD}, expect=409)
+    """The owner asked for a warning when the email is already taken.
+
+    Status alone is not the warning: the sentence has to say what to do next,
+    and it has to be the same one the form puts on screen. Asserting only 409
+    would pass while the page said "Something went wrong.".
+    """
+    status, data, _ = raw_call("POST", "/api/auth/register",
+                               {"username": USERNAME + "2", "email": EMAIL,
+                                "password": PASSWORD})
+    assert status == 409, f"a duplicate email was not refused: {status} {data}"
+    message = (data.get("error") or "").lower()
+    assert "already registered" in message, f"the warning does not say why: {data}"
+    assert "signing in" in message, f"the warning does not say what to do: {data}"
+
+
+def t_register_duplicate_name_is_its_own_warning():
+    """A taken name and a taken address need different next steps."""
+    status, data, _ = raw_call("POST", "/api/auth/register",
+                               {"username": USERNAME, "email": f"other_{uuid.uuid4().hex[:6]}@example.com",
+                                "password": PASSWORD})
+    assert status == 409, f"a duplicate name was not refused: {status} {data}"
+    message = (data.get("error") or "").lower()
+    assert "name" in message and "already registered" in message, data
+    assert "email" not in message, f"the name warning talks about the email: {data}"
 
 
 def t_register_weak_password():
@@ -1248,6 +1270,7 @@ for name, fn in [
     ("database reachable with seed data", t_db_ping),
     ("register creates an account", t_register),
     ("duplicate email rejected", t_register_duplicate),
+    ("duplicate name gets its own warning", t_register_duplicate_name_is_its_own_warning),
     ("weak password rejected", t_register_weak_password),
     ("common password rejected", t_rejects_common_password),
     ("a lowercase phrase is accepted", t_accepts_a_rememberable_phrase),

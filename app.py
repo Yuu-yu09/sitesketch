@@ -551,6 +551,42 @@ def not_found(_err):
     return _not_found_response()
 
 
+_APP_DB_DOWN_HTML = (
+    "<!doctype html><meta charset=utf-8><title>SiteSketch is having a moment</title>"
+    "<meta name=viewport content='width=device-width,initial-scale=1'>"
+    "<div style=\"font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif;"
+    "max-width:34rem;margin:18vh auto;padding:0 1.5rem;text-align:center\">"
+    "<div style=\"font-size:2rem;margin-bottom:1rem\">&#9888;</div>"
+    "<h1 style=\"font-size:1.5rem;margin:0 0 .6rem\">The database is not answering</h1>"
+    "<p style=\"color:#5a5f6b;margin:0 0 1.6rem\">Nothing you typed was saved. "
+    "This is on our side, not yours - please try again in a few minutes.</p>"
+    "<a href=\"/index.html\" style=\"display:inline-block;padding:.7rem 1.2rem;"
+    "border-radius:8px;background:#16283c;color:#fff;text-decoration:none;"
+    "font-weight:600\">Back to SiteSketch</a></div>"
+)
+
+
+@app.errorhandler(DatabaseUnavailable)
+def database_unavailable(err):
+    """Answer an unreachable database with something a person can act on.
+
+    This used to become Flask's own 500 page, so the only thing the browser
+    had to show was the client's fallback: "Something went wrong." That made a
+    dead database look identical to a rejected form - which is exactly how
+    "it will not let me create an account" was reported, when nothing could be
+    looked up at all and the duplicate-email warning never got a chance to
+    run.
+    """
+    import sys
+
+    print(f"database unavailable: {err}", file=sys.stderr, flush=True)
+    if _wants_json():
+        return jsonify(error="The database is not reachable right now, so "
+                             "nothing was saved. Please try again in a few "
+                             "minutes."), 503
+    return make_response(_APP_DB_DOWN_HTML, 503)
+
+
 if __name__ == "__main__":
     # threaded matters: the dev server handles one request at a time without
     # it, so any page asking for a stylesheet and a script at once gets its

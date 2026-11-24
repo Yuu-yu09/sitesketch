@@ -117,6 +117,17 @@
     return refreshing;
   }
 
+  /* One text for "the server broke" and another for "your request was
+     refused". They used to be the same sentence - "Something went wrong." -
+     so a dead database looked exactly like a taken email address, and the
+     register page was reported as refusing a perfectly good new account. */
+  function serverFault(status) {
+    if (status >= 500) {
+      return "The server had a problem and nothing was saved. Try again in a few minutes.";
+    }
+    return "Something went wrong.";
+  }
+
   function send(path, options, attempt) {
     options = options || {};
     var headers = options.headers || {};
@@ -145,7 +156,7 @@
           return { ok: false, status: 401, error: (data && data.error) || "Please sign in again." };
         }
         if (!res.ok) {
-          return { ok: false, status: res.status, error: (data && data.error) || "Something went wrong." };
+          return { ok: false, status: res.status, error: (data && data.error) || serverFault(res.status) };
         }
         return { ok: true, status: res.status, data: data };
       });
